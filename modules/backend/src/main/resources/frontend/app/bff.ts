@@ -31,6 +31,61 @@ export interface Me {
   sessionExpiresAt?: string;
 }
 
+/** One Keycloak system as returned by GET /bff/api/systems[/{alias}]. */
+export interface System {
+  alias: string;
+  displayName?: string;
+  description?: string;
+  url: string;
+  issuer?: string;
+  authRealm: string;
+  grantType: string;
+  clientAuth: string;
+  clientId?: string;
+  /** Masked as "***", or a vault: reference. */
+  clientSecret?: string;
+  username?: string;
+  password?: string;
+  defaultRealm?: string;
+  allowedRealms: string[];
+  version?: string;
+  source?: string;
+  /** True when the admin/BFF API can replace this system (mutable repository). */
+  writable?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  signingKey?: {
+    algorithm?: string;
+    kid?: string;
+    vault?: string;
+    configured?: boolean;
+    jwksPath?: string;
+    jwksUrl?: string;
+  };
+  entries?: string[];
+}
+
+export interface SystemsList {
+  systems: System[];
+}
+
+/** Body for PUT /bff/api/systems/{alias} (omit secrets to keep stored values). */
+export type SystemSave = {
+  url: string;
+  displayName?: string;
+  description?: string;
+  issuer?: string;
+  authRealm?: string;
+  grantType?: string;
+  clientAuth?: string;
+  clientId?: string;
+  clientSecret?: string;
+  defaultRealm?: string;
+  allowedRealms?: string[];
+  version?: string;
+  signingKey?: string;
+};
+
 export class BffError extends Error {
   constructor(
     readonly status: number,
@@ -52,6 +107,9 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set('Accept', 'application/json');
   const response = await fetch(`${BFF}${path}`, { ...init, headers, credentials: 'same-origin' });
   if (response.ok) {
+    if (response.status === 204) {
+      return undefined as T;
+    }
     return (await response.json()) as T;
   }
   let code = `http_${response.status}`;
@@ -108,8 +166,23 @@ export async function checkSession(): Promise<SessionCheck | false> {
   }
 }
 
-/** The API test of the bootstrap: the systems the server knows, as GET /admin/systems. */
-export const systems = (): Promise<unknown> => call<unknown>('/api/systems');
+/** All known systems (GET /bff/api/systems). */
+export const listSystems = (): Promise<SystemsList> => call<SystemsList>('/api/systems');
+
+/** @deprecated use listSystems */
+export const systems = (): Promise<SystemsList> => listSystems();
+
+/** One system (GET /bff/api/systems/{alias}). */
+export const getSystem = (alias: string): Promise<System> =>
+  call<System>(`/api/systems/${encodeURIComponent(alias)}`);
+
+/** Replace a mutable system (PUT /bff/api/systems/{alias}). */
+export const saveSystem = (alias: string, body: SystemSave): Promise<System> =>
+  call<System>(`/api/systems/${encodeURIComponent(alias)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
 /** Full-page navigations: the code flow and the RP-initiated logout are redirects, not fetches. */
 export const login = (idp: Idp): void => {

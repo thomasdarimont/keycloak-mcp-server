@@ -43,6 +43,16 @@ class McpEndpointTest {
             .then()
             .header("Access-Control-Allow-Origin", "http://localhost:5173")
             .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-session-id"));
+        // management UI PUT (system save) + X-Requested-With CSRF header
+        RestAssured.given()
+            .header("Origin", "https://localhost:8443")
+            .header("Access-Control-Request-Method", "PUT")
+            .header("Access-Control-Request-Headers", "content-type,x-requested-with")
+            .options("/mcp")
+            .then()
+            .header("Access-Control-Allow-Origin", "https://localhost:8443")
+            .header("Access-Control-Allow-Methods", Matchers.containsStringIgnoringCase("PUT"))
+            .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("x-requested-with"));
         RestAssured.given()
             .header("Origin", "https://evil.example")
             .header("Access-Control-Request-Method", "POST")

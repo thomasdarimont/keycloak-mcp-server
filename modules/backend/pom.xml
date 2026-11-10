@@ -42,6 +42,16 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>org.mvnpm.at.lit-labs</groupId>
+            <artifactId>router</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mvnpm</groupId>
+            <artifactId>urlpattern-polyfill</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>io.quarkiverse.mcp</groupId>
             <artifactId>quarkus-mcp-server-http</artifactId>
         </dependency>

@@ -9,9 +9,12 @@ import java.util.Map;
 import java.util.TreeSet;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
@@ -49,7 +52,9 @@ import io.quarkus.vertx.http.runtime.CurrentVertxRequest;
  * POST /bff/check-session  is the session still alive at the provider (UserSessionCheck); 200 {"active": true, ...}
  *                       with a re-sent cookie, 401 {"active": false} when it ended elsewhere, 503 when the provider
  *                       cannot be asked
- * GET /bff/api/systems  the known systems, as GET /admin/systems (needs kc-mcp.admin.role)
+ * GET /bff/api/systems           the known systems, as GET /admin/systems (needs kc-mcp.admin.role)
+ * GET /bff/api/systems/{alias}   one system, as GET /admin/systems/{alias}
+ * PUT /bff/api/systems/{alias}   replace a mutable system, as PUT /admin/systems/{alias} (CSRF header)
  * POST /bff/backchannel-logout   the provider ends sessions (OIDC back-channel logout, BackChannelLogoutResource)
  * </pre>
  */
@@ -192,5 +197,21 @@ public class UiResource {
     @Path("api/systems")
     public Map<String, Object> systems(@Context UriInfo uri, @Context HttpHeaders headers) {
         return systems.list(AdminResource.publicBase(config.hostname(), uri, headers));
+    }
+
+    @GET
+    @Path("api/systems/{alias}")
+    public Map<String, Object> system(@PathParam("alias") String alias, @Context UriInfo uri,
+            @Context HttpHeaders headers) {
+        return systems.get(alias, AdminResource.publicBase(config.hostname(), uri, headers));
+    }
+
+    @PUT
+    @Path("api/systems/{alias}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response putSystem(@PathParam("alias") String alias, Map<String, Object> body, @Context UriInfo uri,
+            @Context HttpHeaders headers) {
+        var saved = systems.save(body, alias, AdminResource.publicBase(config.hostname(), uri, headers));
+        return Response.status(saved.replaced() ? 200 : 201).entity(saved.representation()).build();
     }
 }

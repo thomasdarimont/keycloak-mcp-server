@@ -39,6 +39,8 @@
         <jandex-maven-plugin.version>3.6.0</jandex-maven-plugin.version>
         <quarkus-web-bundler.version>3.0.0</quarkus-web-bundler.version>
         <mvnpm.lit.version>3.3.3</mvnpm.lit.version>
+        <mvnpm.lit-labs-router.version>0.1.4</mvnpm.lit-labs-router.version>
+        <mvnpm.urlpattern-polyfill.version>10.1.0</mvnpm.urlpattern-polyfill.version>
         <!-- database kind of the storage module, baked into the backend at build time: h2 or postgresql (-Ppostgresql) -->
         <storage.db-kind>h2</storage.db-kind>
     </properties>
@@ -86,6 +88,16 @@
                 <groupId>org.mvnpm</groupId>
                 <artifactId>lit</artifactId>
                 <version>${mvnpm.lit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mvnpm.at.lit-labs</groupId>
+                <artifactId>router</artifactId>
+                <version>${mvnpm.lit-labs-router.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mvnpm</groupId>
+                <artifactId>urlpattern-polyfill</artifactId>
+                <version>${mvnpm.urlpattern-polyfill.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.google.auto.service</groupId>

@@ -1,58 +1,75 @@
+import { Router } from '@lit-labs/router';
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { BffError, checkSession, login, logout, me, systems, type Me, type SessionCheck } from './bff.js';
+import { checkSession, login, me, type Me, type SessionCheck } from './bff.js';
+import { DEFAULT_PATH, ensureDefaultPath, UI_BASE } from './router.js';
+import './kc-mcp-nav.js';
+import './kc-mcp-toolbar.js';
+import './pages/home-page.js';
+import './pages/placeholder-page.js';
+import './pages/system-settings.js';
+import './pages/systems-page.js';
 
 /**
- * The bootstrap of the management UI: who is signed in, sign-in buttons (one per identity provider), sign-out,
- * and one call of the BFF API to prove the session works end to end. Everything else is for the pages to come.
+ * Shell: masthead, vertical nav (when signed in), content. Systems is the default section.
+ * Routing uses `@lit-labs/router` on pathnames under `/ui/` (served by UiRoutes).
  */
 @customElement('kc-mcp-app')
 export class KcMcpApp extends LitElement {
   static styles = css`
     :host {
-      display: block;
+      --fg: #1f2328;
+      --muted: #656d76;
+      --bg: #f6f8fa;
+      --card: #ffffff;
+      --border: #d0d7de;
+      --error: #cf222e;
+      --pre-bg: #f6f8fa;
+      --accent: #1f6feb;
+      --nav-width: 13.5rem;
+      display: flex;
+      flex-direction: column;
       font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      color: #1f2328;
-      background: #f6f8fa;
+      color: var(--fg);
+      background: var(--bg);
       min-height: 100vh;
     }
     @media (prefers-color-scheme: dark) {
       :host {
-        color: #e6edf3;
-        background: #0d1117;
-      }
-      .card {
-        background: #161b22;
-        border-color: #30363d;
-      }
-      pre {
-        background: #0d1117;
+        --fg: #e6edf3;
+        --muted: #8b949e;
+        --bg: #0d1117;
+        --card: #161b22;
+        --border: #30363d;
+        --error: #ff7b72;
+        --pre-bg: #0d1117;
+        --accent: #2f81f7;
       }
     }
-    header {
+    .body {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0.75rem 1.5rem;
-      border-bottom: 1px solid #d0d7de55;
+      flex: 1;
+      min-height: 0;
     }
-    h1 {
-      font-size: 1.1rem;
-      margin: 0;
+    .body kc-mcp-nav {
+      flex: 0 0 var(--nav-width);
+      align-self: stretch;
     }
     main {
-      max-width: 56rem;
-      margin: 0 auto;
+      flex: 1;
+      min-width: 0;
       padding: 1.5rem;
       display: grid;
       gap: 1rem;
+      align-content: start;
     }
     .card {
-      background: #fff;
-      border: 1px solid #d0d7de;
+      background: var(--card);
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 1rem 1.25rem;
+      color: var(--fg);
+      max-width: 56rem;
     }
     h2 {
       font-size: 1rem;
@@ -62,19 +79,15 @@ export class KcMcpApp extends LitElement {
       font: inherit;
       padding: 0.4rem 0.9rem;
       border-radius: 6px;
-      border: 1px solid #1f6feb;
-      background: #1f6feb;
+      border: 1px solid var(--accent);
+      background: var(--accent);
       color: #fff;
       cursor: pointer;
     }
     button.secondary {
       background: transparent;
-      color: inherit;
-      border-color: #8b949e;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: default;
+      color: var(--fg);
+      border-color: var(--border);
     }
     .row {
       display: flex;
@@ -82,42 +95,79 @@ export class KcMcpApp extends LitElement {
       gap: 0.5rem;
       align-items: center;
     }
-    dl {
-      display: grid;
-      grid-template-columns: max-content 1fr;
-      gap: 0.25rem 1rem;
-      margin: 0.5rem 0 0;
-    }
-    dt {
-      color: #656d76;
-    }
-    dd {
-      margin: 0;
-      overflow-wrap: anywhere;
-    }
-    pre {
-      background: #f6f8fa;
-      padding: 0.75rem;
-      border-radius: 6px;
-      overflow: auto;
-      font-size: 0.85rem;
-      margin: 0.5rem 0 0;
-    }
     .error {
-      color: #cf222e;
+      color: var(--error);
     }
     .muted {
-      color: #656d76;
+      color: var(--muted);
+    }
+    @media (max-width: 640px) {
+      .body {
+        flex-direction: column;
+      }
+      .body kc-mcp-nav {
+        flex: none;
+      }
     }
   `;
 
+  private readonly router = new Router(this, [
+    {
+      name: 'system-new',
+      path: `${UI_BASE}/systems/new`,
+      render: () => html`<kc-mcp-system-settings create></kc-mcp-system-settings>`,
+    },
+    {
+      name: 'system',
+      path: `${UI_BASE}/systems/:alias`,
+      render: ({ alias }) =>
+        html`<kc-mcp-system-settings .alias=${alias ?? ''}></kc-mcp-system-settings>`,
+    },
+    {
+      name: 'systems',
+      path: `${UI_BASE}/systems`,
+      render: () => html`<kc-mcp-systems-page></kc-mcp-systems-page>`,
+    },
+    {
+      name: 'secrets',
+      path: `${UI_BASE}/secrets`,
+      render: () =>
+        html`<kc-mcp-placeholder-page
+          heading="Secrets"
+          description="Placeholder for vault secret metadata via the BFF."
+        ></kc-mcp-placeholder-page>`,
+    },
+    {
+      name: 'storage',
+      path: `${UI_BASE}/storage`,
+      render: () =>
+        html`<kc-mcp-placeholder-page
+          heading="Storage"
+          description="Placeholder for encryption status and rekey via the BFF."
+        ></kc-mcp-placeholder-page>`,
+    },
+    {
+      name: 'home',
+      path: `${UI_BASE}/home`,
+      render: () =>
+        html`<kc-mcp-home-page
+          .session=${this.session}
+          .lastCheck=${this.lastCheck}
+        ></kc-mcp-home-page>`,
+    },
+  ], {
+    fallback: {
+      enter: async () => {
+        history.replaceState({}, '', DEFAULT_PATH + location.search);
+        await this.router.goto(DEFAULT_PATH);
+        return false;
+      },
+    },
+  });
+
   @state() private session: Me | null = null;
   @state() private sessionError: string | null = null;
-  @state() private apiResult: string | null = null;
-  @state() private apiError: string | null = null;
-  @state() private busy = false;
   @state() private lastCheck: { at: Date; ok: boolean } | null = null;
-  /** The provider to offer first: ?idp= in the address (a tenant's link, a logout's return), else this tab's last session's. */
   private suggestedIdp: string | undefined;
   private checking = false;
   private readonly onVisible = () => {
@@ -127,15 +177,14 @@ export class KcMcpApp extends LitElement {
   };
 
   connectedCallback(): void {
-    super.connectedCallback();
-    // /ui/?idp=<alias> names the provider to offer first (a tenant's link, the return from a logout); Quarkus adds
-    // ?state=... to the logout's return, which the address bar need not keep
+    ensureDefaultPath();
     const url = new URL(window.location.href);
     this.suggestedIdp = url.searchParams.get('idp') ?? undefined;
     if (url.searchParams.has('state')) {
       url.searchParams.delete('state');
-      window.history.replaceState(null, '', url.toString());
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
     }
+    super.connectedCallback();
     void this.refresh();
     this.trackActivity();
   }
@@ -146,15 +195,8 @@ export class KcMcpApp extends LitElement {
     super.disconnectedCallback();
   }
 
-  /**
-   * Whenever the user comes back to this tab (Page Visibility API) while signed in, ask the server whether the
-   * session still exists at the identity provider: activity tracking instead of a rolling cookie. The server renews
-   * the tokens and the cookie on success and answers 401 when the session ended elsewhere (logout in another app or
-   * the account console, an administrator, the idle timeout); the page then shows the sign-in buttons again.
-   */
   private trackActivity(): void {
     document.addEventListener('visibilitychange', this.onVisible);
-    // a switch between browser windows changes the focus, not the visibility
     window.addEventListener('focus', this.onVisible);
   }
 
@@ -163,10 +205,6 @@ export class KcMcpApp extends LitElement {
     try {
       const check: SessionCheck | false = await checkSession();
       this.lastCheck = { at: new Date(), ok: check !== false };
-      if (check === false) {
-        this.apiResult = null;
-        this.apiError = null;
-      }
       await this.refresh();
     } catch (e) {
       this.sessionError = e instanceof Error ? e.message : String(e);
@@ -179,7 +217,6 @@ export class KcMcpApp extends LitElement {
     try {
       this.session = await me(this.suggestedIdp);
       if (this.session.authenticated && this.session.idp) {
-        // when this session ends elsewhere, offer its provider first
         this.suggestedIdp = this.session.idp;
       }
       this.sessionError = null;
@@ -189,109 +226,55 @@ export class KcMcpApp extends LitElement {
     }
   }
 
-  private async callApi(): Promise<void> {
-    this.busy = true;
-    this.apiResult = null;
-    this.apiError = null;
-    try {
-      this.apiResult = JSON.stringify(await systems(), null, 2);
-    } catch (e) {
-      if (e instanceof BffError) {
-        this.apiError = `${e.status} ${e.code}: ${e.message}`;
-        if (e.sessionLost) {
-          await this.refresh();
-        }
-      } else {
-        this.apiError = e instanceof Error ? e.message : String(e);
-      }
-    } finally {
-      this.busy = false;
-    }
-  }
-
   render() {
     const s = this.session;
+    const signedIn = !!s?.authenticated;
     return html`
-      <header>
-        <h1>Keycloak MCP Server</h1>
-        ${s?.authenticated
-          ? html`<div class="row">
-              <span>${s.name ?? s.username}</span>
-              <button class="secondary" @click=${() => logout(s)}>Sign out</button>
-            </div>`
-          : nothing}
-      </header>
-      <main>
-        ${this.renderSession()}
-        ${s?.authenticated ? this.renderApiTest() : nothing}
-      </main>
+      <kc-mcp-toolbar .session=${this.session}></kc-mcp-toolbar>
+      <div class="body">
+        ${signedIn ? html`<kc-mcp-nav .path=${location.pathname}></kc-mcp-nav>` : nothing}
+        <main>
+          ${this.sessionError
+            ? html`<section class="card">
+                <h2>Session</h2>
+                <p class="error">${this.sessionError}</p>
+                <button class="secondary" type="button" @click=${() => this.refresh()}>Retry</button>
+              </section>`
+            : !s
+              ? html`<section class="card"><p class="muted">Loading…</p></section>`
+              : !s.authenticated
+                ? this.renderSignIn(s)
+                : html`<section
+                    class="card"
+                    @check-session=${() => this.checkSession()}
+                    @session-lost=${() => this.refresh()}
+                  >
+                    ${this.router.outlet()}
+                  </section>`}
+        </main>
+      </div>
     `;
   }
 
-  private renderSession() {
-    const s = this.session;
-    if (this.sessionError) {
-      return html`<section class="card">
-        <h2>Session</h2>
-        <p class="error">${this.sessionError}</p>
-        <button class="secondary" @click=${() => this.refresh()}>Retry</button>
-      </section>`;
-    }
-    if (!s) {
-      return html`<section class="card"><p class="muted">Loading…</p></section>`;
-    }
-    if (!s.authenticated) {
-      // the provider the page was opened for (or this tab's last session used) comes first
-      const suggested = s.suggestedIdp ?? this.suggestedIdp;
-      const last = s.idps.find((idp) => idp.alias === suggested);
-      const others = s.idps.filter((idp) => idp !== last);
-      return html`<section class="card">
-        <h2>Not signed in</h2>
-        <p class="muted">The server signs you in at the identity provider and keeps the session on its side.</p>
-        <div class="row">
-          ${last
-            ? html`<button @click=${() => login(last)}>${last.displayName}</button>
-                ${others.length ? html`<span class="muted">or</span>` : nothing}`
-            : nothing}
-          ${others.map(
-            (idp) => html`<button class=${last ? 'secondary' : ''} @click=${() => login(idp)}>${idp.displayName}</button>`,
-          )}
-        </div>
-      </section>`;
-    }
+  private renderSignIn(s: Me) {
+    const suggested = s.suggestedIdp ?? this.suggestedIdp;
+    const last = s.idps.find((idp) => idp.alias === suggested);
+    const others = s.idps.filter((idp) => idp !== last);
     return html`<section class="card">
-      <h2>Signed in</h2>
-      <dl>
-        <dt>User</dt>
-        <dd>${s.username} ${s.email ? html`<span class="muted">(${s.email})</span>` : nothing}</dd>
-        <dt>Identity provider</dt>
-        <dd>${s.idp} <span class="muted">${s.issuer}</span></dd>
-        <dt>Roles</dt>
-        <dd>${s.roles?.join(', ') || html`<span class="muted">none</span>`}</dd>
-        <dt>Management role</dt>
-        <dd>${s.adminRole} ${s.admin ? '✓' : html`<span class="error">missing</span>`}</dd>
-        <dt>Session expires</dt>
-        <dd>${s.sessionExpiresAt ? new Date(s.sessionExpiresAt).toLocaleString() : '–'}</dd>
-        <dt>Last session check</dt>
-        <dd>
-          ${this.lastCheck
-            ? html`${this.lastCheck.at.toLocaleTimeString()} ${this.lastCheck.ok ? '✓' : html`<span class="error">session ended</span>`}`
-            : html`<span class="muted">when this tab becomes visible again</span>`}
-          <button class="secondary" @click=${() => this.checkSession()}>Check now</button>
-        </dd>
-      </dl>
-    </section>`;
-  }
-
-  private renderApiTest() {
-    return html`<section class="card">
-      <h2>BFF API test</h2>
-      <p class="muted">
-        <code>GET /bff/api/systems</code> runs with the session cookie; the server checks the management role.
-      </p>
-      <button ?disabled=${this.busy} @click=${() => this.callApi()}>Call the API</button>
-      ${this.apiError ? html`<p class="error">${this.apiError}</p>` : nothing}
-      ${this.apiResult ? html`<pre>${this.apiResult}</pre>` : nothing}
+      <h2>Not signed in</h2>
+      <p class="muted">The server signs you in at the identity provider and keeps the session on its side.</p>
+      <div class="row">
+        ${last
+          ? html`<button type="button" @click=${() => login(last)}>${last.displayName}</button>
+              ${others.length ? html`<span class="muted">or</span>` : nothing}`
+          : nothing}
+        ${others.map(
+          (idp) =>
+            html`<button class=${last ? 'secondary' : ''} type="button" @click=${() => login(idp)}>
+              ${idp.displayName}
+            </button>`,
+        )}
+      </div>
     </section>`;
   }
 }

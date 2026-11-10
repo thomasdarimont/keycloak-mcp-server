@@ -11,5 +11,5 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false
   },
-  "include": ["app"]
+  "include": ["app/**/*.ts"]
 }

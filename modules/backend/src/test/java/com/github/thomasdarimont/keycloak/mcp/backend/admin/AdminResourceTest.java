@@ -242,8 +242,26 @@ class AdminResourceTest {
             .then()
             .statusCode(201)
             .body("clientAuth", equalTo("client_secret"))
-            .body("clientSecret", equalTo("vault:acme/client-secret"));
+            .body("clientSecret", equalTo("vault:acme/client-secret"))
+            .body("writable", equalTo(true));
         admin().get("/admin/secrets/acme/client-secret").then().statusCode(200).body("usedBy", hasItem("by-secret"));
+
+        // UI / replace: omit or mask the secret so the stored vault reference stays
+        admin()
+            .body("{\"url\": \"http://127.0.0.1:1\", \"clientAuth\": \"client_secret\","
+                    + " \"displayName\": \"by vault\"}")
+            .put("/admin/systems/by-secret")
+            .then()
+            .statusCode(200)
+            .body("displayName", equalTo("by vault"))
+            .body("clientSecret", equalTo("vault:acme/client-secret"));
+        admin()
+            .body("{\"url\": \"http://127.0.0.1:1\", \"clientAuth\": \"client_secret\","
+                    + " \"clientSecret\": \"***\"}")
+            .put("/admin/systems/by-secret")
+            .then()
+            .statusCode(200)
+            .body("clientSecret", equalTo("vault:acme/client-secret"));
 
         // which protects the secret from removal until the system is gone
         admin().delete("/admin/secrets/acme/client-secret")

@@ -4,11 +4,10 @@
 
 A browser UI for the server at `/ui`, with its backend-for-frontend (BFF) under `/bff`.
 
-**Status: work in progress.** What exists today is a skeleton: sign in at Keycloak, see who you are, call one API
-(the list of systems), sign out. The pages for managing systems, secrets and the audit trail are not built yet. The
-plumbing underneath is complete and covered by integration tests: the login, sessions in the database, several identity
-providers, session checks and back-channel logout. New pages add methods to the BFF and call the admin services; see
-`modules/backend/src/main/resources/frontend/README.md` for the contract and the development loop.
+**Status: work in progress.** Sign in at Keycloak, browse and edit mutable systems (create / replace via the BFF), see
+who you are, sign out. Secrets and storage pages are still placeholders. The plumbing underneath is covered by
+integration tests: the login, sessions in the database, several identity providers, session checks and back-channel
+logout. See `modules/backend/src/main/resources/frontend/README.md` for the contract and the development loop.
 
 ## How it works
 
@@ -73,7 +72,8 @@ which provider and subject it belongs to.
 | `GET /bff/me` | who is signed in and the providers of the login page |
 | `GET /bff/login[?idp=<alias>]` | starts the login, then `/ui/` |
 | `GET /bff/logout` | RP-initiated logout, session row deleted |
-| `GET /bff/api/systems` | the systems, as `GET /admin/systems`; needs `kc-mcp.admin.role` on the access token |
+| `GET /bff/api/systems[/{alias}]` | the systems, as `GET /admin/systems`; needs `kc-mcp.admin.role` on the access token |
+| `PUT /bff/api/systems/{alias}` | replace a mutable system, as `PUT /admin/systems/{alias}` (CSRF header) |
 | `POST /bff/check-session` | the session check above |
 | `POST /bff/backchannel-logout` | for the identity provider, not the browser |
 

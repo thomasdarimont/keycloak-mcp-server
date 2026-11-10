@@ -171,12 +171,19 @@ public class AdminSystems {
             throw new AdminException(409, "system_configured", "'" + system.name() + "' is defined by the repository '"
                     + owner.get().id() + "', which the admin API cannot change.");
         }
+        if (owner.isPresent()) {
+            // Representations mask secrets as "***"; omit / blank / "***" keeps the
+            // stored value.
+            system = keepSecrets(system, known(system.name()), body);
+        }
         checkSecrets(system);
         checkTools(system, catalog);
         // the stored realms stay, and overlay the new block: checked together
-        KeycloakSystem withRealms = owner.isPresent()
-                ? systems.repository().find(system.name()).map(old -> system.withRealms(old.realms())).orElse(system)
-                : system;
+        KeycloakSystem incoming = system;
+        KeycloakSystem withRealms = owner.isPresent() ? systems.repository()
+            .find(incoming.name())
+            .map(old -> incoming.withRealms(old.realms()))
+            .orElse(incoming) : incoming;
         checkAccess(withRealms);
         if (system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT && !keys.configuredKey()) {
             Object mode = body.get("signingKey");
@@ -252,6 +259,37 @@ public class AdminSystems {
         List<String> out = new ArrayList<>(a.orElse(List.of()));
         out.addAll(b.orElse(List.of()));
         return out;
+    }
+
+    /**
+     * On replace, a missing, blank or masked ({@code ***}) secret in the body means
+     * "leave as stored"; a new value or {@code vault:} reference replaces it.
+     */
+    private static KeycloakSystem keepSecrets(KeycloakSystem incoming, KeycloakSystem existing,
+            Map<String, Object> body) {
+        Optional<String> clientSecret = keepSecret(body, "clientSecret", incoming.clientSecret(),
+                existing.clientSecret());
+        Optional<String> password = keepSecret(body, "password", incoming.password(), existing.password());
+        if (clientSecret.equals(incoming.clientSecret()) && password.equals(incoming.password())) {
+            return incoming;
+        }
+        return incoming.withClientSecret(clientSecret).withPassword(password);
+    }
+
+    private static Optional<String> keepSecret(Map<String, Object> body, String field, Optional<String> parsed,
+            Optional<String> stored) {
+        if (!body.containsKey(field)) {
+            return stored;
+        }
+        Object raw = body.get(field);
+        if (raw == null) {
+            return stored;
+        }
+        String value = String.valueOf(raw).trim();
+        if (value.isEmpty() || "***".equals(value)) {
+            return stored;
+        }
+        return parsed;
     }
 
     /** A {@code vault:} reference the vault does not resolve is refused. */
@@ -548,6 +586,7 @@ public class AdminSystems {
         }
         systems.repositoryOf(s.name()).ifPresent(r -> {
             out.put("source", r.id());
+            out.put("writable", r instanceof MutableKeycloakSystemRepository);
             r.timestamps(s.name()).ifPresent(t -> {
                 out.put("createdAt", t.createdAt().toString());
                 out.put("updatedAt", t.updatedAt().toString());
