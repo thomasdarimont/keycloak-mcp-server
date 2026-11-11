@@ -680,10 +680,21 @@ public interface McpServerConfig {
          */
         Optional<List<String>> trustedIssuers();
 
-        /** Keycloak version of this system; see {@link McpServerConfig#version()}. */
+        /**
+         * Keycloak version of this system ({@code 26.8.2}), for the version checks of the
+         * tools. Wins over the version the admin server info reports (a difference is
+         * logged) and stands in when the server info is not readable; unset, the reported
+         * version applies, and without either the version checks are off.
+         */
         Optional<String> version();
 
-        /** Issuer of this system's auth realm; see {@link McpServerConfig#issuer()}. */
+        /**
+         * Issuer of this system's auth realm as Keycloak states it
+         * ({@code https://sso.example.com/realms/master}), for a {@link #url()} that is
+         * internal and differs from Keycloak's public hostname. It is the {@code aud} of
+         * the {@code private_key_jwt} client assertions, and the public base URL of this
+         * Keycloak is derived from it. Unset, {@code <url>/realms/<auth-realm>} applies.
+         */
         Optional<String> issuer();
 
         /**

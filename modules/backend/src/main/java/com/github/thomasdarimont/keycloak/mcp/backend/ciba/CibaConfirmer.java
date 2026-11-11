@@ -255,7 +255,7 @@ public class CibaConfirmer implements Confirmer {
                             + " kc-mcp.profile=shared"));
         }
         if (givenStore == null && registry != null
-                && registry.extensions(PendingApprovalStore.class).stream().findFirst().isEmpty()) {
+            && registry.extensions(PendingApprovalStore.class).isEmpty()) {
             problems.add(ConfigProblem.error(APPROVAL_STORE_MISSING, NO_STORE));
         }
         String tlsName = config.readString(CibaSettings.TLS_CONFIGURATION_NAME);

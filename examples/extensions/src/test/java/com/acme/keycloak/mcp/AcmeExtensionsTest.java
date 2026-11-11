@@ -165,7 +165,7 @@ class AcmeExtensionsTest {
     @Test
     void tenantRepositoryIsOnlySupportedWithTenants() {
         AcmeTenantRepository repo = new AcmeTenantRepository("");
-        assertTrue(!repo.isSupported(null, new ProviderConfig("acme-tenants", Map.of())));
+        assertFalse(repo.isSupported(null, new ProviderConfig("acme-tenants", Map.of())));
         assertTrue(repo.isSupported(null, new ProviderConfig("acme-tenants",
                 Map.of("systems", "globex=https://sso.globex.example|globex-prod"))));
     }
@@ -185,7 +185,7 @@ class AcmeExtensionsTest {
     void theBundleHasTheLabelsOfEverySetting() {
         ConfigMessages messages = new ConfigMessages(getClass().getClassLoader());
         List<String> missing = new java.util.ArrayList<>();
-        for (Extension e : List.<Extension>of(new ProtectedUsersCheck(), new JsonLinesAuditListener(),
+        for (Extension e : List.of(new ProtectedUsersCheck(), new JsonLinesAuditListener(),
                 new AcmeTenantRepository(), new AcmeToolProvider())) {
             missing.addAll(messages.missingLabels(ConfigMessageKeys.prefix(e), e.configSpec()));
         }

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -15,9 +16,7 @@ import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /** Extensions that cannot work with the current configuration are left out. */
 class IsSupportedTest {
@@ -89,7 +88,7 @@ class IsSupportedTest {
         };
         DefaultExtensionRegistry registry = new DefaultExtensionRegistry(discovery, null,
                 config(Map.of("kc-mcp.spi.audit-listener.with.needs", "yes")));
-        assertEquals(List.of("with"), registry.extensions(AuditListener.class).stream().map(l -> l.id()).toList());
+        assertEquals(List.of("with"), registry.extensions(AuditListener.class).stream().map(Extension::id).toList());
     }
 
     @Test
@@ -182,7 +181,7 @@ class IsSupportedTest {
         assertFalse(
                 Extensions.usable(e, "AuditListener", config(Map.of("kc-mcp.spi.audit-listener.acme-configured.enabled",
                         "false", "kc-mcp.spi.audit-listener.acme-configured.company", "ACME"))));
-        assertEquals(null, e.company);
+        assertNull(e.company);
     }
 
     @Test
