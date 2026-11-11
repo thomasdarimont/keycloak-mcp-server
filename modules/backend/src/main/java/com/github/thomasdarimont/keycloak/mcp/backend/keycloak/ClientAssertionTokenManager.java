@@ -21,6 +21,13 @@ import io.vertx.core.json.JsonObject;
  * Fetches and caches access tokens for a client authenticating with a signed JWT (RFC
  * 7523 / OIDC {@code private_key_jwt}); works with the {@code client_credentials} and the
  * {@code password} grant.
+ * <p>
+ * With {@code client_credentials} an expired token is replaced by a new grant: Keycloak
+ * issues no refresh token for it by default. With {@code password} every grant starts a
+ * user session in Keycloak, so the refresh token is kept and used while it is valid, a
+ * new grant follows only when the refresh is refused, and {@link #close()} logs the
+ * session out; a fresh grant whenever the short-lived access token expires would leave a
+ * session behind each time until Keycloak's idle timeout ends it.
  */
 public class ClientAssertionTokenManager implements AutoCloseable {
 
@@ -41,6 +48,10 @@ public class ClientAssertionTokenManager implements AutoCloseable {
     private final ReentrantLock lock = new ReentrantLock();
     private String token;
     private long expiresAt;
+    /** Kept for the password grant only; {@code null} when none or not to be used. */
+    private String refreshToken;
+    /** Epoch seconds; 0 when Keycloak named no expiry ({@code refresh_expires_in} 0). */
+    private long refreshExpiresAt;
     private String scope;
     private boolean scopeRefused;
     private Runnable onScopeRefused = () -> {
@@ -121,7 +132,9 @@ public class ClientAssertionTokenManager implements AutoCloseable {
         try {
             long now = Instant.now().getEpochSecond();
             if (token == null || now + MIN_VALIDITY_SECONDS >= expiresAt) {
-                grant();
+                if (!refreshed(now)) {
+                    grant();
+                }
             }
             return token;
         }
@@ -130,6 +143,10 @@ public class ClientAssertionTokenManager implements AutoCloseable {
         }
     }
 
+    /**
+     * Drops the access token; the next {@link #accessToken()} refreshes it (password
+     * grant) or asks for a new one.
+     */
     public void invalidate() {
         lock.lock();
         try {
@@ -165,11 +182,7 @@ public class ClientAssertionTokenManager implements AutoCloseable {
 
     private void grant() {
         long now = Instant.now().getEpochSecond();
-        String assertion = clientAssertion(clientId, audience, signer.get(), assertionLifespan);
-        Form form = new Form().param("grant_type", grantType.oauthValue())
-            .param("client_id", clientId)
-            .param("client_assertion_type", ASSERTION_TYPE)
-            .param("client_assertion", assertion);
+        Form form = authenticated(new Form().param("grant_type", grantType.oauthValue()));
         if (grantType == GrantType.PASSWORD) {
             form.param("username", username).param("password", password);
         }
@@ -177,9 +190,7 @@ public class ClientAssertionTokenManager implements AutoCloseable {
         if (withScope) {
             form.param("scope", scope);
         }
-        try (Response response = client.target(tokenEndpoint)
-            .request(MediaType.APPLICATION_JSON_TYPE)
-            .post(Entity.form(form))) {
+        try (Response response = post(tokenEndpoint, form)) {
             String body = response.hasEntity() ? response.readEntity(String.class) : "";
             if (response.getStatus() != 200) {
                 if (withScope && isInvalidScope(response.getStatus(), body)) {
@@ -194,10 +205,91 @@ public class ClientAssertionTokenManager implements AutoCloseable {
                 throw new ToolException("unauthorized",
                         "Keycloak rejected the client assertion (HTTP " + response.getStatus() + "): " + body);
             }
-            JsonObject json = new JsonObject(body);
-            token = json.getString("access_token");
-            long expiresIn = json.getLong("expires_in", 60L);
-            expiresAt = now + expiresIn;
+            accept(new JsonObject(body), now);
+        }
+    }
+
+    /**
+     * Renews the token with the refresh token of the password grant while it is valid.
+     *
+     * @return {@code false} when there is none, it has expired or Keycloak refused it
+     * (session ended, user disabled, password changed): a new grant follows
+     */
+    private boolean refreshed(long now) {
+        if (refreshToken == null || refreshExpiresAt != 0 && now + MIN_VALIDITY_SECONDS >= refreshExpiresAt) {
+            refreshToken = null;
+            return false;
+        }
+        Form form = authenticated(new Form().param("grant_type", "refresh_token").param("refresh_token", refreshToken));
+        try (Response response = post(tokenEndpoint, form)) {
+            String body = response.hasEntity() ? response.readEntity(String.class) : "";
+            if (response.getStatus() != 200) {
+                LOG.debugf("Refresh at %s refused (HTTP %d %s); logging in again", tokenEndpoint, response.getStatus(),
+                        body.replaceAll("\\s+", " ").trim());
+                refreshToken = null;
+                return false;
+            }
+            accept(new JsonObject(body), now);
+            return true;
+        }
+        catch (RuntimeException e) {
+            LOG.debugf(e, "Refresh at %s failed; logging in again", tokenEndpoint);
+            refreshToken = null;
+            return false;
+        }
+    }
+
+    private void accept(JsonObject json, long now) {
+        token = json.getString("access_token");
+        expiresAt = now + json.getLong("expires_in", 60L);
+        String refresh = grantType == GrantType.PASSWORD ? json.getString("refresh_token") : null;
+        if (refresh != null && !refresh.isBlank()) {
+            // a refresh answer without a new refresh token keeps the old one and its
+            // expiry
+            refreshToken = refresh;
+            long refreshExpiresIn = json.getLong("refresh_expires_in", 0L);
+            refreshExpiresAt = refreshExpiresIn > 0 ? now + refreshExpiresIn : 0;
+        }
+    }
+
+    /** The client authentication every request of this client carries. */
+    private Form authenticated(Form form) {
+        return form.param("client_id", clientId)
+            .param("client_assertion_type", ASSERTION_TYPE)
+            .param("client_assertion", clientAssertion(clientId, audience, signer.get(), assertionLifespan));
+    }
+
+    private Response post(String endpoint, Form form) {
+        return client.target(endpoint).request(MediaType.APPLICATION_JSON_TYPE).post(Entity.form(form));
+    }
+
+    /**
+     * Ends the Keycloak session of the password grant (OIDC logout with the refresh
+     * token); nothing to do for {@code client_credentials}. Failures are logged only: the
+     * session then ends at Keycloak's idle timeout.
+     */
+    public void logout() {
+        lock.lock();
+        try {
+            String refresh = refreshToken;
+            refreshToken = null;
+            token = null;
+            expiresAt = 0;
+            if (refresh == null) {
+                return;
+            }
+            String endpoint = tokenEndpoint.substring(0, tokenEndpoint.length() - "/token".length()) + "/logout";
+            try (Response response = post(endpoint, authenticated(new Form().param("refresh_token", refresh)))) {
+                if (response.getStatus() / 100 != 2) {
+                    LOG.debugf("Logout at %s answered HTTP %d", endpoint, response.getStatus());
+                }
+            }
+            catch (RuntimeException e) {
+                LOG.debugf(e, "Logout at %s failed", endpoint);
+            }
+        }
+        finally {
+            lock.unlock();
         }
     }
 
@@ -209,8 +301,14 @@ public class ClientAssertionTokenManager implements AutoCloseable {
         return status == 400 && body != null && body.contains("invalid_scope");
     }
 
+    /** Logs the password grant's session out, then closes the HTTP client. */
     @Override
     public void close() {
-        client.close();
+        try {
+            logout();
+        }
+        finally {
+            client.close();
+        }
     }
 }

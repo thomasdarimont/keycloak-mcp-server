@@ -62,7 +62,7 @@ the database connection.
 |---------------------------------|-----------------------------|---------|
 | `kc-mcp.systems.<name>.url`     |                             | a Keycloak system: base URL, context path included (`https://sso.example.com/auth`); a system exists when its url is set, one Keycloak is usually named `default` ([Several Keycloak systems](systems.md)) |
 | `kc-mcp.systems.<name>.auth-realm` | `master`                 | realm of the system's client / admin user |
-| `kc-mcp.systems.<name>.grant-type` | `client_credentials`     | or `password` (deprecated by OAuth 2.1; local dev only) |
+| `kc-mcp.systems.<name>.grant-type` | `client_credentials`     | or `password` (deprecated by OAuth 2.1; local dev only): one Keycloak session for the admin user, renewed with its refresh token and logged out when the server stops |
 | `kc-mcp.systems.<name>.client-auth` | inferred                | `client_secret`, `private_key_jwt`, `none` |
 | `kc-mcp.systems.<name>.client-id` | `admin-cli` for password+none | client id |
 | `kc-mcp.systems.<name>.client-secret` |                       | for `client_secret` |

@@ -481,6 +481,16 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
         purgeDelegates(Long.MAX_VALUE, true);
         Keycloak k = keycloak;
         if (k != null) {
+            if (forwardedToken == null && jwtTokens == null && system.grantType() == GrantType.PASSWORD) {
+                // the password grant's user session would stay in Keycloak until its idle
+                // timeout; client_credentials has no refresh token to log out with
+                try {
+                    k.tokenManager().logout();
+                }
+                catch (RuntimeException e) {
+                    LOG.debugf(e, "[%s] Logout of the admin user's session failed", system.name());
+                }
+            }
             try {
                 k.close();
             }
