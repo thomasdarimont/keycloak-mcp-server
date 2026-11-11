@@ -4,13 +4,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditEvent;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
+import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
 
 import io.smallrye.config.PropertiesConfigSource;

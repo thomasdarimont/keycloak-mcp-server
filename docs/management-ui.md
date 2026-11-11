@@ -34,8 +34,9 @@ It needs the [database storage](storage.md) and HTTPS.
 A `-Pdist` build ships the same bundle as a static jar (`modules/ui-bundle`) without the extension, which cannot run
 when `bin/kcmcp.sh build` re-augments an unpacked distribution.
 Edit files under `modules/backend/src/main/resources/frontend` while `quarkus:dev` is running for live reload.
-`bin/kcmcp.sh start-dev` in an H2 distribution turns the UI on with a database in `data/` and no HTTPS, as its session
-cookies drop `Secure`; only for one person's machine.
+`bin/kcmcp.sh start-dev` in an H2 distribution turns the UI on with a database in `data/`, registration of systems
+(*Add system*) and no HTTPS, as its session cookies drop `Secure`; only for one person's machine
+([Development mode](configuration.md#development-mode-start-dev)).
 A working setup with one or two identity providers: `examples/management-ui/`.
 
 ## Several identity providers

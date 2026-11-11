@@ -254,8 +254,7 @@ public class CibaConfirmer implements Confirmer {
                             + " quarkus.oidc.tenant-enabled=true), kc-mcp.delegation=forward|exchange, or"
                             + " kc-mcp.profile=shared"));
         }
-        if (givenStore == null && registry != null
-            && registry.extensions(PendingApprovalStore.class).isEmpty()) {
+        if (givenStore == null && registry != null && registry.extensions(PendingApprovalStore.class).isEmpty()) {
             problems.add(ConfigProblem.error(APPROVAL_STORE_MISSING, NO_STORE));
         }
         String tlsName = config.readString(CibaSettings.TLS_CONFIGURATION_NAME);

@@ -51,7 +51,9 @@ class DevModeInterceptorFactoryTest {
         assertEquals("jdbc:h2:file:" + home.resolve("data").resolve("kc-mcp"),
                 c.getRawValue("quarkus.datasource.jdbc.url"));
         assertEquals("true", c.getRawValue("kc-mcp.ui.enabled"));
+        assertEquals("true", c.getRawValue("kc-mcp.dynamic-systems"), "the UI can register systems");
         assertTrue(names(c).contains("quarkus.datasource.jdbc.url"));
+        assertTrue(names(c).contains("kc-mcp.dynamic-systems"));
     }
 
     @Test
@@ -65,10 +67,14 @@ class DevModeInterceptorFactoryTest {
         Map<String, String> uiOff = new HashMap<>(dev);
         uiOff.put("kc-mcp.ui.enabled", "false");
         assertEquals("false", config(uiOff).getRawValue("kc-mcp.ui.enabled"));
+        Map<String, String> staticOnly = new HashMap<>(dev);
+        staticOnly.put("kc-mcp.dynamic-systems", "false");
+        assertEquals("false", config(staticOnly).getRawValue("kc-mcp.dynamic-systems"));
         Map<String, String> noStorage = new HashMap<>(dev);
         noStorage.put("kc-mcp.storage.enabled", "false");
         assertNull(config(noStorage).getRawValue("quarkus.datasource.jdbc.url"));
         assertNull(config(noStorage).getRawValue("kc-mcp.ui.enabled"));
+        assertNull(config(noStorage).getRawValue("kc-mcp.dynamic-systems"));
         ownDatabase.put("kc-mcp.storage.enabled", "false");
         assertNull(config(ownDatabase).getRawValue("kc-mcp.ui.enabled"), "a url alone gives no session store");
     }
@@ -78,6 +84,7 @@ class DevModeInterceptorFactoryTest {
         SmallRyeConfig notDev = config(Map.of("kcmcp.home.dir", home.toString(), "quarkus.datasource.db-kind", "h2"));
         assertNull(notDev.getRawValue("quarkus.datasource.jdbc.url"));
         assertNull(notDev.getRawValue("kc-mcp.ui.enabled"));
+        assertNull(notDev.getRawValue("kc-mcp.dynamic-systems"));
         assertNull(config(Map.of("kc-mcp.dev-mode", "true", "quarkus.datasource.db-kind", "h2"))
             .getRawValue("quarkus.datasource.jdbc.url"), "from source there is no distribution directory");
         Files.createDirectories(home.resolve("lib/quarkus"));

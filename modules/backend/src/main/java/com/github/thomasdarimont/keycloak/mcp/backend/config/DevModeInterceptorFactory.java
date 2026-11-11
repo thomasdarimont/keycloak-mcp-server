@@ -25,10 +25,11 @@ import io.smallrye.config.DefaultValuesConfigSource;
  * {@code kc-mcp.static-systems=false}. Below {@link DefaultTenantInterceptorFactory}, so
  * the default OIDC tenant derives from the assumed system like from a configured one.
  * <p>
- * A distribution built for H2 also gets a database under {@code data/} and the management
- * UI. Whatever is configured from any source wins, and a build for another database has
- * to be given its own connection first. Below the storage switch, which sees this
- * datasource like a configured one.
+ * A distribution built for H2 also gets a database under {@code data/}, the management UI
+ * and {@code kc-mcp.dynamic-systems=true}, so the UI and the admin API can register
+ * systems in that database next to the configured ones. Whatever is configured from any
+ * source wins, and a build for another database has to be given its own connection first.
+ * Below the storage switch, which sees this datasource like a configured one.
  */
 @AutoService(ConfigSourceInterceptorFactory.class)
 public class DevModeInterceptorFactory implements ConfigSourceInterceptorFactory {
@@ -39,6 +40,7 @@ public class DevModeInterceptorFactory implements ConfigSourceInterceptorFactory
     static final String JDBC_URL = "quarkus.datasource.jdbc.url";
     static final String DB_KIND = "quarkus.datasource.db-kind";
     static final String UI_ENABLED = "kc-mcp.ui.enabled";
+    static final String DYNAMIC_SYSTEMS = "kc-mcp.dynamic-systems";
     static final String STORAGE_ENABLED = "kc-mcp.storage.enabled";
     static final String HOME_DIR = "kcmcp.home.dir";
 
@@ -56,7 +58,7 @@ public class DevModeInterceptorFactory implements ConfigSourceInterceptorFactory
                 String assumed = switch (name) {
                     case DEFAULT_URL -> assumesLocalKeycloak(ctx) ? LOCAL_KEYCLOAK : null;
                     case JDBC_URL -> assumedDatabase(ctx);
-                    case UI_ENABLED -> hasDatabase(ctx) ? "true" : null;
+                    case UI_ENABLED, DYNAMIC_SYSTEMS -> hasDatabase(ctx) ? "true" : null;
                     default -> null;
                 };
                 return assumed == null ? value : assumed(name, assumed);
@@ -70,7 +72,10 @@ public class DevModeInterceptorFactory implements ConfigSourceInterceptorFactory
                     all.add(DEFAULT_URL);
                 }
                 if (assumedDatabase(ctx) != null) {
-                    List.of(JDBC_URL, UI_ENABLED).stream().filter(n -> !all.contains(n)).forEach(all::add);
+                    List.of(JDBC_URL, UI_ENABLED, DYNAMIC_SYSTEMS)
+                        .stream()
+                        .filter(n -> !all.contains(n))
+                        .forEach(all::add);
                 }
                 return all.iterator();
             }

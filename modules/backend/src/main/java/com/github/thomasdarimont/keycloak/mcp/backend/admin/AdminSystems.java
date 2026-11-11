@@ -101,13 +101,18 @@ public class AdminSystems {
                 config.admin().allowNewSystems() ? "" : ", registration of new systems closed");
     }
 
-    /** Every known system, static ones included. */
+    /**
+     * Every known system, static ones included, and {@code canRegister}: whether a new
+     * system can be registered (a mutable repository,
+     * {@code kc-mcp.admin.allow-new-systems}).
+     */
     public Map<String, Object> list(String publicBase) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (String name : systems.names()) {
             systems.repository().find(name).ifPresent(s -> out.add(represent(s, publicBase)));
         }
-        return Map.of("systems", out);
+        boolean canRegister = systems.mutableRepository().isPresent() && config.admin().allowNewSystems();
+        return Map.of("systems", out, "canRegister", canRegister);
     }
 
     public Map<String, Object> get(String alias, String publicBase) {

@@ -67,6 +67,8 @@ export interface System {
 
 export interface SystemsList {
   systems: System[];
+  /** Whether a new system can be registered (a mutable repository, new systems allowed). */
+  canRegister?: boolean;
 }
 
 /** Body for PUT /bff/api/systems/{alias} (omit secrets to keep stored values). */

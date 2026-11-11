@@ -104,8 +104,10 @@ MCP client logs the user in at the right realm.
    Swagger UI at <http://localhost:9080/q/swagger-ui/> describes the API; *Authorize* takes the same token. The static
    token keeps the demo simple; on a real server the preferred way in is an access token of a trusted issuer
    (`kc-mcp.admin.issuer`), a person's from the authorization code flow or a service account's from the client
-   credentials grant, carrying `kc-mcp.admin.role`, so Keycloak governs who administers the server. Without a database
-   this server only reads: registering a system answers 503 `no_mutable_repository`, which is the expected answer here
+   credentials grant, carrying `kc-mcp.admin.role`, so Keycloak governs who administers the server. With `start`
+   there is no database and this server only reads: registering a system answers 503 `no_mutable_repository`. With
+   `start-dev` the H2 database comes with `kc-mcp.dynamic-systems=true`, so the API and the UI's *Add system* register
+   systems there, next to the ones of `conf/systems/`
    ([Several Keycloak systems](../../docs/systems.md), [Database storage](../../docs/storage.md)).
 
 6. **LM Studio.** Add the two servers from `mcp.json` (Program → Install → Edit mcp.json). On connect LM Studio opens

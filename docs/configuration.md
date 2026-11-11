@@ -18,6 +18,34 @@ better kept in a file or the environment, since a command line is visible in the
 Run the server with a command, `start` or `start-dev`, also with `java -jar quarkus-run.jar start`; without one it prints
 the help. The launch scripts add `build`, which fixes the database kind ([Storage](storage.md)).
 
+### Development mode (`start-dev`)
+
+`bin/kcmcp.sh start-dev` runs the same configuration with less to set up, for trying the server on one person's
+machine; it sets `kc-mcp.dev-mode=true`. Compared to `start`:
+
+- the `local` security profile applies whatever the files say, and the startup checks warn instead of stopping the
+  start: a setting the `shared` profile would insist on, or a Keycloak that is down, is a warning
+- without any configured system, the Keycloak of the examples is assumed: system `default` at
+  `http://localhost:8080`, the server's client in `master`; a system of any name, or `kc-mcp.static-systems=false`,
+  switches this off
+- in a distribution built for H2 (the default; not after `build --db=postgresql`), unless `kc-mcp.storage.enabled=false`:
+  - a database in `data/` ([Storage](storage.md)): signing keys, secrets, audit and sessions survive a restart;
+    without `kc-mcp.storage.secret-key` it keeps them unencrypted, which the `local` profile only warns about
+  - the management UI at `/ui/` ([Management UI](management-ui.md)); the realm needs its client `keycloak-mcp-ui`
+  - `kc-mcp.dynamic-systems=true`: the admin API and the UI's *Add system* register systems in that database, next to
+    the configured ones, which keep precedence ([Several Keycloak systems](systems.md)); the `local` profile does not
+    require `kc-mcp.allowed-hosts`, so they may point at any host
+- the UI's session cookies drop `Secure`, so it works over plain HTTP
+
+Whatever is configured wins over each of these: a `quarkus.datasource.jdbc.url` replaces the H2 file (for PostgreSQL
+after `build --db=postgresql`), `kc-mcp.ui.enabled=false` or `kc-mcp.dynamic-systems=false` keep the UI or the
+registration off, and a certificate (`conf/scenarios/https.conf.example`) serves HTTPS. `bin/kcmcp.sh show-config`
+names `kc-mcp start-dev` as the source of what development mode assumed. Not for a server other people reach: use
+`start` with a [scenario](scenarios.md) there.
+
+`./mvnw quarkus:dev` is something else, the live-reload mode for working on the server's code
+([Development](development.md)).
+
 A setting that does not exist stops the start, whether from a file or the command line, which also suggests the closest
 name; in the environment it is a warning, and `kc-mcp.spi.*` is not checked, since extensions define those keys.
 
@@ -81,7 +109,7 @@ the database connection.
 | `kc-mcp.delegation`             | `off`                       | `forward`: calls run with the caller's token; `exchange`: with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); both need `quarkus.oidc.tenant-enabled=true` |
 | `kc-mcp.admin-api-scope`        | `kc-admin-api`              | scope requested with Admin API tokens and advertised to MCP clients (Keycloak 26.8.2+ audience check); dropped on `invalid_scope`; blank: none |
 | `kc-mcp.dns-rebinding-protection` | `auto`                    | `auto` (on while anonymous), `on`, `off`: `Host`/`Origin` of MCP requests must be localhost or in `kc-mcp.dns-rebinding-allowed-hosts` |
-| `kc-mcp.dev-mode`               | `false`                     | what `bin/kcmcp.sh start-dev` sets: without any configured system, `default` at `http://localhost:8080` is assumed; in an H2 distribution an H2 database in `data/` and the management UI unless configured; the UI's session cookies are not `Secure` |
+| `kc-mcp.dev-mode`               | `false`                     | what `bin/kcmcp.sh start-dev` sets; see [Development mode](#development-mode-start-dev) |
 | `kc-mcp.profile`                | `local`                     | `local` or `shared`: defaults of the four rows below, and `shared` refuses to start without caller authentication + audience, `allowed-hosts`, admin audience, storage `secret-key` ([Guardrails](security.md#guardrails)) |
 | `kc-mcp.require-caller`         | `false`, `shared`: always   | refuse anonymous requests with the OAuth challenge even with `delegation=off` |
 | `kc-mcp.confirm-fallback`       | `flag`, `shared`: `deny`    | without elicitation: `flag` accepts `confirm: true`, `deny` refuses destructive tools |

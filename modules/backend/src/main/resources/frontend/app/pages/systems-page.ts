@@ -97,6 +97,10 @@ export class SystemsPage extends LitElement {
   @state()
   private busy = false;
 
+  /** From the list; unknown (null) until it is loaded or when the server does not say. */
+  @state()
+  private canRegister: boolean | null = null;
+
   connectedCallback(): void {
     super.connectedCallback();
     void this.load();
@@ -108,8 +112,10 @@ export class SystemsPage extends LitElement {
     try {
       const data = await listSystems();
       this.items = data.systems ?? [];
+      this.canRegister = data.canRegister ?? null;
     } catch (e) {
       this.items = [];
+      this.canRegister = null;
       if (e instanceof BffError) {
         this.error = `${e.status} ${e.code}: ${e.message}`;
         if (e.sessionLost) {
@@ -133,7 +139,11 @@ export class SystemsPage extends LitElement {
         edit its settings.
       </p>
       <div class="row">
-        <a class="btn" href=${newSystemHref()}>Add system</a>
+        ${
+          this.canRegister === false
+            ? nothing
+            : html`<a class="btn" href=${newSystemHref()}>Add system</a>`
+        }
         <button
           class="secondary"
           type="button"
@@ -143,6 +153,15 @@ export class SystemsPage extends LitElement {
           Refresh
         </button>
       </div>
+      ${
+        this.canRegister === false
+          ? html`<p class="muted">
+              This server cannot register systems: it needs the database storage
+              and <code>kc-mcp.dynamic-systems=true</code>, and
+              <code>kc-mcp.admin.allow-new-systems</code> not switched off.
+            </p>`
+          : nothing
+      }
       ${this.error ? html`<p class="error">${this.error}</p>` : nothing}
       ${
         !this.error && !this.busy && this.items.length === 0

@@ -185,8 +185,8 @@ class AcmeExtensionsTest {
     void theBundleHasTheLabelsOfEverySetting() {
         ConfigMessages messages = new ConfigMessages(getClass().getClassLoader());
         List<String> missing = new java.util.ArrayList<>();
-        for (Extension e : List.of(new ProtectedUsersCheck(), new JsonLinesAuditListener(),
-                new AcmeTenantRepository(), new AcmeToolProvider())) {
+        for (Extension e : List.of(new ProtectedUsersCheck(), new JsonLinesAuditListener(), new AcmeTenantRepository(),
+                new AcmeToolProvider())) {
             missing.addAll(messages.missingLabels(ConfigMessageKeys.prefix(e), e.configSpec()));
         }
         assertEquals(List.of(), missing);
