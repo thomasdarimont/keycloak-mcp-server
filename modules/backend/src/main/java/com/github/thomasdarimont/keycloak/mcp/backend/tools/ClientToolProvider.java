@@ -28,6 +28,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -165,6 +166,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .synonyms("service account roles", "client credentials", "machine user", "technical user",
                             "service-account-")
                     .schema(schema().string("clientId", CLIENT_ID).required())
+                    .cost(ToolCost.PER_ITEM, "one call per composite role and group reached")
                     .handler(this::serviceAccount)
                     .roles("view-clients", "view-users")
                     .api(get(R + "/clients/{client-uuid}/service-account-user").path("client-uuid", "clientId"))
@@ -262,6 +264,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .synonyms("authorization", "authz", "uma", "permission", "resource server",
                             "fine grained permissions", "who may access")
                     .schema(schema().string("clientId", CLIENT_ID).required().pagination())
+                    .cost(ToolCost.PER_ITEM, "three calls per permission")
                     .handler(this::authzPermissions)
                     .roles("view-authorization")
                     .api(get(R + "/clients/{client-uuid}/authz/resource-server/policy").path("client-uuid", "clientId"),

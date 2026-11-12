@@ -35,6 +35,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -288,6 +289,7 @@ public class AuthzToolProvider extends AbstractToolProvider {
                         .required()
                         .stringArray("resources", "Resource " + NAMES + " to evaluate (default: all)")
                         .stringArray("scopes", "Only these scopes of them"))
+                    .cost(ToolCost.PER_ITEM, "evaluates every permission when no resources are given")
                     .handler(this::evaluate)
                     .roles("view-authorization", "view-users")
                     .api(post(RS + "/policy/evaluate").path("client-uuid", "clientId")

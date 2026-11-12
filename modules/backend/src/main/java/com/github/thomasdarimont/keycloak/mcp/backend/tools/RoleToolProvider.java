@@ -15,6 +15,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -82,6 +83,7 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .synonyms("permissions of user", "what can", "is admin", "role mapping", "has role",
                             "effective roles", "why does user have role", "client roles of user", "inherited")
                     .schema(schema().string("userId", USER_ID).required())
+                    .cost(ToolCost.PER_ITEM, "one call per composite role and group reached")
                     .handler(this::userRoles)
                     .roles("view-users")
                     .api(get(R + "/users/{user-id}/role-mappings").path("user-id", "userId"),
@@ -97,6 +99,8 @@ public class RoleToolProvider extends AbstractToolProvider {
                         .required()
                         .string("role", "Realm role name, e.g. admin")
                         .required())
+                    .cost(ToolCost.PER_ITEM,
+                            "reports the effective roles after: one call per composite role and group reached")
                     .handler(this::userRoleAssign)
                     .roles("manage-users")
                     .api(post(R + "/users/{user-id}/role-mappings/realm").path("user-id", "userId"))
@@ -107,6 +111,8 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("revoke", "take away", "remove role", "demote", "unassign")
                     .schema(schema().string("userId", USER_ID).required().string("role", "Realm role name").required())
+                    .cost(ToolCost.PER_ITEM,
+                            "reports the effective roles after: one call per composite role and group reached")
                     .handler(this::userRoleUnassign)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/role-mappings/realm").path("user-id", "userId"))
@@ -137,6 +143,8 @@ public class RoleToolProvider extends AbstractToolProvider {
                         .required()
                         .string("role", "Client role name")
                         .required())
+                    .cost(ToolCost.PER_ITEM,
+                            "reports the effective roles after: one call per composite role and group reached")
                     .handler(this::userClientRoleAssign)
                     .roles("manage-users")
                     .api(post(R + "/users/{user-id}/role-mappings/clients/{client-id}").path("user-id", "userId")
@@ -165,6 +173,7 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .synonyms("role details", "composite role", "what does role include", "role attributes",
                             "child roles", "associated roles")
                     .schema(schema().string("role", "Realm role name, e.g. admin").required())
+                    .cost(ToolCost.PER_ITEM, "one call per client among the included roles")
                     .handler(this::get)
                     .roles("view-realm")
                     .api(get(R + "/roles/{role-name}").path("role-name", "role"),

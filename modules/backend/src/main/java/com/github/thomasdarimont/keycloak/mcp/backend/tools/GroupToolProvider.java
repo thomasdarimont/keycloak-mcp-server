@@ -17,6 +17,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
@@ -80,6 +81,7 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .api(get(R + "/groups/{group-id}").path("group-id", "id"),
                             get(R + "/groups/{group-id}/role-mappings").path("group-id", "id"),
                             get(R + "/groups/{group-id}/children").path("group-id", "id"))
+                    .cost(ToolCost.PER_ITEM, "one call per composite role and group reached")
                     .handler(this::get)
                     .build(),
                 tool("keycloak_group_create").title("Create group")
@@ -124,6 +126,8 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .idempotent(true)
                     .synonyms("join", "assign to group", "put user in", "membership")
                     .schema(schema().string("groupId", GROUP_ID).required().string("userId", USER_ID).required())
+                    .cost(ToolCost.PER_ITEM,
+                            "reports the effective roles after: one call per composite role and group reached")
                     .handler(this::memberAdd)
                     .roles("manage-users")
                     .api(put(R + "/users/{user-id}/groups/{groupId}").path("user-id", "userId")
@@ -135,6 +139,8 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("leave", "kick from group", "unassign group", "membership")
                     .schema(schema().string("groupId", GROUP_ID).required().string("userId", USER_ID).required())
+                    .cost(ToolCost.PER_ITEM,
+                            "reports the effective roles after: one call per composite role and group reached")
                     .handler(this::memberRemove)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/groups/{groupId}").path("user-id", "userId")

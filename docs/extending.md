@@ -53,6 +53,10 @@ public class AcmeToolProvider implements ToolProvider {
 - Every tool declares its level, `.read()`, `.write()` or `.destructive()`; `build()` refuses a tool without one, so a
   forgotten call cannot slip past the read-only filter or the confirmation. The level is in every `search_tools` hit
   (`level`) and in the MCP tool annotations (`readOnlyHint`, `destructiveHint`).
+- Cost on a large realm: `.cost(ToolCost.PER_ITEM, "one call per client")` for a tool whose requests grow with
+  the realm, `ToolCost.HEAVY` for long-running work in Keycloak; `LIGHT` is the default. The model sees `cost` and
+  `costNote` in `search_tools` hits and the note at the end of a directly listed tool's description. The note says
+  why in a few words, at most 80 characters.
 - Provider tools get search, exposure modes, validation, realm checks, confirmation, audit.
 - Built-in areas (`users`, `groups`, `roles`, `clients`, `idp`, `orgs`, `federation`, `auth-flows`, `events`, `realm`)
   use the same SPI; `kc-mcp.spi.<spi>.<id>.enabled=false` switches one off.

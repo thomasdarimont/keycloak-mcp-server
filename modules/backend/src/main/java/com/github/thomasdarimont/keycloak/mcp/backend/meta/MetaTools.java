@@ -28,6 +28,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.search.SearchHit;
 import com.github.thomasdarimont.keycloak.mcp.backend.search.ToolIndex;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -323,11 +324,30 @@ public class MetaTools {
     }
 
     public static JsonObject toolJson(ToolSpec spec) {
-        return new JsonObject().put("name", spec.name())
+        JsonObject tool = new JsonObject().put("name", spec.name())
             .put("title", spec.title())
             .put("description", spec.description())
-            .put("level", spec.level().name().toLowerCase())
-            .put("inputSchema", spec.inputSchema());
+            .put("level", spec.level().name().toLowerCase());
+        if (spec.cost() != ToolCost.LIGHT) {
+            // a hint to narrow the call (a filter, a smaller tool) on a large realm
+            tool.put("cost", spec.cost().id());
+            if (spec.costNote() != null) {
+                tool.put("costNote", spec.costNote());
+            }
+        }
+        return tool.put("inputSchema", spec.inputSchema());
+    }
+
+    /**
+     * The description a directly listed tool carries: its own, plus what makes it heavy
+     * when it is.
+     */
+    public static String listedDescription(ToolSpec spec) {
+        if (spec.cost() == ToolCost.LIGHT) {
+            return spec.description();
+        }
+        String why = spec.costNote() == null ? "" : ": " + spec.costNote();
+        return spec.description() + " Cost " + spec.cost().id() + why + ".";
     }
 
     // ---- whoami

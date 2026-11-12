@@ -13,66 +13,189 @@ import io.vertx.core.json.JsonObject;
 
 /**
  * Catalog entry for one tool, made with {@link #builder(String)}; the builder's methods
- * say what each part does.
- *
- * @param name what models call it ({@link #builder(String)})
- * @param title short human readable name ({@link Builder#title})
- * @param description what the tool does, for the model ({@link Builder#description})
- * @param category the area it belongs to ({@link Builder#category})
- * @param level read, write or destructive ({@link Builder#read()})
- * @param idempotent whether a repeated call has the same effect
- * ({@link Builder#idempotent})
- * @param inputSchema flat JSON schema of the tool's own parameters; the catalog adds
- * {@code realm} for realm scoped tools and clamps pagination
- * @param synonyms extra search terms, never shown to the model
- * @param hot candidate for direct exposure in hybrid mode
- * @param realmScoped whether the tool takes a {@code realm} argument
- * @param api Admin REST operations the tool relies on (checked against the OpenAPI
- * document in tests)
- * @param requires features or versions the Keycloak system must have
- * @param requiredRoles roles the server's token needs in the target realm, all of them
- * ({@link com.github.thomasdarimont.keycloak.mcp.access.RoleRef} syntax; {@code manage-x}
- * satisfies {@code view-x}, see
- * {@link com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles}); empty = no role
- * needed
- * @param accessChecks extra per-call predicates, evaluated after roles and before
- * confirmation
- * @param delegation whether the tool may run under delegated access
- * @param sensitiveResult the result carries a secret (a client secret, a generated
- * password): it still goes to the caller, who asked for it, but the audit event says so
- * and nothing the server logs itself contains it
- * @param handler what runs on a call ({@link Builder#handler})
- * @param formerNames names the tool had before ({@link Builder#formerly})
+ * say what each part does. Immutable; {@link #withName}, {@link #withHot} and
+ * {@link #withInputSchema} return changed copies.
  */
-public record ToolSpec(String name, String title, String description, Category category, ToolLevel level,
-        boolean idempotent, JsonObject inputSchema, List<String> synonyms, boolean hot, boolean realmScoped,
-        List<ApiOperation> api, Set<String> requiredRoles, List<Requirement> requires, List<AccessCheck> accessChecks,
-        Delegation delegation, ToolHandler handler, boolean sensitiveResult, Set<String> formerNames) {
+public final class ToolSpec {
 
-    public ToolSpec {
-        Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(title, "title");
-        Objects.requireNonNull(description, "description");
-        Objects.requireNonNull(category, "category");
-        Objects.requireNonNull(level, "level");
-        Objects.requireNonNull(handler, "handler");
-        inputSchema = inputSchema == null ? InputSchema.builder().build() : inputSchema;
-        synonyms = List.copyOf(synonyms == null ? List.of() : synonyms);
-        api = List.copyOf(api == null ? List.of() : api);
-        requiredRoles = Set.copyOf(requiredRoles == null ? Set.of() : requiredRoles);
-        requires = List.copyOf(requires == null ? List.of() : requires);
-        accessChecks = List.copyOf(accessChecks == null ? List.of() : accessChecks);
-        delegation = delegation == null ? Delegation.ALLOWED : delegation;
-        formerNames = Set.copyOf(formerNames == null ? Set.of() : formerNames);
+    private final String name;
+    private final String title;
+    private final String description;
+    private final Category category;
+    private final ToolLevel level;
+    private final boolean idempotent;
+    private final JsonObject inputSchema;
+    private final List<String> synonyms;
+    private final boolean hot;
+    private final boolean realmScoped;
+    private final List<ApiOperation> api;
+    private final Set<String> requiredRoles;
+    private final List<Requirement> requires;
+    private final List<AccessCheck> accessChecks;
+    private final Delegation delegation;
+    private final ToolHandler handler;
+    private final boolean sensitiveResult;
+    private final Set<String> formerNames;
+    private final ToolCost cost;
+    private final String costNote;
+
+    private ToolSpec(Builder b, boolean idempotent) {
+        this.name = Objects.requireNonNull(b.name, "name");
+        this.title = Objects.requireNonNull(b.title, "title");
+        this.description = Objects.requireNonNull(b.description, "description");
+        this.category = Objects.requireNonNull(b.category, "category");
+        this.level = Objects.requireNonNull(b.level, "level");
+        this.handler = Objects.requireNonNull(b.handler, "handler");
+        this.idempotent = idempotent;
+        this.inputSchema = b.inputSchema == null ? InputSchema.builder().build() : b.inputSchema;
+        this.synonyms = List.copyOf(b.synonyms);
+        this.hot = b.hot;
+        this.realmScoped = b.realmScoped;
+        this.api = List.copyOf(b.api);
+        this.requiredRoles = Set.copyOf(b.requiredRoles);
+        this.requires = List.copyOf(b.requires);
+        this.accessChecks = List.copyOf(b.accessChecks);
+        this.delegation = b.delegation == null ? Delegation.ALLOWED : b.delegation;
+        this.sensitiveResult = b.sensitiveResult;
+        this.formerNames = Set.copyOf(b.formerNames);
+        this.cost = b.cost == null ? ToolCost.LIGHT : b.cost;
+        this.costNote = b.costNote;
     }
 
-    /** Without former names. */
-    public ToolSpec(String name, String title, String description, Category category, ToolLevel level,
-            boolean idempotent, JsonObject inputSchema, List<String> synonyms, boolean hot, boolean realmScoped,
-            List<ApiOperation> api, Set<String> requiredRoles, List<Requirement> requires,
-            List<AccessCheck> accessChecks, Delegation delegation, ToolHandler handler, boolean sensitiveResult) {
-        this(name, title, description, category, level, idempotent, inputSchema, synonyms, hot, realmScoped, api,
-                requiredRoles, requires, accessChecks, delegation, handler, sensitiveResult, Set.of());
+    /** A copy with one part changed. */
+    private ToolSpec(ToolSpec o, String name, JsonObject inputSchema, boolean hot) {
+        this.name = name;
+        this.title = o.title;
+        this.description = o.description;
+        this.category = o.category;
+        this.level = o.level;
+        this.idempotent = o.idempotent;
+        this.inputSchema = inputSchema;
+        this.synonyms = o.synonyms;
+        this.hot = hot;
+        this.realmScoped = o.realmScoped;
+        this.api = o.api;
+        this.requiredRoles = o.requiredRoles;
+        this.requires = o.requires;
+        this.accessChecks = o.accessChecks;
+        this.delegation = o.delegation;
+        this.handler = o.handler;
+        this.sensitiveResult = o.sensitiveResult;
+        this.formerNames = o.formerNames;
+        this.cost = o.cost;
+        this.costNote = o.costNote;
+    }
+
+    /** What models call it ({@link #builder(String)}). */
+    public String name() {
+        return name;
+    }
+
+    /** Short human readable name ({@link Builder#title}). */
+    public String title() {
+        return title;
+    }
+
+    /** What the tool does, for the model ({@link Builder#description}). */
+    public String description() {
+        return description;
+    }
+
+    /** The area it belongs to ({@link Builder#category}). */
+    public Category category() {
+        return category;
+    }
+
+    /** Read, write or destructive ({@link Builder#read()}). */
+    public ToolLevel level() {
+        return level;
+    }
+
+    /** Whether a repeated call has the same effect ({@link Builder#idempotent}). */
+    public boolean idempotent() {
+        return idempotent;
+    }
+
+    /**
+     * Flat JSON schema of the tool's own parameters; the catalog adds {@code realm} for
+     * realm scoped tools and clamps pagination.
+     */
+    public JsonObject inputSchema() {
+        return inputSchema;
+    }
+
+    /** Extra search terms, never shown to the model. */
+    public List<String> synonyms() {
+        return synonyms;
+    }
+
+    /** Candidate for direct exposure in hybrid mode. */
+    public boolean hot() {
+        return hot;
+    }
+
+    /** Whether the tool takes a {@code realm} argument. */
+    public boolean realmScoped() {
+        return realmScoped;
+    }
+
+    /**
+     * Admin REST operations the tool relies on (checked against the OpenAPI document).
+     */
+    public List<ApiOperation> api() {
+        return api;
+    }
+
+    /**
+     * Roles the server's token needs in the target realm, all of them
+     * ({@link com.github.thomasdarimont.keycloak.mcp.access.RoleRef} syntax;
+     * {@code manage-x} satisfies {@code view-x}); empty = no role needed.
+     */
+    public Set<String> requiredRoles() {
+        return requiredRoles;
+    }
+
+    /** Features or versions the Keycloak system must have. */
+    public List<Requirement> requires() {
+        return requires;
+    }
+
+    /** Extra per-call predicates, evaluated after roles and before confirmation. */
+    public List<AccessCheck> accessChecks() {
+        return accessChecks;
+    }
+
+    /** Whether the tool may run under delegated access. */
+    public Delegation delegation() {
+        return delegation;
+    }
+
+    /** What runs on a call ({@link Builder#handler}). */
+    public ToolHandler handler() {
+        return handler;
+    }
+
+    /**
+     * The result carries a secret: it still goes to the caller, but the audit event says
+     * so and nothing the server logs itself contains it.
+     */
+    public boolean sensitiveResult() {
+        return sensitiveResult;
+    }
+
+    /** Names the tool had before ({@link Builder#formerly}). */
+    public Set<String> formerNames() {
+        return formerNames;
+    }
+
+    /** How heavy a call can get on a large realm ({@link Builder#cost}). */
+    public ToolCost cost() {
+        return cost;
+    }
+
+    /** What makes it heavy, e.g. "one call per client"; {@code null} for light tools. */
+    public String costNote() {
+        return costNote;
     }
 
     public boolean isDestructive() {
@@ -84,23 +207,39 @@ public record ToolSpec(String name, String title, String description, Category c
     }
 
     public ToolSpec withInputSchema(JsonObject schema) {
-        return new ToolSpec(name, title, description, category, level, idempotent, schema, synonyms, hot, realmScoped,
-                api, requiredRoles, requires, accessChecks, delegation, handler, sensitiveResult, formerNames);
+        return new ToolSpec(this, name, schema, hot);
     }
 
     public ToolSpec withName(String newName) {
-        if (newName.equals(name)) {
-            return this;
-        }
-        return new ToolSpec(newName, title, description, category, level, idempotent, inputSchema, synonyms, hot,
-                realmScoped, api, requiredRoles, requires, accessChecks, delegation, handler, sensitiveResult,
-                formerNames);
+        return newName.equals(name) ? this : new ToolSpec(this, newName, inputSchema, hot);
     }
 
     public ToolSpec withHot(boolean hotFlag) {
-        return new ToolSpec(name, title, description, category, level, idempotent, inputSchema, synonyms, hotFlag,
-                realmScoped, api, requiredRoles, requires, accessChecks, delegation, handler, sensitiveResult,
-                formerNames);
+        return new ToolSpec(this, name, inputSchema, hotFlag);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return this == o || o instanceof ToolSpec t && name.equals(t.name) && title.equals(t.title)
+                && description.equals(t.description) && category == t.category && level == t.level
+                && idempotent == t.idempotent && inputSchema.equals(t.inputSchema) && synonyms.equals(t.synonyms)
+                && hot == t.hot && realmScoped == t.realmScoped && api.equals(t.api)
+                && requiredRoles.equals(t.requiredRoles) && requires.equals(t.requires)
+                && accessChecks.equals(t.accessChecks) && delegation == t.delegation && handler.equals(t.handler)
+                && sensitiveResult == t.sensitiveResult && formerNames.equals(t.formerNames) && cost == t.cost
+                && Objects.equals(costNote, t.costNote);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, title, description, category, level, inputSchema, hot, cost);
+    }
+
+    @Override
+    public String toString() {
+        return "ToolSpec[name=" + name + ", title=" + title + ", category=" + category + ", level=" + level + ", cost="
+                + cost.id() + ", hot=" + hot + ", realmScoped=" + realmScoped + ", requiredRoles=" + requiredRoles
+                + "]";
     }
 
     /** Parameter names declared in the (effective) schema, in declaration order. */
@@ -157,6 +296,8 @@ public record ToolSpec(String name, String title, String description, Category c
         private ToolHandler handler;
         private boolean sensitiveResult;
         private final Set<String> formerNames = new LinkedHashSet<>();
+        private ToolCost cost;
+        private String costNote;
 
         private Builder(String name) {
             this.name = name;
@@ -384,6 +525,19 @@ public record ToolSpec(String name, String title, String description, Category c
         }
 
         /**
+         * How heavy a call can get on a large realm, and why in a few words ("one call
+         * per client"). Default {@link ToolCost#LIGHT}. A model sees anything heavier in
+         * {@code search_tools} hits and in the description of a directly listed tool, so
+         * it can pass a filter or choose a narrower tool; the built-in tools that are not
+         * light say why.
+         */
+        public Builder cost(ToolCost cost, String note) {
+            this.cost = cost;
+            this.costNote = note == null || note.isBlank() ? null : note.trim();
+            return this;
+        }
+
+        /**
          * The result carries a secret (a client secret, a generated password): the caller
          * gets it, having asked for it, but the audit event says so and nothing the
          * server logs contains it. Secrets among the arguments are declared in the schema
@@ -422,10 +576,7 @@ public record ToolSpec(String name, String title, String description, Category c
                         + " destructive() on the builder (READ is not assumed, the level drives read-only mode,"
                         + " confirmation and the explicit-target rule)");
             }
-            boolean idem = idempotent != null ? idempotent : level == ToolLevel.READ;
-            return new ToolSpec(name, title, description, category, level, idem, inputSchema, synonyms, hot,
-                    realmScoped, api, requiredRoles, requires, accessChecks, delegation, handler, sensitiveResult,
-                    formerNames);
+            return new ToolSpec(this, idempotent != null ? idempotent : level == ToolLevel.READ);
         }
     }
 }

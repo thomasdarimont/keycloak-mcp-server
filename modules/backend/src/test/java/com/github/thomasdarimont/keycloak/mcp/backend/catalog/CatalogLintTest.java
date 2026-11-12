@@ -12,14 +12,17 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.RoleRef;
+import com.github.thomasdarimont.keycloak.mcp.backend.meta.MetaTools;
 import com.github.thomasdarimont.keycloak.mcp.backend.spi.DefaultExtensionRegistry;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Sensitive;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.vertx.core.json.JsonObject;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -85,6 +88,33 @@ class CatalogLintTest {
             }
         }
         assertTrue(problems.isEmpty(), String.join("\n", problems));
+    }
+
+    @Test
+    void heavierToolsSayWhyAndTheModelSeesIt() {
+        List<String> problems = new ArrayList<>();
+        for (ToolSpec spec : catalog.all()) {
+            if (spec.cost() == ToolCost.LIGHT) {
+                if (spec.costNote() != null) {
+                    problems.add(spec.name() + ": a cost note on a light tool");
+                }
+                assertEquals(spec.description(), MetaTools.listedDescription(spec), spec.name());
+                assertFalse(MetaTools.toolJson(spec).containsKey("cost"), spec.name());
+                continue;
+            }
+            if (spec.costNote() == null || spec.costNote().length() > 80) {
+                problems.add(spec.name() + ": " + spec.cost().id() + " needs a note of at most 80 characters");
+                continue;
+            }
+            assertTrue(MetaTools.listedDescription(spec).endsWith(spec.costNote() + "."), spec.name());
+            JsonObject hit = MetaTools.toolJson(spec);
+            assertEquals(spec.cost().id(), hit.getString("cost"), spec.name());
+            assertEquals(spec.costNote(), hit.getString("costNote"), spec.name());
+        }
+        assertTrue(problems.isEmpty(), String.join("\n", problems));
+        assertEquals(ToolCost.PER_ITEM, catalog.get("keycloak_scope_mappings_get").orElseThrow().cost());
+        assertEquals(ToolCost.HEAVY, catalog.get("keycloak_federation_sync").orElseThrow().cost());
+        assertEquals(ToolCost.LIGHT, catalog.get("keycloak_user_search").orElseThrow().cost());
     }
 
     @Test

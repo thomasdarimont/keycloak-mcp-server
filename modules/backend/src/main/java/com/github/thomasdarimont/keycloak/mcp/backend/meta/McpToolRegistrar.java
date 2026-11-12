@@ -144,7 +144,7 @@ public class McpToolRegistrar {
     private void registerCatalogTool(ToolSpec spec) {
         toolManager.newTool(spec.name())
             .setTitle(spec.title())
-            .setDescription(spec.description())
+            .setDescription(MetaTools.listedDescription(spec))
             .setAnnotations(new ToolAnnotations(spec.title(), spec.isReadOnly(), spec.isDestructive(),
                     spec.idempotent(), false))
             .setInputSchema(config.effectiveConfirmFallback().acceptsFlag() ? withConfirm(spec) : spec.inputSchema())

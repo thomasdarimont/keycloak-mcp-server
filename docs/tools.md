@@ -39,6 +39,13 @@ How the server presents its tools to a model, which tools exist, and the prompts
 - Fewer round trips: membership and role changes return effective roles; `keycloak_user_roles_get` names each role's
   source (`direct`, `group:/path`, `composite:<role>`), default roles apart; `keycloak_group_get` shows what a group grants.
 
+- Cost: tools whose requests grow with the realm say so, `cost: per-item` or `heavy` plus a `costNote` in
+  `search_tools` hits, and the note at the end of the description in `tools/list`. Per-item: `scope_mappings_get`
+  (one call per client), `authz_permissions_list` (three per permission), `user_roles_get`, `group_get`,
+  `client_service_account_get`, `role_get`, and the role and membership changes that report effective roles (one
+  call per composite role and group reached), `authz_evaluate` without resources. Heavy: `federation_sync` with
+  `full`. Unlabelled tools make a fixed handful of requests, paged where a result can be long.
+
 ## Tool areas
 
 | category        | tools |

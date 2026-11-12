@@ -22,6 +22,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -186,6 +187,7 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                     .synonyms("role scope", "roles in token", "full scope allowed", "dedicated scope",
                             "which roles appear in token")
                     .schema(mappingTarget(schema()))
+                    .cost(ToolCost.PER_ITEM, "one call per client of the realm")
                     .handler(this::scopeMappings)
                     .roles("view-clients")
                     .api(get(R + "/client-scopes/{client-scope-id}/scope-mappings/realm").path("client-scope-id",

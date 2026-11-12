@@ -13,6 +13,7 @@ import com.github.thomasdarimont.keycloak.mcp.access.Delegation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -84,6 +85,7 @@ public class FederationToolProvider extends AbstractToolProvider {
                         .required()
                         .enumeration("mode", "full or changed (default changed)", "full", "changed")
                         .def("changed"))
+                    .cost(ToolCost.HEAVY, "a full sync re-imports the whole directory; changed is lighter")
                     .handler(this::sync)
                     .delegation(Delegation.FORBIDDEN)
                     .roles("manage-realm")
