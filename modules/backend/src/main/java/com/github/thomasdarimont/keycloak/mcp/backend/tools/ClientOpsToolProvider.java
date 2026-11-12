@@ -213,7 +213,7 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
         ClientRepresentation full = resource.toRepresentation();
         int now = (int) (System.currentTimeMillis() / 1000);
         full.setNotBefore(now);
-        resource.update(full);
+        call.kc().save(full, call.realm(), "clients", c.getId());
         boolean pushed = full.getAdminUrl() != null && !full.getAdminUrl().isBlank();
         if (pushed) {
             resource.pushRevocation();

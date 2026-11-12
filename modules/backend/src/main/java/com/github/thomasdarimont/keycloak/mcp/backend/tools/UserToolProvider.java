@@ -367,7 +367,7 @@ public class UserToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one field besides id.");
         }
-        res.update(u);
+        call.kc().save(u, call.realm(), "users", u.getId());
         if (call.has("attributes")) {
             Map<String, List<String>> stored = res.toRepresentation().getAttributes();
             List<String> dropped = Objects.requireNonNull(call.stringMap("attributes"))
@@ -388,7 +388,7 @@ public class UserToolProvider extends AbstractToolProvider {
         UserResource res = call.kc().user(call.realm(), call.str("id"));
         UserRepresentation u = res.toRepresentation();
         u.setEnabled(call.bool("enabled"));
-        res.update(u);
+        call.kc().save(u, call.realm(), "users", u.getId());
         return ToolResult.done(Boolean.TRUE.equals(u.isEnabled()) ? "User enabled" : "User disabled", "id", u.getId(),
                 "username", u.getUsername(), "enabled", u.isEnabled());
     }

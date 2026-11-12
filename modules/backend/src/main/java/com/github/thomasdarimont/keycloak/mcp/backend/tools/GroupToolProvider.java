@@ -466,7 +466,7 @@ public class GroupToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass name or attributes.");
         }
-        res.update(g);
+        call.kc().save(g, call.realm(), "groups", g.getId());
         GroupRepresentation now = res.toRepresentation();
         return ToolResult.done("Group updated", "id", now.getId(), "path", now.getPath(), "changed", changed);
     }

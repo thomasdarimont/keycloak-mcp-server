@@ -471,7 +471,7 @@ public class AuthzToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one setting.");
         }
-        authz.update(s);
+        call.kc().save(s, call.realm(), "clients", c.getId(), "authz", "resource-server");
         return ToolResult.done("Authorization settings updated", "clientId", c.getClientId(), "changed", changed, "now",
                 view(authz.getSettings()));
     }
@@ -583,7 +583,7 @@ public class AuthzToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments",
                     "Nothing to update: pass at least one field besides resource.");
         }
-        authz.resources().resource(r.getId()).update(r);
+        call.kc().save(r, call.realm(), "clients", c.getId(), "authz", "resource-server", "resource", r.getId());
         return ToolResult.done("Authorization resource updated", "clientId", c.getClientId(), "name", r.getName(),
                 "changed", changed, "scopesCreated", createdScopes);
     }
@@ -728,32 +728,35 @@ public class AuthzToolProvider extends AbstractToolProvider {
             case "role" -> {
                 RolePolicyRepresentation p = policies.role().findById(id).toRepresentation();
                 fill(call, authz, p, false);
-                policies.role().findById(id).update(p);
+                call.kc().save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "policy", "role", id);
             }
             case "user" -> {
                 UserPolicyRepresentation p = policies.user().findById(id).toRepresentation();
                 fill(call, authz, p, false);
-                policies.user().findById(id).update(p);
+                call.kc().save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "policy", "user", id);
             }
             case "group" -> {
                 GroupPolicyRepresentation p = policies.group().findById(id).toRepresentation();
                 fill(call, authz, p, false);
-                policies.group().findById(id).update(p);
+                call.kc()
+                    .save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "policy", "group", id);
             }
             case "client" -> {
                 ClientPolicyRepresentation p = policies.client().findById(id).toRepresentation();
                 fill(call, authz, p, false);
-                policies.client().findById(id).update(p);
+                call.kc()
+                    .save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "policy", "client", id);
             }
             case "time" -> {
                 TimePolicyRepresentation p = policies.time().findById(id).toRepresentation();
                 fill(call, authz, p, false);
-                policies.time().findById(id).update(p);
+                call.kc().save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "policy", "time", id);
             }
             case "aggregate" -> {
                 AggregatePolicyRepresentation p = policies.aggregate().findById(id).toRepresentation();
                 fill(call, authz, p, false);
-                policies.aggregate().findById(id).update(p);
+                call.kc()
+                    .save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "policy", "aggregate", id);
             }
             case "resource", "scope" -> {
                 return ToolResult.error("invalid_arguments",
@@ -879,7 +882,9 @@ public class AuthzToolProvider extends AbstractToolProvider {
                 changed.add("resourceType");
             }
             if (!changed.isEmpty()) {
-                authz.permissions().scope().findById(found.getId()).update(p);
+                call.kc()
+                    .save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "permission", "scope",
+                            found.getId());
             }
         }
         else if ("resource".equals(found.getType())) {
@@ -895,7 +900,9 @@ public class AuthzToolProvider extends AbstractToolProvider {
                 changed.add("resourceType");
             }
             if (!changed.isEmpty()) {
-                authz.permissions().resource().findById(found.getId()).update(p);
+                call.kc()
+                    .save(p, call.realm(), "clients", c.getId(), "authz", "resource-server", "permission", "resource",
+                            found.getId());
             }
         }
         else {

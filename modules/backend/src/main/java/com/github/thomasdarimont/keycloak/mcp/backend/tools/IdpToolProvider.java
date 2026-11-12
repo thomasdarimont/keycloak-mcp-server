@@ -328,7 +328,7 @@ public class IdpToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one field besides alias.");
         }
-        call.kc().realm(call.realm()).identityProviders().get(idp.getAlias()).update(idp);
+        call.kc().save(idp, call.realm(), "identity-provider", "instances", idp.getAlias());
         return ToolResult.done("Identity provider updated", "alias", idp.getAlias(), "changed", changed);
     }
 

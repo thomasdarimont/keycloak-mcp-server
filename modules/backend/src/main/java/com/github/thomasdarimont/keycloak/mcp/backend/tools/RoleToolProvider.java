@@ -513,7 +513,7 @@ public class RoleToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass description or attributes.");
         }
-        call.kc().realm(call.realm()).roles().get(role.getName()).update(role);
+        call.kc().save(role, call.realm(), "roles-by-id", role.getId());
         return ToolResult.done("Realm role updated", "role", role.getName(), "changed", changed);
     }
 

@@ -12,7 +12,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
-import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Client;
 
 import org.jboss.logging.Logger;
@@ -342,12 +342,54 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
             k = keycloak;
             if (k == null) {
                 k = build();
+                if (asksForScope() && scopeRefusedBy(k)) {
+                    k.close();
+                    k = build();
+                }
                 keycloak = k;
             }
             return k;
         }
         finally {
             initLock.unlock();
+        }
+    }
+
+    /**
+     * Whether {@link #build()} asks for the Admin API scope with the admin client's own
+     * token requests.
+     */
+    private boolean asksForScope() {
+        return forwardedToken == null && !scopeRefused && jwtKeys != null && jwtKeys.adminApiScope() != null
+                && system.clientAuth() != ClientAuth.PRIVATE_KEY_JWT;
+    }
+
+    /**
+     * Gets the first token of a new client. A 400 means the server rejects the scope
+     * (Keycloak before 26.8.2 has no {@code kc-admin-api}; the admin client hides the
+     * body): tokens are requested without it from then on. Every other failure is left to
+     * the first call, as without a scope.
+     */
+    private boolean scopeRefusedBy(Keycloak k) {
+        try {
+            k.tokenManager().getAccessTokenString();
+            return false;
+        }
+        catch (WebApplicationException e) {
+            // the Quarkus REST client throws the plain exception, not BadRequestException
+            if (e.getResponse() == null || e.getResponse().getStatus() != 400) {
+                LOG.debugf(e, "[%s] first token request failed", system.name());
+                return false;
+            }
+            LOG.infof("[%s] token request with the scope '%s' failed (HTTP 400); requesting tokens without it",
+                    system.name(), jwtKeys.adminApiScope());
+            scopeRefused = true;
+            metrics.scopeFallback(system.name());
+            return true;
+        }
+        catch (RuntimeException e) {
+            LOG.debugf(e, "[%s] first token request failed", system.name());
+            return false;
         }
     }
 
@@ -427,34 +469,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
         if (jwt != null) {
             return jwt.accessToken();
         }
-        try {
-            return k.tokenManager().getAccessTokenString();
-        }
-        catch (BadRequestException e) {
-            // the admin client hides the body; a 400 on a token request that asked for a
-            // scope
-            // is retried once without it (RFC 6749 invalid_scope on servers without
-            // kc-admin-api)
-            if (scopeRefused || jwtKeys == null || jwtKeys.adminApiScope() == null) {
-                throw e;
-            }
-            LOG.infof("[%s] token request with the scope '%s' failed (HTTP 400); requesting tokens without it",
-                    system.name(), jwtKeys.adminApiScope());
-            scopeRefused = true;
-            metrics.scopeFallback(system.name());
-            initLock.lock();
-            try {
-                Keycloak stale = keycloak;
-                keycloak = null;
-                if (stale != null) {
-                    stale.close();
-                }
-            }
-            finally {
-                initLock.unlock();
-            }
-            return client().tokenManager().getAccessTokenString();
-        }
+        return k.tokenManager().getAccessTokenString();
     }
 
     @Override

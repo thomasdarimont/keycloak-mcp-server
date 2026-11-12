@@ -455,7 +455,7 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
             a.setAnnotations(anyMap(call, "annotations"));
         }
         config.addOrReplaceAttribute(a);
-        profile.update(config);
+        call.kc().save(config, call.realm(), "users", "profile");
         return ToolResult.done(created ? "Attribute added to the user profile" : "Attribute updated", "attribute",
                 view(profile.getConfiguration().getAttribute(name)));
     }
@@ -475,7 +475,7 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
         if (!config.removeAttribute(name)) {
             throw ToolException.notFound("User profile attribute", name);
         }
-        profile.update(config);
+        call.kc().save(config, call.realm(), "users", "profile");
         return ToolResult.done("Attribute removed from the user profile", "name", name);
     }
 
@@ -485,7 +485,7 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
         String policy = call.str("policy").toUpperCase(Locale.ROOT);
         config.setUnmanagedAttributePolicy(
                 "DISABLED".equals(policy) ? null : UPConfig.UnmanagedAttributePolicy.valueOf(policy));
-        profile.update(config);
+        call.kc().save(config, call.realm(), "users", "profile");
         return ToolResult.done("Unmanaged attribute policy set", "policy", policy);
     }
 

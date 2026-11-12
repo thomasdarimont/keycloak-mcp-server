@@ -71,9 +71,14 @@ public class RealmManagerTestResource implements QuarkusTestResourceLifecycleMan
                                 .add("email")
                                 .add("service_account")
                                 .add("kc-admin-api")));
-        String saUser = new JsonObject(
-                get("/admin/realms/" + REALM + "/clients/" + clientUuid + "/service-account-user"))
-            .getString("id");
+        // Keycloak after 26.8 names the user on the client and drops the
+        // service-account-user endpoint
+        String saUser = new JsonObject(get("/admin/realms/" + REALM + "/clients/" + clientUuid))
+            .getString("serviceAccountUserId");
+        if (saUser == null) {
+            saUser = new JsonObject(get("/admin/realms/" + REALM + "/clients/" + clientUuid + "/service-account-user"))
+                .getString("id");
+        }
         String rm = new JsonArray(get("/admin/realms/" + REALM + "/clients?clientId=realm-management")).getJsonObject(0)
             .getString("id");
         JsonArray roles = new JsonArray();

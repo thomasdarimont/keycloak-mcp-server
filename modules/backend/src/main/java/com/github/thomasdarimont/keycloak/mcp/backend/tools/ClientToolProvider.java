@@ -469,7 +469,7 @@ public class ClientToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments",
                     "Nothing to update: pass at least one field besides clientId.");
         }
-        res.update(c);
+        call.kc().save(c, call.realm(), "clients", c.getId());
         return ToolResult.done("Client updated", "clientId", c.getClientId(), "changed", changed);
     }
 
@@ -571,7 +571,7 @@ public class ClientToolProvider extends AbstractToolProvider {
             return ToolResult.error("no_service_account", "Client '" + c.getClientId()
                     + "' has no service account. Enable it with keycloak_client_update serviceAccountsEnabled=true.");
         }
-        UserRepresentation u = call.kc().realm(call.realm()).clients().get(c.getId()).getServiceAccountUser();
+        UserRepresentation u = call.kc().serviceAccountUser(call.realm(), c.getId());
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("clientId", c.getClientId());
         m.put("userId", u.getId());

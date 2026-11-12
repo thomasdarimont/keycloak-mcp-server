@@ -504,7 +504,7 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
             }
             default -> throw new ToolException("invalid_arguments", "Unknown binding " + binding);
         }
-        call.kc().realm(call.realm()).update(r);
+        call.kc().save(r, call.realm());
         return ToolResult.done("Flow bound", "binding", binding, "flowAlias", flow.getAlias(), "previous", previous);
     }
 

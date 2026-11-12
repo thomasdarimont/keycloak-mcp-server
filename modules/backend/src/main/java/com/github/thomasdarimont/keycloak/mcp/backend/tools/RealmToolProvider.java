@@ -248,7 +248,7 @@ public class RealmToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one setting.");
         }
-        call.kc().realm(call.realm()).update(r);
+        call.kc().save(r, call.realm());
         return ToolResult.done("Realm updated", "realm", r.getRealm(), "changed", changed);
     }
 

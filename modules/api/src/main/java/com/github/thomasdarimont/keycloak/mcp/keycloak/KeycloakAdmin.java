@@ -1,8 +1,11 @@
 package com.github.thomasdarimont.keycloak.mcp.keycloak;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
@@ -64,6 +67,38 @@ public interface KeycloakAdmin extends AccessTokenSource {
      */
     default AdminQueries queries() {
         return client().proxy(AdminQueries.class, URI.create(system().url()));
+    }
+
+    /**
+     * The resource at {@code /admin/realms/<realm>/<path...>} as plain JSON; each path
+     * element is one URL segment, encoded here. No path is the realm itself.
+     */
+    default RepresentationResource representation(String realm, String... path) {
+        StringBuilder url = new StringBuilder(system().url().replaceAll("/+$", "")).append("/admin/realms/")
+            .append(segment(realm));
+        for (String p : path) {
+            url.append('/').append(segment(p));
+        }
+        return client().proxy(RepresentationResource.class, URI.create(url.toString()));
+    }
+
+    /**
+     * Writes a changed representation back without losing what the admin client cannot
+     * represent: reads the stored JSON, adds the fields the class lacks (a newer server's
+     * settings) and sends the result ({@link Representations#withUnknownFields}). Use it
+     * for every read-modify-write instead of the admin client's {@code update(...)}.
+     */
+    default void save(Object changed, String realm, String... path) {
+        RepresentationResource res = representation(realm, path);
+        Map<String, Object> stored = res.get();
+        ok(res.put(Representations.withUnknownFields(changed, stored)));
+    }
+
+    private static String segment(String s) {
+        if (s == null || s.isEmpty()) {
+            throw new IllegalArgumentException("empty path segment");
+        }
+        return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     default RealmResource realm(String realm) {
@@ -134,6 +169,21 @@ public interface KeycloakAdmin extends AccessTokenSource {
             return found.getFirst();
         }
         throw ToolException.notFound("Client", idOrClientId);
+    }
+
+    /**
+     * The service account user of a client (internal id). Keycloak after 26.8 names it in
+     * the client's {@code serviceAccountUserId} and drops
+     * {@code GET /clients/{id}/service-account-user}; older servers only have the
+     * endpoint. The client is read as JSON because the admin client's class has no such
+     * field.
+     */
+    default UserRepresentation serviceAccountUser(String realm, String clientUuid) {
+        if (representation(realm, "clients", clientUuid).get().get("serviceAccountUserId") instanceof String id
+                && !id.isBlank()) {
+            return realm(realm).users().get(id).toRepresentation();
+        }
+        return realm(realm).clients().get(clientUuid).getServiceAccountUser();
     }
 
     default ClientResource clientResource(String realm, String idOrClientId) {

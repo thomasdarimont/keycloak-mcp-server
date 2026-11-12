@@ -419,7 +419,7 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one field besides scope.");
         }
         if (!changed.isEmpty()) {
-            res.update(s);
+            call.kc().save(s, call.realm(), "client-scopes", s.getId());
         }
         if (call.has("realmDefault")) {
             setRealmDefault(realm, s.getId(), call.str("realmDefault"));
@@ -558,15 +558,18 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments", "Pass either scope (a client scope) or clientId (a client).");
         }
         ProtocolMappersResource mappers;
+        String[] owner;
         Map<String, Object> where = new LinkedHashMap<>();
         if (byScope) {
             ClientScopeRepresentation s = ClientToolProvider.findScope(call, call.str("scope"));
             mappers = call.kc().realm(call.realm()).clientScopes().get(s.getId()).getProtocolMappers();
+            owner = new String[] { "client-scopes", s.getId() };
             where.put("scope", s.getName());
         }
         else {
             ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
             mappers = call.kc().realm(call.realm()).clients().get(c.getId()).getProtocolMappers();
+            owner = new String[] { "clients", c.getId() };
             where.put("clientId", c.getClientId());
         }
         ProtocolMapperRepresentation m = findMapper(mappers, call.str("mapper"));
@@ -592,7 +595,7 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
         if (changed.isEmpty()) {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass name or config.");
         }
-        mappers.update(m.getId(), m);
+        call.kc().save(m, call.realm(), owner[0], owner[1], "protocol-mappers", "models", m.getId());
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("ok", true);
         out.put("message", "Mapper updated");

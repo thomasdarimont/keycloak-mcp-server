@@ -346,7 +346,7 @@ public class BrokeringToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass name, syncMode or config.");
         }
         full.setConfig(config);
-        resource.update(full.getId(), full);
+        call.kc().save(full, call.realm(), "identity-provider", "instances", idp.getAlias(), "mappers", full.getId());
         return ToolResult.done("Mapper updated", "alias", idp.getAlias(), "id", full.getId(), "name", full.getName(),
                 "changed", changed);
     }

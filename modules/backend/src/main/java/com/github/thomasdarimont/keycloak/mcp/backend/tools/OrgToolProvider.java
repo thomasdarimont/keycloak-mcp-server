@@ -352,7 +352,7 @@ public class OrgToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments",
                     "Nothing to update: pass name, description, enabled, redirectUrl or domains.");
         }
-        KeycloakAdmin.ok(call.kc().realm(call.realm()).organizations().get(o.getId()).update(full));
+        call.kc().save(full, call.realm(), "organizations", o.getId());
         return ToolResult.done("Organization updated", "id", o.getId(), "name", full.getName(), "changed", changed);
     }
 

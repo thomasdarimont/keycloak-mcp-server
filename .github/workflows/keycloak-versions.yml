@@ -1,0 +1,66 @@
+# The backend's integration tests against other Keycloak versions than the one ci.yml uses (26.8.2).
+#
+#   oldest   the oldest release of the baseline (CapabilityDiscovery.BASELINE_VERSION, docs/keycloak-versions.md);
+#            must pass.
+#   nightly  Keycloak's nightly build: an early warning that a coming release changes the Admin API. Allowed to
+#            fail; a failure shows up as a warning on the run, not a red build.
+#
+# Runs on pull requests and pushes to main, every Monday (nightly changes without a commit here), and on demand
+# with any image.
+name: Keycloak versions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Keycloak image to test against (empty runs the matrix)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keycloak-versions-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_ARGS: -B -ntp
+
+jobs:
+  integration:
+    name: Keycloak ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event.inputs.image != '' && format('[{{"name":"{0}","image":"{0}","experimental":false}}]', github.event.inputs.image) || '[{"name":"26.8.0 (oldest)","image":"quay.io/keycloak/keycloak:26.8.0","experimental":false},{"name":"nightly","image":"quay.io/keycloak/keycloak:nightly","experimental":true}]') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Pull the image
+        run: docker pull ${{ matrix.image }}
+
+      - name: Run the integration tests
+        run: ./mvnw verify -DskipITs=false -pl modules/backend -am -Dkeycloak.image=${{ matrix.image }}
+
+      - name: Keep the test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: failsafe-reports-${{ strategy.job-index }}
+          path: modules/backend/target/failsafe-reports/
+          if-no-files-found: ignore

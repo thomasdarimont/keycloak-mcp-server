@@ -113,7 +113,8 @@ class KeycloakIT {
     @Order(1)
     void serverInfoAndRealmConfig() {
         JsonObject info = McpClient.text(mcp.callTool("keycloak_server_info", new JsonObject()));
-        assertTrue(info.getString("version").startsWith("26."), info.encode());
+        // 26.x releases, 999.0.0-SNAPSHOT for nightly
+        assertTrue(info.getString("version").matches("\\d+\\.\\d+.*"), info.encode());
         JsonObject features = McpClient.text(mcp.callTool("keycloak_server_features", new JsonObject()));
         assertTrue(features.getInteger("total") > 20, features.encode());
         assertTrue(
@@ -142,7 +143,7 @@ class KeycloakIT {
                 new JsonObject().put("name", off.getJsonArray("items").getJsonObject(0).getString("name"))));
         assertTrue(first.getJsonObject("howToEnable").getString("cli").startsWith("bin/kc.sh start --feature-"),
                 first.encode());
-        assertTrue(one.getString("version").startsWith("26."), one.encode());
+        assertTrue(one.getString("version").matches("\\d+\\.\\d+.*"), one.encode());
         JsonObject unknown = McpClient
             .text(mcp.callTool("keycloak_server_features", new JsonObject().put("name", "warp-drive")));
         assertEquals("not_found", unknown.getString("error"), unknown.encode());
@@ -150,7 +151,7 @@ class KeycloakIT {
         // unavailable
         JsonObject who = McpClient.text(mcp.callTool("whoami", new JsonObject()));
         JsonObject server = who.getJsonObject("server");
-        assertTrue(server.getString("version").startsWith("26."), who.encode());
+        assertTrue(server.getString("version").matches("\\d+\\.\\d+.*"), who.encode());
         assertFalse(server.containsKey("belowBaseline"), who.encode());
         assertFalse(server.containsKey("unavailableTools"), who.encode());
         JsonObject cfg = call("keycloak_realm_get_config", new JsonObject());
@@ -687,7 +688,7 @@ class KeycloakIT {
         assertEquals("eve", viaMirror.getJsonArray("items").getJsonObject(0).getString("username"));
         JsonObject info = McpClient
             .text(mcp.callTool("keycloak_server_info", new JsonObject().put("system", "mirror")));
-        assertTrue(info.getString("version").startsWith("26."));
+        assertTrue(info.getString("version").matches("\\d+\\.\\d+.*"), info.encode());
         JsonObject bad = error("keycloak_user_search", new JsonObject().put("system", "nope"));
         assertEquals("invalid_arguments", bad.getString("error"));
         JsonObject notAllowed = McpClient
