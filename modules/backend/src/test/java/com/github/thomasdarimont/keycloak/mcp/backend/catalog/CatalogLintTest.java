@@ -102,9 +102,10 @@ class CatalogLintTest {
                 ours.add(s.name());
             }
         }
-        Set<String> extras = Set.of("keycloak_group_get", "keycloak_client_example_token",
+        Set<String> extras = new TreeSet<>(Set.of("keycloak_group_get", "keycloak_client_example_token",
                 "keycloak_client_evaluate_scopes", "keycloak_server_features",
-                "keycloak_auth_flow_execution_config_get", "keycloak_auth_flow_execution_config_set");
+                "keycloak_auth_flow_execution_config_get", "keycloak_auth_flow_execution_config_set"));
+        extras.addAll(BEYOND_REFERENCE);
         Set<String> unknown = new TreeSet<>(ours);
         unknown.removeAll(reference);
         unknown.removeAll(extras);
@@ -115,6 +116,24 @@ class CatalogLintTest {
         assertTrue(missing.isEmpty(), "reference tools not ported: " + missing);
         assertEquals(75 + extras.size(), ours.size());
     }
+
+    /**
+     * Daily administration the reference project lacks (roles and composites, client
+     * scopes and mappers, group client roles, credentials, lockouts, consents, org
+     * members, IdP updates and mappers).
+     */
+    static final Set<String> BEYOND_REFERENCE = Set.of("keycloak_role_get", "keycloak_role_create",
+            "keycloak_role_update", "keycloak_role_delete", "keycloak_role_composite_add",
+            "keycloak_role_composite_remove", "keycloak_client_role_create", "keycloak_client_role_delete",
+            "keycloak_client_service_account_get", "keycloak_client_mapper_add", "keycloak_client_mapper_delete",
+            "keycloak_client_scope_get", "keycloak_client_scope_create", "keycloak_client_scope_update",
+            "keycloak_client_scope_delete", "keycloak_client_scope_mapper_add", "keycloak_client_scope_mapper_delete",
+            "keycloak_group_update", "keycloak_group_role_unassign", "keycloak_group_client_role_assign",
+            "keycloak_group_client_role_unassign", "keycloak_user_credentials_list", "keycloak_user_credential_delete",
+            "keycloak_user_brute_force_get", "keycloak_user_brute_force_clear", "keycloak_user_consents_list",
+            "keycloak_user_consent_revoke", "keycloak_user_offline_sessions_list", "keycloak_client_sessions_list",
+            "keycloak_org_update", "keycloak_org_members_list", "keycloak_org_member_add", "keycloak_org_member_remove",
+            "keycloak_idp_update", "keycloak_idp_mapper_create", "keycloak_idp_mapper_delete");
 
     static Set<String> referenceNames() throws IOException {
         Path file = Path.of("src/test/resources/reference-tool-names.txt");

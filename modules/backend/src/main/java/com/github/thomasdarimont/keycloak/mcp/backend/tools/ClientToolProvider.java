@@ -23,6 +23,7 @@ import org.keycloak.representations.idm.authorization.ResourceRepresentation;
 import org.keycloak.representations.idm.authorization.ScopeRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Delegation;
+import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
@@ -154,6 +155,18 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .handler(this::delete)
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}").path("client-uuid", "clientId"))
+                    .build(),
+                tool("keycloak_client_service_account_get").title("Get a client's service account")
+                    .description(
+                            "The service account user of a client and the roles it holds (client credentials grant).")
+                    .category(Category.CLIENTS)
+                    .read()
+                    .synonyms("service account roles", "client credentials", "machine user", "technical user",
+                            "service-account-")
+                    .schema(schema().string("clientId", CLIENT_ID).required())
+                    .handler(this::serviceAccount)
+                    .roles("view-clients", "view-users")
+                    .api(get(R + "/clients/{client-uuid}/service-account-user").path("client-uuid", "clientId"))
                     .build(),
                 tool("keycloak_client_mappers_list").title("List client protocol mappers")
                     .description("Protocol mappers defined directly on a client (claims added to its tokens).")
@@ -537,6 +550,21 @@ public class ClientToolProvider extends AbstractToolProvider {
         return ToolResult.done("Client deleted", "clientId", c.getClientId(), "id", c.getId());
     }
 
+    ToolResult serviceAccount(ToolCall call) {
+        ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+        if (!Boolean.TRUE.equals(c.isServiceAccountsEnabled())) {
+            return ToolResult.error("no_service_account", "Client '" + c.getClientId()
+                    + "' has no service account. Enable it with keycloak_client_update serviceAccountsEnabled=true.");
+        }
+        UserRepresentation u = call.kc().realm(call.realm()).clients().get(c.getId()).getServiceAccountUser();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("clientId", c.getClientId());
+        m.put("userId", u.getId());
+        m.put("username", u.getUsername());
+        m.putAll(EffectiveRoles.ofUser(call.kc(), call.realm(), u.getId()).toView(false));
+        return ToolResult.ok(m);
+    }
+
     ToolResult mappers(ToolCall call) {
         ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
         List<ProtocolMapperRepresentation> mappers = call.kc()
@@ -799,7 +827,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                 res.getOptionalClientScopes().stream().map(ClientScopeRepresentation::getName).sorted().toList()));
     }
 
-    private static ClientScopeRepresentation findScope(ToolCall call, String nameOrId) {
+    static ClientScopeRepresentation findScope(ToolCall call, String nameOrId) {
         for (ClientScopeRepresentation s : call.kc().realm(call.realm()).clientScopes().findAll()) {
             if (s.getName().equals(nameOrId) || s.getId().equals(nameOrId)) {
                 return s;

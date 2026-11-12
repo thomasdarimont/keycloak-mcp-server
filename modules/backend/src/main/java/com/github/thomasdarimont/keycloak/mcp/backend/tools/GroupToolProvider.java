@@ -6,13 +6,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.keycloak.admin.client.resource.GroupResource;
 import org.keycloak.admin.client.resource.GroupsResource;
+import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -160,7 +163,67 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .handler(this::roleAssign)
                     .roles("manage-users")
                     .api(post(R + "/groups/{group-id}/role-mappings/realm").path("group-id", "groupId"))
+                    .build(),
+                tool("keycloak_group_role_unassign").title("Remove realm role from group")
+                    .description("Revoke a realm role from a group; its members lose it unless granted elsewhere.")
+                    .category(Category.GROUPS)
+                    .destructive()
+                    .synonyms("revoke", "group role", "remove permission from group", "unassign")
+                    .schema(schema().string("groupId", GROUP_ID)
+                        .required()
+                        .string("role", "Realm role name")
+                        .required())
+                    .handler(this::roleUnassign)
+                    .roles("manage-users")
+                    .api(delete(R + "/groups/{group-id}/role-mappings/realm").path("group-id", "groupId"))
+                    .build(),
+                tool("keycloak_group_client_role_assign").title("Assign client role to group")
+                    .description("Grant a client role (e.g. realm-management/view-users) to every member of a group.")
+                    .category(Category.GROUPS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("grant", "group client role", "application permission for group", "role mapping")
+                    .schema(groupClientRole(schema()))
+                    .handler(this::clientRoleAssign)
+                    .roles("manage-users")
+                    .api(post(R + "/groups/{group-id}/role-mappings/clients/{client-id}").path("group-id", "groupId")
+                        .path("client-id", "clientId"))
+                    .build(),
+                tool("keycloak_group_client_role_unassign").title("Remove client role from group")
+                    .description("Revoke a client role from a group.")
+                    .category(Category.GROUPS)
+                    .destructive()
+                    .synonyms("revoke", "remove client role from group", "unassign")
+                    .schema(groupClientRole(schema()))
+                    .handler(this::clientRoleUnassign)
+                    .roles("manage-users")
+                    .api(delete(R + "/groups/{group-id}/role-mappings/clients/{client-id}").path("group-id", "groupId")
+                        .path("client-id", "clientId"))
+                    .build(),
+                tool("keycloak_group_update").title("Update group")
+                    .description("Rename a group or change its attributes; an empty attribute value removes it.")
+                    .category(Category.GROUPS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("rename group", "edit team", "group attributes", "group description")
+                    .schema(schema().string("id", GROUP_ID)
+                        .required()
+                        .string("name", "New group name")
+                        .stringMap("attributes", "Attributes to set, merged into the existing ones"))
+                    .handler(this::update)
+                    .roles("manage-users")
+                    .api(put(R + "/groups/{group-id}").path("group-id", "id")
+                        .body("GroupRepresentation", "name", "attributes"))
                     .build());
+    }
+
+    private static InputSchema.Builder groupClientRole(InputSchema.Builder b) {
+        return b.string("groupId", GROUP_ID)
+            .required()
+            .string("clientId", CLIENT_ID)
+            .required()
+            .string("role", "Client role name")
+            .required();
     }
 
     ToolResult list(ToolCall call) {
@@ -288,5 +351,61 @@ public class GroupToolProvider extends AbstractToolProvider {
         RoleRepresentation role = RoleToolProvider.realmRole(call.kc(), call.realm(), call.str("role"));
         call.kc().realm(call.realm()).groups().group(g.getId()).roles().realmLevel().add(List.of(role));
         return ToolResult.done("Role assigned to group", "group", g.getPath(), "role", role.getName());
+    }
+
+    ToolResult roleUnassign(ToolCall call) {
+        GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
+        RoleRepresentation role = RoleToolProvider.realmRole(call.kc(), call.realm(), call.str("role"));
+        call.kc().realm(call.realm()).groups().group(g.getId()).roles().realmLevel().remove(List.of(role));
+        return ToolResult.done("Role removed from group", "group", g.getPath(), "role", role.getName());
+    }
+
+    ToolResult clientRoleAssign(ToolCall call) {
+        GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
+        ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+        RoleRepresentation role = RoleToolProvider.clientRole(call.kc(), call.realm(), c.getId(), call.str("role"));
+        call.kc().realm(call.realm()).groups().group(g.getId()).roles().clientLevel(c.getId()).add(List.of(role));
+        return ToolResult.done("Client role assigned to group", "group", g.getPath(), "clientId", c.getClientId(),
+                "role", role.getName());
+    }
+
+    ToolResult clientRoleUnassign(ToolCall call) {
+        GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
+        ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+        RoleRepresentation role = RoleToolProvider.clientRole(call.kc(), call.realm(), c.getId(), call.str("role"));
+        call.kc().realm(call.realm()).groups().group(g.getId()).roles().clientLevel(c.getId()).remove(List.of(role));
+        return ToolResult.done("Client role removed from group", "group", g.getPath(), "clientId", c.getClientId(),
+                "role", role.getName());
+    }
+
+    ToolResult update(ToolCall call) {
+        GroupRepresentation found = call.kc().findGroup(call.realm(), call.str("id"));
+        GroupResource res = call.kc().realm(call.realm()).groups().group(found.getId());
+        GroupRepresentation g = res.toRepresentation();
+        List<String> changed = new ArrayList<>();
+        if (call.has("name")) {
+            g.setName(call.str("name"));
+            changed.add("name");
+        }
+        if (call.has("attributes")) {
+            Map<String, List<String>> attrs = g.getAttributes() == null ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(g.getAttributes());
+            call.stringMap("attributes").forEach((k, v) -> {
+                if (v == null || v.isEmpty()) {
+                    attrs.remove(k);
+                }
+                else {
+                    attrs.put(k, List.of(v));
+                }
+            });
+            g.setAttributes(attrs);
+            changed.add("attributes");
+        }
+        if (changed.isEmpty()) {
+            return ToolResult.error("invalid_arguments", "Nothing to update: pass name or attributes.");
+        }
+        res.update(g);
+        GroupRepresentation now = res.toRepresentation();
+        return ToolResult.done("Group updated", "id", now.getId(), "path", now.getPath(), "changed", changed);
     }
 }

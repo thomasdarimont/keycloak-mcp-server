@@ -391,4 +391,109 @@ class PolicyChecksTest {
             .check(ctx(tool("keycloak_group_delete", "id"), DAN, Map.of("id", "/admins")))
             .allowed());
     }
+
+    @Test
+    void noEscalationCoversCompositesGroupClientRolesAndIdpRoleMappers() {
+        NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));
+        ToolSpec composite = tool("keycloak_role_composite_add", "role", "composite", "compositeClientId");
+        assertTrue(check.check(ctx(composite, ALICE, Map.of("role", "viewer", "composite", "editor"))).allowed());
+        assertEquals("privilege_escalation",
+                check.check(ctx(composite, ALICE, Map.of("role", "viewer", "composite", "admin"))).code(),
+                "everyone holding viewer would become admin");
+        assertTrue(check
+            .check(ctx(composite, ALICE, Map.of("role", "viewer", "composite", "user", "compositeClientId", "app")))
+            .allowed());
+
+        ToolSpec groupClient = tool("keycloak_group_client_role_assign", "groupId", "clientId", "role");
+        assertTrue(check.check(ctx(groupClient, ALICE, Map.of("groupId", "/team-a", "clientId", "app", "role", "user")))
+            .allowed());
+        dir.role("app.admin", Set.of("app.admin"));
+        assertEquals("privilege_escalation",
+                check.check(ctx(groupClient, ALICE, Map.of("groupId", "/team-a", "clientId", "app", "role", "admin")))
+                    .code());
+
+        ToolSpec mapper = tool("keycloak_idp_mapper_create", "alias", "name", "type");
+        assertEquals("privilege_escalation",
+                check
+                    .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type", "hardcoded-role-idp-mapper",
+                            "config", Map.of("role", "admin"))))
+                    .code(),
+                "a hardcoded realm role");
+        assertEquals("privilege_escalation",
+                check
+                    .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type", "hardcoded-role-idp-mapper",
+                            "config", Map.of("role", "app.admin"))))
+                    .code(),
+                "a hardcoded client role, clientId.role");
+        assertTrue(check
+            .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type", "oidc-user-attribute-idp-mapper",
+                    "config", Map.of("claim", "dept"))))
+            .allowed(), "no role in it");
+    }
+
+    @Test
+    void lowerAdminsCannotTouchTheCredentialsOrLockoutOfHigherOnes() {
+        NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));
+        for (String name : List.of("keycloak_user_credential_delete", "keycloak_user_brute_force_clear",
+                "keycloak_user_consent_revoke", "keycloak_org_member_remove")) {
+            ToolSpec t = tool(name, "userId");
+            assertEquals("target_outranks_caller", check.check(ctx(t, ALICE, Map.of("userId", "bob"))).code(), name);
+            assertTrue(check.check(ctx(t, ALICE, Map.of("userId", "carol"))).allowed(), name);
+        }
+    }
+
+    @Test
+    void groupScopeCoversTheNewGroupTools() {
+        GroupScopeCheck check = new GroupScopeCheck(dir,
+                settings(PolicySettings.GroupScope.GROUP, "realm:group-manager", false));
+        assertEquals("group_out_of_scope",
+                check.check(ctx(tool("keycloak_group_update", "id", "name"), ALICE, Map.of("id", "/team-b"))).code());
+        assertTrue(check.check(ctx(tool("keycloak_group_update", "id", "name"), ALICE, Map.of("id", "/team-a/dev")))
+            .allowed());
+        for (String name : List.of("keycloak_group_role_unassign", "keycloak_group_client_role_assign",
+                "keycloak_group_client_role_unassign")) {
+            assertEquals("group_out_of_scope",
+                    check.check(ctx(tool(name, "groupId", "role"), ALICE, Map.of("groupId", "/team-b"))).code(), name);
+        }
+    }
+
+    @Test
+    void nobodyStripsTheAdminAccessTheyDependOn() {
+        SelfProtectionCheck check = new SelfProtectionCheck(dir, SELF_ONLY);
+        ToolSpec unassign = tool("keycloak_group_role_unassign", "groupId", "role");
+        AccessCheck.Decision viaGroup = check.check(ctx(unassign, DAN, Map.of("groupId", "/admins", "role", "admin")));
+        assertEquals("self_protection", viaGroup.code(), viaGroup.message());
+        assertEquals("self_protection",
+                check.check(ctx(unassign, ERIN, Map.of("groupId", "/admins", "role", "admin"))).code(),
+                "a member of a subgroup loses it too");
+        assertTrue(check.check(ctx(unassign, DAN, Map.of("groupId", "/team-b", "role", "admin"))).allowed(),
+                "not a member");
+        assertTrue(check.check(ctx(unassign, DAN, Map.of("groupId", "/admins", "role", "viewer"))).allowed(),
+                "not administrative");
+        assertEquals("self_protection",
+                check
+                    .check(ctx(tool("keycloak_group_client_role_unassign", "groupId", "clientId", "role"), DAN,
+                            Map.of("groupId", "/admins", "clientId", "realm-management", "role", "manage-users")))
+                    .code(),
+                "realm-management roles are administrative");
+
+        ToolSpec composite = tool("keycloak_role_composite_remove", "role", "composite", "compositeClientId");
+        dir.role("realm:ops", Set.of("realm:ops", "realm:admin"))
+            .user("olga", Set.of("realm:ops", "realm:admin"), List.of(), Set.of());
+        Caller olga = Caller.of("id-olga", "olga", "demo", Set.of("realm:ops"));
+        AccessCheck.Decision own = check.check(ctx(composite, olga, Map.of("role", "ops", "composite", "admin")));
+        assertEquals("self_protection", own.code(), own.message());
+        assertTrue(own.message().contains("which you hold yourself"), own.message());
+        assertTrue(check.check(ctx(composite, ALICE, Map.of("role", "ops", "composite", "admin"))).allowed(),
+                "alice does not hold ops");
+
+        AccessCheck.Decision credential = check
+            .check(ctx(tool("keycloak_user_credential_delete", "userId", "credentialId"), ALICE,
+                    Map.of("userId", "alice", "credentialId", "otp")));
+        assertEquals("self_protection", credential.code(), credential.message());
+        assertTrue(check
+            .check(ctx(tool("keycloak_user_credential_delete", "userId", "credentialId"), ALICE,
+                    Map.of("userId", "carol", "credentialId", "otp")))
+            .allowed());
+    }
 }

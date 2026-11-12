@@ -31,9 +31,13 @@ public final class GroupScopeCheck implements AccessCheck {
     }
 
     /** tool name -> argument naming the target group */
-    static final Map<String, String> GROUP_ARG = Map.of("keycloak_group_delete", "id", "keycloak_group_members_list",
-            "groupId", "keycloak_group_member_add", "groupId", "keycloak_group_member_remove", "groupId",
-            "keycloak_group_role_assign", "groupId", "keycloak_group_create", "parentId");
+    static final Map<String, String> GROUP_ARG = Map.ofEntries(Map.entry("keycloak_group_delete", "id"),
+            Map.entry("keycloak_group_update", "id"), Map.entry("keycloak_group_members_list", "groupId"),
+            Map.entry("keycloak_group_member_add", "groupId"), Map.entry("keycloak_group_member_remove", "groupId"),
+            Map.entry("keycloak_group_role_assign", "groupId"), Map.entry("keycloak_group_role_unassign", "groupId"),
+            Map.entry("keycloak_group_client_role_assign", "groupId"),
+            Map.entry("keycloak_group_client_role_unassign", "groupId"),
+            Map.entry("keycloak_group_create", "parentId"));
 
     private final Function<Context, RealmDirectory> directories;
     private final PolicySettings settings;

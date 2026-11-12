@@ -121,6 +121,68 @@ public class IdpToolProvider extends AbstractToolProvider {
                     .handler(this::delete)
                     .roles("manage-identity-providers")
                     .api(delete(R + "/identity-provider/instances/{alias}").path("alias", "alias"))
+                    .build(),
+                tool("keycloak_idp_update").title("Update identity provider")
+                    .description(
+                            "Change an identity provider's settings; config keys are merged, an empty value removes one.")
+                    .category(Category.IDP)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("edit sso", "rotate idp secret", "disable google login", "change issuer", "hide on login")
+                    .schema(schema().string("alias", "Identity provider alias")
+                        .required()
+                        .string("displayName", "Button label on the login page")
+                        .bool("enabled", "Enabled")
+                        .bool("trustEmail", "Trust emails from this provider as verified")
+                        .bool("hideOnLogin", "Hide the button (used only for domain routing)")
+                        .string("firstBrokerLoginFlowAlias", "First login flow")
+                        .string("postBrokerLoginFlowAlias", "Flow run after every broker login; empty clears it")
+                        .stringMap("config",
+                                "Provider config keys to set: clientId, clientSecret, issuer, defaultScope, ...")
+                        .sensitiveKeys(SECRET_KEYS.toArray(String[]::new)))
+                    .handler(this::update)
+                    .roles("manage-identity-providers")
+                    .api(put(R + "/identity-provider/instances/{alias}").path("alias", "alias")
+                        .body("IdentityProviderRepresentation", "displayName", "enabled", "trustEmail", "hideOnLogin",
+                                "firstBrokerLoginFlowAlias", "postBrokerLoginFlowAlias", "config"))
+                    .build(),
+                tool("keycloak_idp_mapper_create").title("Create identity provider mapper")
+                    .description(
+                            "Add a mapper to an identity provider: import a claim, set a role, template the username.")
+                    .category(Category.IDP)
+                    .write()
+                    .synonyms("attribute importer", "hardcoded role", "claim to role", "username template",
+                            "map idp claim")
+                    .schema(schema().string("alias", "Identity provider alias")
+                        .required()
+                        .string("name", "Mapper name")
+                        .required()
+                        .string("type", "Mapper type, e.g. oidc-user-attribute-idp-mapper, hardcoded-role-idp-mapper, "
+                                + "oidc-role-idp-mapper, oidc-username-idp-mapper, saml-user-attribute-idp-mapper")
+                        .required()
+                        .enumeration("syncMode", "When it applies (default INHERIT)", "INHERIT", "IMPORT", "LEGACY",
+                                "FORCE")
+                        .stringMap("config",
+                                "Mapper config, e.g. {\"claim\": \"department\", \"user.attribute\": \"dept\"} "
+                                        + "or {\"role\": \"my-app.editor\"}"))
+                    .handler(this::mapperCreate)
+                    .roles("manage-identity-providers")
+                    .api(post(R + "/identity-provider/instances/{alias}/mappers").path("alias", "alias")
+                        .body("IdentityProviderMapperRepresentation", "name", "config"))
+                    .build(),
+                tool("keycloak_idp_mapper_delete").title("Delete identity provider mapper")
+                    .description("Remove a mapper from an identity provider, by id or name.")
+                    .category(Category.IDP)
+                    .destructive()
+                    .synonyms("remove idp mapper", "drop attribute importer")
+                    .schema(schema().string("alias", "Identity provider alias")
+                        .required()
+                        .string("mapper", "Mapper id or name")
+                        .required())
+                    .handler(this::mapperDelete)
+                    .roles("manage-identity-providers")
+                    .api(delete(R + "/identity-provider/instances/{alias}/mappers/{id}").path("alias", "alias")
+                        .path("id", "mapper"))
                     .build());
     }
 
@@ -213,6 +275,95 @@ public class IdpToolProvider extends AbstractToolProvider {
         idp.setConfig(config);
         KeycloakAdmin.ok(call.kc().realm(call.realm()).identityProviders().create(idp));
         return ToolResult.done("Identity provider created", "alias", idp.getAlias(), "providerId", idp.getProviderId());
+    }
+
+    ToolResult update(ToolCall call) {
+        IdentityProviderRepresentation idp = find(call, call.str("alias"));
+        List<String> changed = new ArrayList<>();
+        if (call.has("displayName")) {
+            idp.setDisplayName(call.str("displayName"));
+            changed.add("displayName");
+        }
+        if (call.has("enabled")) {
+            idp.setEnabled(call.bool("enabled"));
+            changed.add("enabled");
+        }
+        if (call.has("trustEmail")) {
+            idp.setTrustEmail(call.bool("trustEmail"));
+            changed.add("trustEmail");
+        }
+        if (call.has("hideOnLogin")) {
+            idp.setHideOnLogin(call.bool("hideOnLogin"));
+            changed.add("hideOnLogin");
+        }
+        if (call.has("firstBrokerLoginFlowAlias")) {
+            idp.setFirstBrokerLoginFlowAlias(call.str("firstBrokerLoginFlowAlias"));
+            changed.add("firstBrokerLoginFlowAlias");
+        }
+        if (call.has("postBrokerLoginFlowAlias")) {
+            String flow = call.str("postBrokerLoginFlowAlias");
+            idp.setPostBrokerLoginFlowAlias(flow == null || flow.isBlank() ? null : flow);
+            changed.add("postBrokerLoginFlowAlias");
+        }
+        if (call.has("config")) {
+            Map<String, String> config = idp.getConfig() == null ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(idp.getConfig());
+            Objects.requireNonNull(call.stringMap("config")).forEach((k, v) -> {
+                if (SECRET_KEYS.contains(k) && v != null && v.matches("\\*+")) {
+                    // the masked value keycloak_idp_get shows, echoed back: keep the
+                    // secret
+                    return;
+                }
+                if (v == null || v.isEmpty()) {
+                    config.remove(k);
+                }
+                else {
+                    config.put(k, v);
+                }
+            });
+            idp.setConfig(config);
+            changed.add("config");
+        }
+        if (changed.isEmpty()) {
+            return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one field besides alias.");
+        }
+        call.kc().realm(call.realm()).identityProviders().get(idp.getAlias()).update(idp);
+        return ToolResult.done("Identity provider updated", "alias", idp.getAlias(), "changed", changed);
+    }
+
+    ToolResult mapperCreate(ToolCall call) {
+        IdentityProviderRepresentation idp = find(call, call.str("alias"));
+        IdentityProviderMapperRepresentation mapper = new IdentityProviderMapperRepresentation();
+        mapper.setName(call.str("name"));
+        mapper.setIdentityProviderAlias(idp.getAlias());
+        mapper.setIdentityProviderMapper(call.str("type"));
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("syncMode", call.str("syncMode", "INHERIT"));
+        if (call.has("config")) {
+            config.putAll(Objects.requireNonNull(call.stringMap("config")));
+        }
+        mapper.setConfig(config);
+        String id = KeycloakAdmin
+            .created(call.kc().realm(call.realm()).identityProviders().get(idp.getAlias()).addMapper(mapper));
+        return ToolResult.done("Mapper created", "alias", idp.getAlias(), "id", id, "name", mapper.getName(), "type",
+                mapper.getIdentityProviderMapper());
+    }
+
+    ToolResult mapperDelete(ToolCall call) {
+        IdentityProviderRepresentation idp = find(call, call.str("alias"));
+        String ref = call.str("mapper");
+        IdentityProviderMapperRepresentation mapper = call.kc()
+            .realm(call.realm())
+            .identityProviders()
+            .get(idp.getAlias())
+            .getMappers()
+            .stream()
+            .filter(m -> ref.equals(m.getId()) || ref.equals(m.getName()))
+            .findFirst()
+            .orElseThrow(() -> ToolException.notFound("Identity provider mapper", ref));
+        call.kc().realm(call.realm()).identityProviders().get(idp.getAlias()).delete(mapper.getId());
+        return ToolResult.done("Mapper deleted", "alias", idp.getAlias(), "id", mapper.getId(), "name",
+                mapper.getName());
     }
 
     ToolResult delete(ToolCall call) {

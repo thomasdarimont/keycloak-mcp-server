@@ -45,7 +45,14 @@ public final class SelfProtectionCheck implements AccessCheck {
     /** built-in tools that act on a user, with the argument naming them */
     static final Map<String, String> BUILT_IN = Map.of("keycloak_user_delete", "id", "keycloak_user_set_enabled", "id",
             "keycloak_user_update", "id", "keycloak_user_role_unassign", "userId", "keycloak_user_client_role_unassign",
-            "userId", "keycloak_group_member_remove", "userId");
+            "userId", "keycloak_group_member_remove", "userId", "keycloak_user_credential_delete", "userId");
+
+    /** taking a role from a group takes it from every member, the caller included */
+    static final Set<String> GROUP_ROLE_REMOVAL = Set.of("keycloak_group_role_unassign",
+            "keycloak_group_client_role_unassign");
+
+    /** taking a role out of a composite takes it from everyone holding the composite */
+    static final String COMPOSITE_REMOVE = "keycloak_role_composite_remove";
 
     /** deleting a group takes its role mappings from every member, the caller included */
     static final String GROUP_DELETE = "keycloak_group_delete";
@@ -93,6 +100,13 @@ public final class SelfProtectionCheck implements AccessCheck {
         if (GROUP_DELETE.equals(tool)) {
             return groupDeletion(ctx, ctx.arg("id"));
         }
+        if (GROUP_ROLE_REMOVAL.contains(tool)) {
+            return groupRoleRemoval(ctx, "keycloak_group_role_unassign".equals(tool) ? "realm:" + ctx.arg("role")
+                    : ctx.arg("clientId") + "." + ctx.arg("role"));
+        }
+        if (COMPOSITE_REMOVE.equals(tool)) {
+            return compositeRemoval(ctx);
+        }
         String userArg = userArgs.get(tool);
         // a tool configured under its former name stays guarded after a rename
         for (java.util.Iterator<String> f = ctx.tool().formerNames().iterator(); userArg == null && f.hasNext();) {
@@ -114,6 +128,9 @@ public final class SelfProtectionCheck implements AccessCheck {
         switch (tool) {
             case "keycloak_user_delete" -> {
                 return refuse(caller, "delete your own account");
+            }
+            case "keycloak_user_credential_delete" -> {
+                return refuse(caller, "delete one of your own credentials");
             }
             case "keycloak_user_set_enabled", "keycloak_user_update" -> {
                 if (disables(ctx)) {
@@ -184,6 +201,68 @@ public final class SelfProtectionCheck implements AccessCheck {
                             + " administrative access (" + admin + " through '" + membership + "')");
                 }
             }
+        }
+        return Decision.allow();
+    }
+
+    /**
+     * Taking a role from a group the caller belongs to, directly or through a subgroup,
+     * when the role is (or includes) administrative access.
+     */
+    private Decision groupRoleRemoval(Context ctx, String roleKey) {
+        String groupRef = ctx.arg("groupId");
+        if (groupRef == null || ctx.arg("role") == null) {
+            return Decision.allow();
+        }
+        RealmDirectory directory = directories.apply(ctx);
+        Set<String> closure = directory.roleClosure(ctx.realm(), roleKey);
+        Set<String> admin = administrative(closure.isEmpty() ? Set.of(roleKey) : closure);
+        if (admin.isEmpty()) {
+            return Decision.allow();
+        }
+        Caller caller = ctx.caller();
+        String callerId = CallerContext.callerUserId(directory, ctx);
+        if (callerId == null) {
+            return refuse(caller, "take " + admin + " from group '" + groupRef + "' while your own account cannot be"
+                    + " resolved in realm '" + ctx.realm() + "', so whether you depend on it is unknown");
+        }
+        Optional<String> path = directory.groupPath(ctx.realm(), groupRef);
+        if (path.isEmpty()) {
+            return refuse(caller, "take " + admin + " from group '" + groupRef + "', which could not be inspected,"
+                    + " so whether you hold administrative access through it is unknown");
+        }
+        for (String membership : directory.groupPaths(ctx.realm(), callerId)) {
+            if (membership.equals(path.get()) || membership.startsWith(path.get() + "/")) {
+                return refuse(caller, "take " + admin + " from group '" + path.get()
+                        + "', through which you hold administrative access ('" + membership + "')");
+            }
+        }
+        return Decision.allow();
+    }
+
+    /**
+     * Taking an administrative role out of a composite role the caller holds.
+     */
+    private Decision compositeRemoval(Context ctx) {
+        if (ctx.arg("role") == null || ctx.arg("composite") == null) {
+            return Decision.allow();
+        }
+        String included = ctx.arg("compositeClientId") != null
+                ? ctx.arg("compositeClientId") + "." + ctx.arg("composite") : "realm:" + ctx.arg("composite");
+        RealmDirectory directory = directories.apply(ctx);
+        Set<String> closure = directory.roleClosure(ctx.realm(), included);
+        Set<String> admin = administrative(closure.isEmpty() ? Set.of(included) : closure);
+        if (admin.isEmpty()) {
+            return Decision.allow();
+        }
+        Caller caller = ctx.caller();
+        String callerId = CallerContext.callerUserId(directory, ctx);
+        if (callerId == null) {
+            return refuse(caller, "take " + admin + " out of role '" + ctx.arg("role") + "' while your own account"
+                    + " cannot be resolved in realm '" + ctx.realm() + "', so whether you depend on it is unknown");
+        }
+        if (directory.effectiveRoles(ctx.realm(), callerId).contains("realm:" + ctx.arg("role"))) {
+            return refuse(caller, "take " + admin + " out of role '" + ctx.arg("role") + "', which you hold yourself");
         }
         return Decision.allow();
     }

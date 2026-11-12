@@ -3,6 +3,7 @@ package com.github.thomasdarimont.keycloak.mcp.backend.policies;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
@@ -31,7 +32,8 @@ public final class NoEscalationCheck implements AccessCheck {
     }
 
     static final Set<String> GRANT_TOOLS = Set.of("keycloak_user_role_assign", "keycloak_user_client_role_assign",
-            "keycloak_group_role_assign", "keycloak_group_member_add");
+            "keycloak_group_role_assign", "keycloak_group_client_role_assign", "keycloak_group_member_add",
+            "keycloak_role_composite_add", "keycloak_idp_mapper_create");
     /** tools that act on a target user: the target must not outrank the caller */
     static final Map<String, String> USER_ARG = Map.ofEntries(Map.entry("keycloak_user_set_enabled", "id"),
             Map.entry("keycloak_user_update", "id"), Map.entry("keycloak_user_delete", "id"),
@@ -39,7 +41,9 @@ public final class NoEscalationCheck implements AccessCheck {
             Map.entry("keycloak_user_logout", "id"), Map.entry("keycloak_user_role_assign", "userId"),
             Map.entry("keycloak_user_role_unassign", "userId"), Map.entry("keycloak_user_client_role_assign", "userId"),
             Map.entry("keycloak_user_client_role_unassign", "userId"), Map.entry("keycloak_group_member_add", "userId"),
-            Map.entry("keycloak_group_member_remove", "userId"));
+            Map.entry("keycloak_group_member_remove", "userId"), Map.entry("keycloak_user_credential_delete", "userId"),
+            Map.entry("keycloak_user_brute_force_clear", "userId"), Map.entry("keycloak_user_consent_revoke", "userId"),
+            Map.entry("keycloak_org_member_add", "userId"), Map.entry("keycloak_org_member_remove", "userId"));
 
     private final Function<Context, RealmDirectory> directories;
     private final PolicySettings settings;
@@ -91,8 +95,15 @@ public final class NoEscalationCheck implements AccessCheck {
             Set<String> granting = switch (tool) {
                 case "keycloak_user_role_assign", "keycloak_group_role_assign" ->
                     directory.roleClosure(ctx.realm(), "realm:" + ctx.arg("role"));
-                case "keycloak_user_client_role_assign" ->
+                case "keycloak_user_client_role_assign", "keycloak_group_client_role_assign" ->
                     directory.roleClosure(ctx.realm(), ctx.arg("clientId") + "." + ctx.arg("role"));
+                // everyone holding the composite gets what it now includes
+                case "keycloak_role_composite_add" -> directory.roleClosure(ctx.realm(),
+                        ctx.arg("compositeClientId") != null ? ctx.arg("compositeClientId") + "." + ctx.arg("composite")
+                                : "realm:" + ctx.arg("composite"));
+                // a role mapper hands its role to everyone signing in through the
+                // provider
+                case "keycloak_idp_mapper_create" -> mapperRole(directory, ctx);
                 case "keycloak_group_member_add" -> directory.groupPath(ctx.realm(), ctx.arg("groupId"))
                     .map(p -> directory.groupRoles(ctx.realm(), p))
                     .orElse(Set.of());
@@ -105,5 +116,22 @@ public final class NoEscalationCheck implements AccessCheck {
             }
         }
         return Decision.allow();
+    }
+
+    /**
+     * The roles an identity provider mapper would grant: its {@code role} config, written
+     * the way Keycloak's role mappers take it ({@code name} for a realm role,
+     * {@code clientId.name} for a client role); both readings count when there is a dot.
+     */
+    static Set<String> mapperRole(RealmDirectory directory, Context ctx) {
+        if (!(ctx.args().get("config") instanceof Map<?, ?> config) || config.get("role") == null) {
+            return Set.of();
+        }
+        String role = String.valueOf(config.get("role"));
+        Set<String> granting = new TreeSet<>(directory.roleClosure(ctx.realm(), "realm:" + role));
+        if (role.contains(".")) {
+            granting.addAll(directory.roleClosure(ctx.realm(), role));
+        }
+        return granting;
     }
 }

@@ -7,11 +7,14 @@ import java.util.Map;
 import java.util.Objects;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 
 import org.keycloak.admin.client.resource.OrganizationsResource;
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
+import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationDomainRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
@@ -20,6 +23,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.ToolHandler;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
+import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakErrors;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.Views;
 import com.github.thomasdarimont.keycloak.mcp.tools.AbstractToolProvider;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
@@ -150,6 +154,64 @@ public class OrgToolProvider extends AbstractToolProvider {
                     .api(delete(R + "/organizations/{org-id}/identity-providers/{alias}")
                         .path("org-id", "organizationId")
                         .path("alias", "idpAlias"))
+                    .build(),
+                tool("keycloak_org_update").title("Update organization")
+                    .requiresFeatures("organization")
+                    .description("Change an organization's name, description, enabled flag, redirect URL or domains.")
+                    .category(Category.ORGS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("edit tenant", "rename company", "add domain", "disable organization")
+                    .schema(schema().string("organizationId", ORG_ID)
+                        .required()
+                        .string("name", "New name")
+                        .string("description", "Description")
+                        .bool("enabled", "Enabled")
+                        .string("redirectUrl", "Redirect URL after invitation")
+                        .stringArray("domains", "Email domains, replacing the old list; stored as verified"))
+                    .handler(guard(this::update))
+                    .roles("manage-realm")
+                    .api(put(R + "/organizations/{org-id}").path("org-id", "organizationId")
+                        .body("OrganizationRepresentation", "name", "description", "enabled", "redirectUrl", "domains"))
+                    .build(),
+                tool("keycloak_org_members_list").title("List organization members")
+                    .requiresFeatures("organization")
+                    .description("Users that are members of an organization, managed or unmanaged.")
+                    .category(Category.ORGS)
+                    .read()
+                    .synonyms("who is in tenant", "company users", "org membership", "employees")
+                    .schema(schema().string("organizationId", ORG_ID)
+                        .required()
+                        .string("search", "Filter by username, email, first or last name")
+                        .pagination())
+                    .handler(guard(this::members))
+                    .roles("view-realm", "view-users")
+                    .api(get(R + "/organizations/{org-id}/members").path("org-id", "organizationId")
+                        .query("search", "first", "max"))
+                    .build(),
+                tool("keycloak_org_member_add").title("Add organization member")
+                    .requiresFeatures("organization")
+                    .description("Make an existing user a member of an organization.")
+                    .category(Category.ORGS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("join tenant", "add employee", "assign user to company", "org membership")
+                    .schema(schema().string("organizationId", ORG_ID).required().string("userId", USER_ID).required())
+                    .handler(guard(this::memberAdd))
+                    .roles("manage-realm", "manage-users")
+                    .api(post(R + "/organizations/{org-id}/members").path("org-id", "organizationId"))
+                    .build(),
+                tool("keycloak_org_member_remove").title("Remove organization member")
+                    .requiresFeatures("organization")
+                    .description("Remove a user from an organization; a managed member's account is deleted with it.")
+                    .category(Category.ORGS)
+                    .destructive()
+                    .synonyms("leave tenant", "offboard employee", "remove user from company")
+                    .schema(schema().string("organizationId", ORG_ID).required().string("userId", USER_ID).required())
+                    .handler(guard(this::memberRemove))
+                    .roles("manage-realm", "manage-users")
+                    .api(delete(R + "/organizations/{org-id}/members/{member-id}").path("org-id", "organizationId")
+                        .path("member-id", "userId"))
                     .build());
     }
 
@@ -238,15 +300,105 @@ public class OrgToolProvider extends AbstractToolProvider {
         o.setEnabled(call.bool("enabled", true));
         o.setRedirectUrl(call.str("redirectUrl"));
         if (call.has("domains")) {
-            for (String d : Objects.requireNonNull(call.strings("domains"))) {
-                OrganizationDomainRepresentation rep = new OrganizationDomainRepresentation();
-                rep.setName(d.trim().toLowerCase());
-                rep.setVerified(true);
-                o.addDomain(rep);
-            }
+            domains(Objects.requireNonNull(call.strings("domains"))).forEach(o::addDomain);
         }
         String id = KeycloakAdmin.created(call.kc().realm(call.realm()).organizations().create(o));
         return ToolResult.done("Organization created", "id", id, "name", o.getName(), "alias", o.getAlias());
+    }
+
+    private static List<OrganizationDomainRepresentation> domains(List<String> names) {
+        List<OrganizationDomainRepresentation> out = new ArrayList<>();
+        for (String d : names) {
+            OrganizationDomainRepresentation rep = new OrganizationDomainRepresentation();
+            rep.setName(d.trim().toLowerCase());
+            rep.setVerified(true);
+            out.add(rep);
+        }
+        return out;
+    }
+
+    ToolResult update(ToolCall call) {
+        OrganizationRepresentation o = find(call, call.str("organizationId"));
+        OrganizationRepresentation full = call.kc()
+            .realm(call.realm())
+            .organizations()
+            .get(o.getId())
+            .toRepresentation();
+        List<String> changed = new ArrayList<>();
+        if (call.has("name")) {
+            full.setName(call.str("name"));
+            changed.add("name");
+        }
+        if (call.has("description")) {
+            full.setDescription(call.str("description"));
+            changed.add("description");
+        }
+        if (call.has("enabled")) {
+            full.setEnabled(call.bool("enabled"));
+            changed.add("enabled");
+        }
+        if (call.has("redirectUrl")) {
+            full.setRedirectUrl(call.str("redirectUrl"));
+            changed.add("redirectUrl");
+        }
+        if (call.has("domains")) {
+            // no setter: empty the set the representation hands out, then add the new
+            // ones
+            new ArrayList<>(full.getDomains() == null ? List.of() : full.getDomains()).forEach(full::removeDomain);
+            domains(Objects.requireNonNull(call.strings("domains"))).forEach(full::addDomain);
+            changed.add("domains");
+        }
+        if (changed.isEmpty()) {
+            return ToolResult.error("invalid_arguments",
+                    "Nothing to update: pass name, description, enabled, redirectUrl or domains.");
+        }
+        KeycloakAdmin.ok(call.kc().realm(call.realm()).organizations().get(o.getId()).update(full));
+        return ToolResult.done("Organization updated", "id", o.getId(), "name", full.getName(), "changed", changed);
+    }
+
+    ToolResult members(ToolCall call) {
+        OrganizationRepresentation o = find(call, call.str("organizationId"));
+        var members = call.kc()
+            .realm(call.realm())
+            .organizations()
+            .get(o.getId())
+            .members()
+            .search(call.str("search"), false, call.first(), call.max());
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (MemberRepresentation m : members) {
+            Map<String, Object> v = Views.user(m);
+            if (m.getMembershipType() != null) {
+                v.put("membershipType", m.getMembershipType().name().toLowerCase());
+            }
+            items.add(v);
+        }
+        Map<String, Object> page = Views.page(items, call.max());
+        page.put("organization", o.getName());
+        return ToolResult.ok(page);
+    }
+
+    ToolResult memberAdd(ToolCall call) {
+        OrganizationRepresentation o = find(call, call.str("organizationId"));
+        UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
+        try (Response r = call.kc().realm(call.realm()).organizations().get(o.getId()).members().addMember(u.getId())) {
+            if (r.getStatus() == 409) {
+                return ToolResult.done("User was already a member of the organization", "organization", o.getName(),
+                        "username", u.getUsername(), "alreadyMember", true);
+            }
+            if (r.getStatus() >= 400) {
+                throw KeycloakErrors.fromResponse(r);
+            }
+        }
+        return ToolResult.done("User added to organization", "organization", o.getName(), "username", u.getUsername());
+    }
+
+    ToolResult memberRemove(ToolCall call) {
+        OrganizationRepresentation o = find(call, call.str("organizationId"));
+        UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
+        KeycloakAdmin
+            .ok(call.kc().realm(call.realm()).organizations().get(o.getId()).members().member(u.getId()).delete());
+        return ToolResult.done("User removed from organization", "organization", o.getName(), "username",
+                u.getUsername());
     }
 
     ToolResult delete(ToolCall call) {
@@ -267,8 +419,8 @@ public class OrgToolProvider extends AbstractToolProvider {
         for (IdentityProviderRepresentation idp : idps) {
             Map<String, Object> v = IdpToolProvider.view(idp);
             if (idp.getConfig() != null) {
-                Views.put(v, "domain", idp.getConfig().get("call.kc().org.domain"));
-                Views.put(v, "redirectMode", idp.getConfig().get("call.kc().org.broker.redirect.mode.email-matches"));
+                Views.put(v, "domain", idp.getConfig().get("kc.org.domain"));
+                Views.put(v, "redirectMode", idp.getConfig().get("kc.org.broker.redirect.mode.email-matches"));
             }
             items.add(v);
         }

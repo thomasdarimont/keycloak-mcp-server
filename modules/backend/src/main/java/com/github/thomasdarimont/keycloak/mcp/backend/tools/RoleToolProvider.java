@@ -1,5 +1,7 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.tools;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +13,7 @@ import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -154,7 +157,116 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/role-mappings/clients/{client-id}").path("user-id", "userId")
                         .path("client-id", "clientId"))
+                    .build(),
+                tool("keycloak_role_get").title("Get realm role")
+                    .description("One realm role with description, attributes and the roles it includes (composites).")
+                    .category(Category.ROLES)
+                    .read()
+                    .synonyms("role details", "composite role", "what does role include", "role attributes",
+                            "child roles", "associated roles")
+                    .schema(schema().string("role", "Realm role name, e.g. admin").required())
+                    .handler(this::get)
+                    .roles("view-realm")
+                    .api(get(R + "/roles/{role-name}").path("role-name", "role"),
+                            get(R + "/roles/{role-name}/composites").path("role-name", "role"))
+                    .build(),
+                tool("keycloak_role_create").title("Create realm role")
+                    .description("Create a realm role with an optional description and attributes.")
+                    .category(Category.ROLES)
+                    .write()
+                    .synonyms("add role", "new role", "define permission", "new realm role")
+                    .schema(schema().string("name", "Role name, e.g. editor")
+                        .required()
+                        .string("description", "What the role is for")
+                        .stringMap("attributes", "Role attributes, e.g. {\"department\": \"sales\"}"))
+                    .handler(this::create)
+                    .roles("manage-realm")
+                    .api(post(R + "/roles").body("RoleRepresentation", "name", "description"))
+                    .build(),
+                tool("keycloak_role_update").title("Update realm role")
+                    .description(
+                            "Change a realm role's description or attributes; an empty attribute value removes it.")
+                    .category(Category.ROLES)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("edit role", "rename description", "role attributes")
+                    .schema(schema().string("role", "Realm role name")
+                        .required()
+                        .string("description", "New description")
+                        .stringMap("attributes", "Attributes to set, merged into the existing ones"))
+                    .handler(this::update)
+                    .roles("manage-realm")
+                    .api(put(R + "/roles/{role-name}").path("role-name", "role")
+                        .body("RoleRepresentation", "description"))
+                    .build(),
+                tool("keycloak_role_delete").title("Delete realm role")
+                    .description("Delete a realm role; every user and group holding it loses it.")
+                    .category(Category.ROLES)
+                    .destructive()
+                    .synonyms("remove role", "drop role", "delete permission")
+                    .schema(schema().string("role", "Realm role name").required())
+                    .handler(this::delete)
+                    .roles("manage-realm")
+                    .api(delete(R + "/roles/{role-name}").path("role-name", "role"))
+                    .build(),
+                tool("keycloak_role_composite_add").title("Add role to composite role")
+                    .description("Make a realm role include another role, so holders of it get that role too.")
+                    .category(Category.ROLES)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("composite", "include role", "nest role", "associated role", "role hierarchy")
+                    .schema(compositeFields(schema()))
+                    .handler(this::compositeAdd)
+                    .roles("manage-realm")
+                    .api(post(R + "/roles/{role-name}/composites").path("role-name", "role"))
+                    .build(),
+                tool("keycloak_role_composite_remove").title("Remove role from composite role")
+                    .description("Stop a realm role from including another role.")
+                    .category(Category.ROLES)
+                    .destructive()
+                    .synonyms("composite", "exclude role", "unnest role", "associated role")
+                    .schema(compositeFields(schema()))
+                    .handler(this::compositeRemove)
+                    .roles("manage-realm")
+                    .api(delete(R + "/roles/{role-name}/composites").path("role-name", "role"))
+                    .build(),
+                tool("keycloak_client_role_create").title("Create client role")
+                    .description("Create a role on a client, e.g. my-app/editor.")
+                    .category(Category.ROLES)
+                    .write()
+                    .synonyms("add client role", "application role", "new app permission")
+                    .schema(schema().string("clientId", CLIENT_ID)
+                        .required()
+                        .string("name", "Role name")
+                        .required()
+                        .string("description", "What the role is for"))
+                    .handler(this::clientRoleCreate)
+                    .roles("manage-clients")
+                    .api(post(R + "/clients/{client-uuid}/roles").path("client-uuid", "clientId")
+                        .body("RoleRepresentation", "name", "description"))
+                    .build(),
+                tool("keycloak_client_role_delete").title("Delete client role")
+                    .description("Delete a client role; every user and group holding it loses it.")
+                    .category(Category.ROLES)
+                    .destructive()
+                    .synonyms("remove client role", "drop application role")
+                    .schema(schema().string("clientId", CLIENT_ID)
+                        .required()
+                        .string("role", "Client role name")
+                        .required())
+                    .handler(this::clientRoleDelete)
+                    .roles("manage-clients")
+                    .api(delete(R + "/clients/{client-uuid}/roles/{role-name}").path("client-uuid", "clientId")
+                        .path("role-name", "role"))
                     .build());
+    }
+
+    private static InputSchema.Builder compositeFields(InputSchema.Builder b) {
+        return b.string("role", "The composite realm role, e.g. admin")
+            .required()
+            .string("composite", "The role it includes: a realm role, or a role of compositeClientId")
+            .required()
+            .string("compositeClientId", "Client of the included role, when it is a client role");
     }
 
     static RoleRepresentation realmRole(KeycloakAdmin kc, String realm, String name) {
@@ -248,5 +360,142 @@ public class RoleToolProvider extends AbstractToolProvider {
         call.kc().realm(call.realm()).users().get(u.getId()).roles().clientLevel(c.getId()).remove(List.of(role));
         return ToolResult.done("Client role removed", "username", u.getUsername(), "clientId", c.getClientId(), "role",
                 role.getName());
+    }
+
+    /** A role as {@code name} for realm roles, {@code clientId/name} for client roles. */
+    static String label(KeycloakAdmin kc, String realm, RoleRepresentation r, Map<String, String> clientIds) {
+        if (!Boolean.TRUE.equals(r.getClientRole())) {
+            return r.getName();
+        }
+        String clientId = clientIds.computeIfAbsent(r.getContainerId(), id -> {
+            try {
+                return kc.realm(realm).clients().get(id).toRepresentation().getClientId();
+            }
+            catch (RuntimeException e) {
+                return id;
+            }
+        });
+        return clientId + "/" + r.getName();
+    }
+
+    ToolResult get(ToolCall call) {
+        RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
+        Map<String, Object> m = Views.role(role);
+        Views.put(m, "id", role.getId());
+        if (role.getAttributes() != null && !role.getAttributes().isEmpty()) {
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            role.getAttributes().forEach((k, v) -> attrs.put(k, v != null && v.size() == 1 ? v.getFirst() : v));
+            m.put("attributes", attrs);
+        }
+        if (Boolean.TRUE.equals(role.isComposite())) {
+            Map<String, String> clientIds = new HashMap<>();
+            m.put("includes",
+                    call.kc()
+                        .realm(call.realm())
+                        .roles()
+                        .get(role.getName())
+                        .getRoleComposites()
+                        .stream()
+                        .map(r -> label(call.kc(), call.realm(), r, clientIds))
+                        .sorted()
+                        .toList());
+        }
+        return ToolResult.ok(m);
+    }
+
+    private static Map<String, List<String>> attributes(Map<String, List<String>> existing, Map<String, String> set) {
+        Map<String, List<String>> attrs = existing == null ? new LinkedHashMap<>() : new LinkedHashMap<>(existing);
+        set.forEach((k, v) -> {
+            if (v == null || v.isEmpty()) {
+                attrs.remove(k);
+            }
+            else {
+                attrs.put(k, List.of(v));
+            }
+        });
+        return attrs;
+    }
+
+    ToolResult create(ToolCall call) {
+        RoleRepresentation role = new RoleRepresentation();
+        role.setName(call.str("name"));
+        role.setDescription(call.str("description"));
+        if (call.has("attributes")) {
+            role.setAttributes(attributes(null, call.stringMap("attributes")));
+        }
+        call.kc().realm(call.realm()).roles().create(role);
+        return ToolResult.done("Realm role created", "role", role.getName());
+    }
+
+    ToolResult update(ToolCall call) {
+        RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
+        List<String> changed = new ArrayList<>();
+        if (call.has("description")) {
+            role.setDescription(call.str("description"));
+            changed.add("description");
+        }
+        if (call.has("attributes")) {
+            role.setAttributes(attributes(role.getAttributes(), call.stringMap("attributes")));
+            changed.add("attributes");
+        }
+        if (changed.isEmpty()) {
+            return ToolResult.error("invalid_arguments", "Nothing to update: pass description or attributes.");
+        }
+        call.kc().realm(call.realm()).roles().get(role.getName()).update(role);
+        return ToolResult.done("Realm role updated", "role", role.getName(), "changed", changed);
+    }
+
+    ToolResult delete(ToolCall call) {
+        RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
+        call.kc().realm(call.realm()).roles().deleteRole(role.getName());
+        return ToolResult.done("Realm role deleted", "role", role.getName());
+    }
+
+    /**
+     * The included role of a composite change: a realm role, or a role of
+     * compositeClientId.
+     */
+    private static RoleRepresentation composite(ToolCall call) {
+        if (call.has("compositeClientId")) {
+            ClientRepresentation c = call.kc().findClient(call.realm(), call.str("compositeClientId"));
+            return clientRole(call.kc(), call.realm(), c.getId(), call.str("composite"));
+        }
+        return realmRole(call.kc(), call.realm(), call.str("composite"));
+    }
+
+    ToolResult compositeAdd(ToolCall call) {
+        RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
+        RoleRepresentation included = composite(call);
+        if (role.getId().equals(included.getId())) {
+            return ToolResult.error("invalid_arguments", "A role cannot include itself.");
+        }
+        call.kc().realm(call.realm()).roles().get(role.getName()).addComposites(List.of(included));
+        return ToolResult.done("Role included", "role", role.getName(), "includes",
+                label(call.kc(), call.realm(), included, new HashMap<>()));
+    }
+
+    ToolResult compositeRemove(ToolCall call) {
+        RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
+        RoleRepresentation included = composite(call);
+        call.kc().realm(call.realm()).roles().get(role.getName()).deleteComposites(List.of(included));
+        return ToolResult.done("Role no longer included", "role", role.getName(), "removed",
+                label(call.kc(), call.realm(), included, new HashMap<>()));
+    }
+
+    ToolResult clientRoleCreate(ToolCall call) {
+        ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+        RoleRepresentation role = new RoleRepresentation();
+        role.setName(call.str("name"));
+        role.setDescription(call.str("description"));
+        role.setClientRole(true);
+        call.kc().realm(call.realm()).clients().get(c.getId()).roles().create(role);
+        return ToolResult.done("Client role created", "clientId", c.getClientId(), "role", role.getName());
+    }
+
+    ToolResult clientRoleDelete(ToolCall call) {
+        ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+        RoleRepresentation role = clientRole(call.kc(), call.realm(), c.getId(), call.str("role"));
+        call.kc().realm(call.realm()).clients().get(c.getId()).roles().deleteRole(role.getName());
+        return ToolResult.done("Client role deleted", "clientId", c.getClientId(), "role", role.getName());
     }
 }
