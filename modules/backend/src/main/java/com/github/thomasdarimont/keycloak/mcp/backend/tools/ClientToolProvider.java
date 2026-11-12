@@ -77,10 +77,15 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .read()
                     .synonyms("applications", "apps", "oauth", "oidc", "saml", "service accounts", "which clients",
                             "relying party")
-                    .schema(schema().string("search", "Filter by (partial) clientId").pagination())
+                    .schema(schema().string("search", "Filter by (partial) clientId")
+                        .string("attribute",
+                                "Searchable attribute as key:value, e.g. saml_idp_initiated_sso_url_name:sales")
+                        .pagination())
                     .handler(this::list)
                     .roles("query-clients")
-                    .api(get(R + "/clients").queryAs("clientId", "search").query("first", "max"))
+                    .api(get(R + "/clients").queryAs("clientId", "search")
+                        .queryAs("q", "attribute")
+                        .query("first", "max"))
                     .build(),
                 tool("keycloak_client_get").title("Get client")
                     .description("Full client settings: flows, URIs, PKCE, auth type, scopes.")
@@ -374,9 +379,9 @@ public class ClientToolProvider extends AbstractToolProvider {
 
     ToolResult list(ToolCall call) {
         List<ClientRepresentation> clients = call.kc()
-            .realm(call.realm())
-            .clients()
-            .findAll(call.str("search"), true, call.has("search"), call.first(), call.max());
+            .queries()
+            .clients(call.realm(), call.str("search"), call.has("search") ? Boolean.TRUE : null, call.str("attribute"),
+                    call.first(), call.max());
         return ToolResult.ok(Views.page(Views.list(clients, Views::client), call.max()));
     }
 

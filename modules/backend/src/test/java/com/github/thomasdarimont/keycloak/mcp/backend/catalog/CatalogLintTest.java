@@ -152,7 +152,7 @@ class CatalogLintTest {
      * Tools that only read but must declare write, because Keycloak answers them through
      * a POST; the view roles are what Keycloak checks for them.
      */
-    static final Set<String> READS_THROUGH_POST = Set.of("keycloak_authz_evaluate");
+    static final Set<String> READS_THROUGH_POST = Set.of("keycloak_authz_evaluate", "keycloak_realm_partial_export");
 
     /**
      * Daily administration the reference project lacks (roles and composites, client
@@ -188,7 +188,29 @@ class CatalogLintTest {
             "keycloak_realm_list", "keycloak_realm_create", "keycloak_realm_delete", "keycloak_realm_logout_all",
             "keycloak_realm_revoke_tokens", "keycloak_brute_force_clear_all", "keycloak_auth_flow_delete",
             "keycloak_protocol_mapper_update", "keycloak_user_count", "keycloak_federation_test_connection",
-            "keycloak_idp_check");
+            "keycloak_idp_check",
+            // brokering, sessions, client operations, required actions, organizations,
+            // realm transfer, workflows, events
+            "keycloak_user_idp_links_list", "keycloak_user_idp_link_add", "keycloak_user_idp_link_remove",
+            "keycloak_idp_import_config", "keycloak_idp_reload_keys", "keycloak_idp_mapper_types_list",
+            "keycloak_idp_mapper_update", "keycloak_idp_export", "keycloak_session_delete",
+            "keycloak_client_session_count", "keycloak_realm_session_stats", "keycloak_client_revoke_tokens",
+            "keycloak_client_rotated_secret_get", "keycloak_client_rotated_secret_invalidate",
+            "keycloak_client_initial_access_list", "keycloak_client_initial_access_create",
+            "keycloak_client_initial_access_delete", "keycloak_role_holders_list", "keycloak_default_groups_list",
+            "keycloak_default_group_add", "keycloak_default_group_remove", "keycloak_auth_required_action_get",
+            "keycloak_auth_required_action_config_set", "keycloak_auth_required_action_config_reset",
+            "keycloak_auth_required_action_raise_priority", "keycloak_auth_required_action_lower_priority",
+            "keycloak_auth_required_actions_unregistered_list", "keycloak_auth_required_action_register",
+            "keycloak_auth_required_action_unregister", "keycloak_org_invite", "keycloak_org_invitations_list",
+            "keycloak_org_invitation_resend", "keycloak_org_invitation_delete", "keycloak_user_orgs_list",
+            "keycloak_org_member_set_type", "keycloak_org_idp_update", "keycloak_org_groups_list",
+            "keycloak_org_group_create", "keycloak_org_group_delete", "keycloak_org_group_members_list",
+            "keycloak_org_group_member_add", "keycloak_org_group_member_remove", "keycloak_realm_partial_export",
+            "keycloak_realm_partial_import", "keycloak_workflows_list", "keycloak_workflow_get",
+            "keycloak_workflow_create", "keycloak_workflow_update", "keycloak_workflow_delete",
+            "keycloak_workflow_scheduled_list", "keycloak_workflow_activate", "keycloak_workflow_deactivate",
+            "keycloak_events_clear");
 
     static Set<String> referenceNames() throws IOException {
         Path file = Path.of("src/test/resources/reference-tool-names.txt");

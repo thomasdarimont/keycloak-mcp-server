@@ -29,7 +29,7 @@ echo "login events of shop-web, newest first: LOGIN and CODE_TO_TOKEN_ERROR take
 call keycloak_events_login '{"client": "shop-web", "max": 8}' \
   | jq -r '.items[] | "  \(.time)  \(.type)  \(.error // "")  \(.details.username // "")"'
 echo "what changed on a client shortly before:"
-call keycloak_events_admin '{"resourceType": "CLIENT"}' \
+call keycloak_events_admin '{"resourceTypes": ["CLIENT"]}' \
   | jq -r '.items[] | "  \(.time)  \(.operation)  \(.resourcePath | sub("clients/[^/]+"; "clients/<shop-web>"))"'
 echo "=> Keycloak logs frank in every time; the application redeems the code with a secret that was regenerated"
 echo "   seconds before the first failure. Fix: give the application the new secret. Nothing to change in Keycloak."

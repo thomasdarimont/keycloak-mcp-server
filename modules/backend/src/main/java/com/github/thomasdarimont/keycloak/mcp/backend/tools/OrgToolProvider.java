@@ -219,7 +219,7 @@ public class OrgToolProvider extends AbstractToolProvider {
      * Turns the generic 404/400 Keycloak answers into a clear hint when organizations are
      * switched off.
      */
-    private ToolHandler guard(ToolHandler handler) {
+    static ToolHandler guard(ToolHandler handler) {
         return call -> {
             try {
                 return handler.handle(call);
@@ -248,7 +248,7 @@ public class OrgToolProvider extends AbstractToolProvider {
         return m;
     }
 
-    private static OrganizationRepresentation find(ToolCall call, String idOrAliasOrName) {
+    static OrganizationRepresentation find(ToolCall call, String idOrAliasOrName) {
         OrganizationsResource orgs = call.kc().realm(call.realm()).organizations();
         if (KeycloakAdmin.isUuid(idOrAliasOrName)) {
             try {

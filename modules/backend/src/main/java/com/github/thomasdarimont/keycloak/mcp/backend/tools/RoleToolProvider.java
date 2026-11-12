@@ -5,9 +5,13 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.WebApplicationException;
 
+import org.keycloak.admin.client.resource.RoleResource;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -267,7 +271,66 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}/roles/{role-name}").path("client-uuid", "clientId")
                         .path("role-name", "role"))
+                    .build(),
+                tool("keycloak_role_holders_list").title("Who has a role")
+                    .description(
+                            "Users and groups that hold a realm or client role directly; group members inherit it.")
+                    .category(Category.ROLES)
+                    .read()
+                    .synonyms("who has role", "users with role", "role members", "who is admin", "groups with role",
+                            "role assignment report")
+                    .schema(schema().string("role", "Role name, e.g. admin or manage-users")
+                        .required()
+                        .string("clientId", "Client of a client role, e.g. realm-management; omit for a realm role")
+                        .pagination())
+                    .handler(this::holders)
+                    .roles("view-realm", "query-users")
+                    .api(get(R + "/roles/{role-name}/users").path("role-name", "role").query("first", "max"),
+                            get(R + "/roles/{role-name}/groups").path("role-name", "role").query("first", "max"),
+                            get(R + "/clients/{client-uuid}/roles/{role-name}/users").path("client-uuid", "clientId")
+                                .path("role-name", "role")
+                                .query("first", "max"),
+                            get(R + "/clients/{client-uuid}/roles/{role-name}/groups").path("client-uuid", "clientId")
+                                .path("role-name", "role")
+                                .query("first", "max"))
                     .build());
+    }
+
+    ToolResult holders(ToolCall call) {
+        String role = call.str("role");
+        RoleResource resource;
+        String label;
+        if (call.has("clientId")) {
+            ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+            resource = call.kc().realm(call.realm()).clients().get(c.getId()).roles().get(role);
+            label = c.getClientId() + "." + role;
+        }
+        else {
+            resource = call.kc().realm(call.realm()).roles().get(role);
+            label = role;
+        }
+        List<UserRepresentation> users;
+        Set<GroupRepresentation> groups;
+        try {
+            users = resource.getUserMembers(call.first(), call.max());
+            groups = resource.getRoleGroupMembers(call.first(), call.max());
+        }
+        catch (WebApplicationException e) {
+            if (e.getResponse() == null || e.getResponse().getStatus() != 404) {
+                throw e;
+            }
+            throw ToolException.notFound(call.has("clientId") ? "Client role" : "Realm role", label);
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("role", label);
+        m.put("users", Views.list(users, Views::user));
+        m.put("groups", groups.stream().map(Views::group).toList());
+        m.put("note", "Direct holders only: members of these groups and holders of composites that include the"
+                + " role have it too.");
+        if (users.size() >= call.max() || groups.size() >= call.max()) {
+            m.put("more", "More may exist: raise max or page with first.");
+        }
+        return ToolResult.ok(m);
     }
 
     private static InputSchema.Builder compositeFields(InputSchema.Builder b) {

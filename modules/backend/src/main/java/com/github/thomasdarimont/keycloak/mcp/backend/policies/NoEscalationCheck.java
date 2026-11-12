@@ -1,5 +1,7 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.policies;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -33,7 +35,8 @@ public final class NoEscalationCheck implements AccessCheck {
 
     static final Set<String> GRANT_TOOLS = Set.of("keycloak_user_role_assign", "keycloak_user_client_role_assign",
             "keycloak_group_role_assign", "keycloak_group_client_role_assign", "keycloak_group_member_add",
-            "keycloak_role_composite_add", "keycloak_idp_mapper_create");
+            "keycloak_role_composite_add", "keycloak_idp_mapper_create", "keycloak_idp_mapper_update",
+            "keycloak_default_group_add", "keycloak_realm_partial_import");
     /** tools that act on a target user: the target must not outrank the caller */
     static final Map<String, String> USER_ARG = Map.ofEntries(Map.entry("keycloak_user_set_enabled", "id"),
             Map.entry("keycloak_user_update", "id"), Map.entry("keycloak_user_delete", "id"),
@@ -43,7 +46,12 @@ public final class NoEscalationCheck implements AccessCheck {
             Map.entry("keycloak_user_client_role_unassign", "userId"), Map.entry("keycloak_group_member_add", "userId"),
             Map.entry("keycloak_group_member_remove", "userId"), Map.entry("keycloak_user_credential_delete", "userId"),
             Map.entry("keycloak_user_brute_force_clear", "userId"), Map.entry("keycloak_user_consent_revoke", "userId"),
-            Map.entry("keycloak_org_member_add", "userId"), Map.entry("keycloak_org_member_remove", "userId"));
+            Map.entry("keycloak_org_member_add", "userId"), Map.entry("keycloak_org_member_remove", "userId"),
+            // linking an outside identity lets whoever holds it sign in as the user
+            Map.entry("keycloak_user_idp_link_add", "userId"), Map.entry("keycloak_user_idp_link_remove", "userId"),
+            Map.entry("keycloak_org_member_set_type", "userId"), Map.entry("keycloak_org_group_member_add", "userId"),
+            Map.entry("keycloak_org_group_member_remove", "userId"), Map.entry("keycloak_workflow_activate", "userId"),
+            Map.entry("keycloak_workflow_deactivate", "userId"));
 
     private final Function<Context, RealmDirectory> directories;
     private final PolicySettings settings;
@@ -90,6 +98,25 @@ public final class NoEscalationCheck implements AccessCheck {
                 }
             }
         }
+        // 1b. an import that overwrites or skips existing users must not reach users
+        // above the caller: OVERWRITE replaces them
+        if ("keycloak_realm_partial_import".equals(tool)
+                && "OVERWRITE".equalsIgnoreCase(String.valueOf(ctx.args().get("ifResourceExists")))) {
+            for (String username : importedUsernames(ctx)) {
+                Optional<String> existing = directory.userId(ctx.realm(), username);
+                if (existing.isPresent()) {
+                    if (existing.get().equals(callerId)) {
+                        return Decision.deny("self_grant", "The import would overwrite your own account.");
+                    }
+                    Set<String> missing = CallerContext.missing(directory.effectiveRoles(ctx.realm(), existing.get()),
+                            mine);
+                    if (!missing.isEmpty()) {
+                        return Decision.deny("target_outranks_caller", "The import would overwrite user '" + username
+                                + "', who holds roles you do not: " + missing + ".");
+                    }
+                }
+            }
+        }
         // 2. what is being granted must be within the caller's roles
         if (GRANT_TOOLS.contains(tool)) {
             Set<String> granting = switch (tool) {
@@ -103,10 +130,14 @@ public final class NoEscalationCheck implements AccessCheck {
                                 : "realm:" + ctx.arg("composite"));
                 // a role mapper hands its role to everyone signing in through the
                 // provider
-                case "keycloak_idp_mapper_create" -> mapperRole(directory, ctx);
-                case "keycloak_group_member_add" -> directory.groupPath(ctx.realm(), ctx.arg("groupId"))
-                    .map(p -> directory.groupRoles(ctx.realm(), p))
-                    .orElse(Set.of());
+                case "keycloak_idp_mapper_create", "keycloak_idp_mapper_update" -> mapperRole(directory, ctx);
+                // a group member, or every new user for a default group, gets its roles
+                case "keycloak_group_member_add",
+                        "keycloak_default_group_add" ->
+                    directory.groupPath(ctx.realm(), ctx.arg("groupId"))
+                        .map(p -> directory.groupRoles(ctx.realm(), p))
+                        .orElse(Set.of());
+                case "keycloak_realm_partial_import" -> importGrants(directory, ctx);
                 default -> Set.of();
             };
             Set<String> missing = CallerContext.missing(granting, mine);
@@ -133,5 +164,93 @@ public final class NoEscalationCheck implements AccessCheck {
             granting.addAll(directory.roleClosure(ctx.realm(), role));
         }
         return granting;
+    }
+
+    /**
+     * Every role a partial import would hand out: the realm and client roles of its users
+     * and groups (nested ones too), the roles of existing groups its users join, and the
+     * composites of the roles it defines, since an imported user may hold a new role that
+     * includes an existing one.
+     */
+    static Set<String> importGrants(RealmDirectory directory, Context ctx) {
+        Set<String> granting = new TreeSet<>();
+        if (!(ctx.args().get("representation") instanceof Map<?, ?> rep)) {
+            return granting;
+        }
+        String realm = ctx.realm();
+        for (Map<?, ?> user : maps(rep.get("users"))) {
+            mappedRoles(directory, realm, user, granting);
+            for (Object group : list(user.get("groups"))) {
+                directory.groupPath(realm, String.valueOf(group))
+                    .ifPresent(p -> granting.addAll(directory.groupRoles(realm, p)));
+            }
+        }
+        groupRoles(directory, realm, maps(rep.get("groups")), granting);
+        if (rep.get("roles") instanceof Map<?, ?> roles) {
+            List<Map<?, ?>> defined = new ArrayList<>(maps(roles.get("realm")));
+            if (roles.get("client") instanceof Map<?, ?> byClient) {
+                byClient.values().forEach(v -> defined.addAll(maps(v)));
+            }
+            for (Map<?, ?> role : defined) {
+                if (role.get("composites") instanceof Map<?, ?> composites) {
+                    for (Object r : list(composites.get("realm"))) {
+                        granting.addAll(directory.roleClosure(realm, "realm:" + r));
+                    }
+                    clientRoles(directory, realm, composites.get("client"), granting);
+                }
+            }
+        }
+        return granting;
+    }
+
+    private static void groupRoles(RealmDirectory directory, String realm, List<Map<?, ?>> groups,
+            Set<String> granting) {
+        for (Map<?, ?> group : groups) {
+            mappedRoles(directory, realm, group, granting);
+            groupRoles(directory, realm, maps(group.get("subGroups")), granting);
+        }
+    }
+
+    private static void mappedRoles(RealmDirectory directory, String realm, Map<?, ?> holder, Set<String> granting) {
+        for (Object r : list(holder.get("realmRoles"))) {
+            granting.addAll(directory.roleClosure(realm, "realm:" + r));
+        }
+        clientRoles(directory, realm, holder.get("clientRoles"), granting);
+    }
+
+    private static void clientRoles(RealmDirectory directory, String realm, Object byClient, Set<String> granting) {
+        if (byClient instanceof Map<?, ?> m) {
+            m.forEach((client, roles) -> {
+                for (Object r : list(roles)) {
+                    granting.addAll(directory.roleClosure(realm, client + "." + r));
+                }
+            });
+        }
+    }
+
+    private static List<String> importedUsernames(Context ctx) {
+        List<String> names = new ArrayList<>();
+        if (ctx.args().get("representation") instanceof Map<?, ?> rep) {
+            for (Map<?, ?> user : maps(rep.get("users"))) {
+                if (user.get("username") != null) {
+                    names.add(String.valueOf(user.get("username")));
+                }
+            }
+        }
+        return names;
+    }
+
+    private static List<?> list(Object value) {
+        return value instanceof List<?> l ? l : List.of();
+    }
+
+    private static List<Map<?, ?>> maps(Object value) {
+        List<Map<?, ?>> out = new ArrayList<>();
+        for (Object o : list(value)) {
+            if (o instanceof Map<?, ?> m) {
+                out.add(m);
+            }
+        }
+        return out;
     }
 }

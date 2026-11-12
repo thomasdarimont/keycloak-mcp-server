@@ -7,12 +7,12 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.keycloak.admin.client.resource.UserResource;
-import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -57,37 +57,27 @@ public class UserToolProvider extends AbstractToolProvider {
 
     @Override
     public List<ToolSpec> tools(ToolProviderContext context) {
-        return List.of(
-                tool("keycloak_user_count").title("Count users")
-                    .description(
-                            "How many users match: all, by free text, enabled, email verified, IdP link or attribute.")
-                    .category(Category.USERS)
-                    .read()
-                    .synonyms("how many users", "number of users", "user count", "total users", "statistics")
-                    .schema(schema().string("search", "Free text over username, email, first and last name")
-                        .bool("enabled", "Only enabled (true) or disabled (false) users")
-                        .bool("emailVerified", "Only users whose email is (not) verified")
-                        .string("idpAlias", "Only users linked to this identity provider")
-                        .string("attribute", "Only users with this attribute value, as key:value"))
-                    .handler(this::count)
-                    .roles("query-users")
-                    .api(get(R + "/users/count").query("search", "enabled", "emailVerified", "idpAlias")
-                        .queryAs("q", "attribute"))
-                    .build(),
+        return List.of(tool("keycloak_user_count").title("Count users")
+            .description("How many users match; the same filters as keycloak_user_search, e.g. created after a date.")
+            .category(Category.USERS)
+            .read()
+            .synonyms("how many users", "number of users", "user count", "total users", "statistics")
+            .schema(userFilters(schema()))
+            .handler(this::count)
+            .roles("query-users")
+            .api(get(R + "/users/count").query(FILTER_PARAMS).queryAs("q", "attribute"))
+            .build(),
                 tool("keycloak_user_search").title("Search users")
-                    .description("Find users by free text, username or email; returns id, username, email, enabled.")
+                    .description("Find users by free text, name, email, attribute, IdP link or creation date.")
                     .category(Category.USERS)
                     .read()
                     .hot()
-                    .synonyms("find", "lookup", "list users", "account", "who", "email", "login name", "exists")
-                    .schema(schema().string("search", "Free text over username, email, first and last name")
-                        .string("username", "Exact username")
-                        .string("email", "Exact email address")
-                        .bool("enabled", "Only enabled (true) or disabled (false) users")
-                        .pagination())
+                    .synonyms("find", "lookup", "list users", "account", "who", "email", "login name", "exists",
+                            "created last week", "new users", "users of idp", "by attribute")
+                    .schema(userFilters(schema()).pagination())
                     .handler(this::search)
                     .roles("query-users")
-                    .api(get(R + "/users").query("search", "username", "email", "enabled", "first", "max"))
+                    .api(get(R + "/users").query(FILTER_PARAMS).queryAs("q", "attribute").query("first", "max"))
                     .build(),
                 tool("keycloak_user_get").title("Get user")
                     .description("Full details of one user including attributes, required actions and groups.")
@@ -233,51 +223,71 @@ public class UserToolProvider extends AbstractToolProvider {
     // ---- handlers
     // -----------------------------------------------------------------------------------------------
 
+    /** The user filters Keycloak takes, besides {@code q} (our {@code attribute}). */
+    static final String[] FILTER_PARAMS = { "search", "username", "email", "firstName", "lastName", "enabled",
+            "emailVerified", "idpAlias", "idpUserId", "exact", "createdAfter", "createdBefore" };
+
+    static InputSchema.Builder userFilters(InputSchema.Builder schema) {
+        return schema.string("search", "Free text over username, email, first and last name")
+            .string("username", "Username")
+            .string("email", "Email address")
+            .string("firstName", "First name")
+            .string("lastName", "Last name")
+            .bool("exact", "username, email, firstName and lastName match exactly (default true); false: contains")
+            .bool("enabled", "Only enabled (true) or disabled (false) users")
+            .bool("emailVerified", "Only users whose email is (not) verified")
+            .string("idpAlias", "Only users linked to this identity provider")
+            .string("idpUserId", "Only the user with this user id at the identity provider (with idpAlias)")
+            .string("attribute", "Attribute values as key:value, several separated by spaces")
+            .string("createdAfter", "Created on or after: yyyy-MM-dd or epoch milliseconds")
+            .string("createdBefore", "Created on or before: yyyy-MM-dd or epoch milliseconds");
+    }
+
+    /** {@code exact} defaults to true once a name or email is given, as it did. */
+    private static Boolean exact(ToolCall call) {
+        if (call.has("exact")) {
+            return call.bool("exact");
+        }
+        boolean named = call.has("username") || call.has("email") || call.has("firstName") || call.has("lastName");
+        return named ? Boolean.TRUE : null;
+    }
+
     ToolResult count(ToolCall call) {
         Integer n = call.kc()
-            .realm(call.realm())
-            .users()
-            .count(call.str("search"), null, null, null, call.bool("emailVerified"), null, call.bool("enabled"),
-                    call.str("idpAlias"), null, call.str("attribute"));
+            .queries()
+            .countUsers(call.realm(), call.str("search"), call.str("username"), call.str("email"),
+                    call.str("firstName"), call.str("lastName"), call.bool("enabled"), call.bool("emailVerified"),
+                    call.str("idpAlias"), call.str("idpUserId"), call.str("attribute"), exact(call),
+                    call.str("createdAfter"), call.str("createdBefore"));
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("count", n);
-        for (String filter : List.of("search", "enabled", "emailVerified", "idpAlias", "attribute")) {
-            if (call.has(filter)) {
-                m.put(filter, call.args().get(filter));
-            }
+        Map<String, Object> filters = filters(call);
+        if (!filters.isEmpty()) {
+            m.put("filters", filters);
         }
         return ToolResult.ok(m);
     }
 
+    private static Map<String, Object> filters(ToolCall call) {
+        Map<String, Object> filters = new LinkedHashMap<>();
+        for (String f : FILTER_PARAMS) {
+            if (call.has(f)) {
+                filters.put(f, call.args().get(f));
+            }
+        }
+        if (call.has("attribute")) {
+            filters.put("attribute", call.str("attribute"));
+        }
+        return filters;
+    }
+
     ToolResult search(ToolCall call) {
-        UsersResource users = call.kc().realm(call.realm()).users();
-        boolean hasSearch = call.has("search");
-        boolean hasUsername = call.has("username");
-        boolean hasEmail = call.has("email");
-        List<UserRepresentation> found;
-        if (hasUsername && !hasSearch && !hasEmail) {
-            found = users.searchByUsername(call.str("username"), true);
-        }
-        else if (hasEmail && !hasSearch && !hasUsername) {
-            found = users.searchByEmail(call.str("email"), true);
-        }
-        else {
-            found = users.search(call.str("search"), call.bool("enabled"), call.first(), call.max());
-            if (hasUsername) {
-                found = found.stream()
-                    .filter(u -> Objects.requireNonNull(call.str("username")).equalsIgnoreCase(u.getUsername()))
-                    .toList();
-            }
-            if (hasEmail) {
-                found = found.stream()
-                    .filter(u -> Objects.requireNonNull(call.str("email")).equalsIgnoreCase(u.getEmail()))
-                    .toList();
-            }
-        }
-        if (call.has("enabled")) {
-            boolean enabled = Boolean.TRUE.equals(call.bool("enabled"));
-            found = found.stream().filter(u -> Boolean.valueOf(enabled).equals(u.isEnabled())).toList();
-        }
+        List<UserRepresentation> found = call.kc()
+            .queries()
+            .users(call.realm(), call.str("search"), call.str("username"), call.str("email"), call.str("firstName"),
+                    call.str("lastName"), call.bool("enabled"), call.bool("emailVerified"), call.str("idpAlias"),
+                    call.str("idpUserId"), call.str("attribute"), exact(call), call.str("createdAfter"),
+                    call.str("createdBefore"), call.first(), call.max(), true);
         return ToolResult.ok(Views.page(Views.list(found, Views::user), call.max()));
     }
 

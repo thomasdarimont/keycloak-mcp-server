@@ -45,7 +45,8 @@ public final class SelfProtectionCheck implements AccessCheck {
     /** built-in tools that act on a user, with the argument naming them */
     static final Map<String, String> BUILT_IN = Map.of("keycloak_user_delete", "id", "keycloak_user_set_enabled", "id",
             "keycloak_user_update", "id", "keycloak_user_role_unassign", "userId", "keycloak_user_client_role_unassign",
-            "userId", "keycloak_group_member_remove", "userId", "keycloak_user_credential_delete", "userId");
+            "userId", "keycloak_group_member_remove", "userId", "keycloak_user_credential_delete", "userId",
+            "keycloak_user_idp_link_remove", "userId", "keycloak_workflow_activate", "userId");
 
     /** taking a role from a group takes it from every member, the caller included */
     static final Set<String> GROUP_ROLE_REMOVAL = Set.of("keycloak_group_role_unassign",

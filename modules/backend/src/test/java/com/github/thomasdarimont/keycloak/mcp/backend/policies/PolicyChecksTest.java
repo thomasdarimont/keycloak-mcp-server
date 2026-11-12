@@ -415,14 +415,14 @@ class PolicyChecksTest {
         ToolSpec mapper = tool("keycloak_idp_mapper_create", "alias", "name", "type");
         assertEquals("privilege_escalation",
                 check
-                    .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type", "hardcoded-role-idp-mapper",
-                            "config", Map.of("role", "admin"))))
+                    .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type",
+                            "oidc-hardcoded-role-idp-mapper", "config", Map.of("role", "admin"))))
                     .code(),
                 "a hardcoded realm role");
         assertEquals("privilege_escalation",
                 check
-                    .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type", "hardcoded-role-idp-mapper",
-                            "config", Map.of("role", "app.admin"))))
+                    .check(ctx(mapper, ALICE, Map.of("alias", "corp", "name", "m", "type",
+                            "oidc-hardcoded-role-idp-mapper", "config", Map.of("role", "app.admin"))))
                     .code(),
                 "a hardcoded client role, clientId.role");
         assertTrue(check
@@ -495,5 +495,96 @@ class PolicyChecksTest {
             .check(ctx(tool("keycloak_user_credential_delete", "userId", "credentialId"), ALICE,
                     Map.of("userId", "carol", "credentialId", "otp")))
             .allowed());
+    }
+
+    static Map<String, Object> importOf(Map<String, Object> rep) {
+        return Map.of("representation", rep);
+    }
+
+    @Test
+    void aPartialImportHandsOutOnlyRolesTheCallerHolds() {
+        NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));
+        dir.role("app.admin", Set.of("app.admin"));
+        ToolSpec imp = tool("keycloak_realm_partial_import", "ifResourceExists");
+        assertTrue(
+                check
+                    .check(ctx(imp, ALICE,
+                            importOf(Map.of("users",
+                                    List.of(Map.of("username", "new1", "realmRoles", List.of("viewer")))))))
+                    .allowed());
+        assertEquals("privilege_escalation",
+                check
+                    .check(ctx(imp, ALICE,
+                            importOf(Map.of("users",
+                                    List.of(Map.of("username", "new1", "realmRoles", List.of("admin")))))))
+                    .code(),
+                "a user with a realm role");
+        assertEquals("privilege_escalation", check
+            .check(ctx(imp, ALICE,
+                    importOf(Map.of("users",
+                            List.of(Map.of("username", "new1", "clientRoles", Map.of("app", List.of("admin"))))))))
+            .code(), "a user with a client role");
+        assertEquals("privilege_escalation",
+                check
+                    .check(ctx(imp, ALICE,
+                            importOf(Map.of("users",
+                                    List.of(Map.of("username", "new1", "groups", List.of("/admins")))))))
+                    .code(),
+                "a user joining an existing group");
+        assertEquals("privilege_escalation",
+                check.check(ctx(imp, ALICE,
+                        importOf(Map.of("groups",
+                                List.of(Map.of("name", "g", "subGroups",
+                                        List.of(Map.of("name", "sub", "realmRoles", List.of("admin")))))))))
+                    .code(),
+                "a nested group");
+        assertEquals("privilege_escalation", check
+            .check(ctx(imp, ALICE,
+                    importOf(Map.of("roles", Map.of("realm",
+                            List.of(Map.of("name", "fresh", "composites", Map.of("realm", List.of("admin")))))))))
+            .code(), "a new role that includes admin");
+
+        Map<String, Object> overwriteBob = new java.util.HashMap<>(
+                importOf(Map.of("users", List.of(Map.of("username", "bob")))));
+        overwriteBob.put("ifResourceExists", "OVERWRITE");
+        assertEquals("target_outranks_caller", check.check(ctx(imp, ALICE, overwriteBob)).code());
+        Map<String, Object> overwriteSelf = new java.util.HashMap<>(
+                importOf(Map.of("users", List.of(Map.of("username", "alice")))));
+        overwriteSelf.put("ifResourceExists", "OVERWRITE");
+        assertEquals("self_grant", check.check(ctx(imp, ALICE, overwriteSelf)).code());
+        Map<String, Object> skipBob = new java.util.HashMap<>(overwriteBob);
+        skipBob.put("ifResourceExists", "SKIP");
+        assertTrue(check.check(ctx(imp, ALICE, skipBob)).allowed(), "SKIP leaves bob alone");
+    }
+
+    @Test
+    void defaultGroupsMapperUpdatesAndIdentityLinksAreGrants() {
+        NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));
+        ToolSpec defaultGroup = tool("keycloak_default_group_add", "groupId");
+        assertEquals("privilege_escalation", check.check(ctx(defaultGroup, ALICE, Map.of("groupId", "/admins"))).code(),
+                "every new user would be an admin");
+        assertTrue(check.check(ctx(defaultGroup, ALICE, Map.of("groupId", "/team-a"))).allowed());
+
+        ToolSpec mapperUpdate = tool("keycloak_idp_mapper_update", "alias", "mapper");
+        assertEquals("privilege_escalation", check
+            .check(ctx(mapperUpdate, ALICE, Map.of("alias", "corp", "mapper", "m", "config", Map.of("role", "admin"))))
+            .code());
+        assertTrue(
+                check.check(ctx(mapperUpdate, ALICE, Map.of("alias", "corp", "mapper", "m", "name", "x"))).allowed());
+
+        for (String name : List.of("keycloak_user_idp_link_add", "keycloak_user_idp_link_remove",
+                "keycloak_workflow_activate", "keycloak_org_member_set_type")) {
+            ToolSpec t = tool(name, "userId");
+            assertEquals("target_outranks_caller", check.check(ctx(t, ALICE, Map.of("userId", "bob"))).code(), name);
+            assertTrue(check.check(ctx(t, ALICE, Map.of("userId", "carol"))).allowed(), name);
+        }
+
+        SelfProtectionCheck self = new SelfProtectionCheck(dir, SELF_ONLY);
+        assertEquals("self_protection", self
+            .check(ctx(tool("keycloak_user_idp_link_remove", "userId", "alias"), ALICE,
+                    Map.of("userId", "alice", "alias", "corp")))
+            .code());
+        assertEquals("self_protection",
+                self.check(ctx(tool("keycloak_workflow_activate", "userId"), ALICE, Map.of("userId", "alice"))).code());
     }
 }

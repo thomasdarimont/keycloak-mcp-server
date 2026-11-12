@@ -47,7 +47,22 @@ class EnglishSearchTest {
             "protect resource, keycloak_authz_resource_create", "policy enforcement mode, keycloak_authz_settings_get",
             "how many users are there, keycloak_user_count", "list all realms, keycloak_realm_list",
             "log out everyone, keycloak_realm_logout_all", "test ldap connection, keycloak_federation_test_connection",
-            "check idp saml metadata, keycloak_idp_check", "delete authentication flow, keycloak_auth_flow_delete", })
+            "check idp saml metadata, keycloak_idp_check", "delete authentication flow, keycloak_auth_flow_delete",
+            "who has the admin role, keycloak_role_holders_list",
+            "which identity providers is the user linked to, keycloak_user_idp_links_list",
+            "unlink account from idp, keycloak_user_idp_link_remove", "kill one session, keycloak_session_delete",
+            "new users join group automatically, keycloak_default_group_add",
+            "how many sessions does the client have, keycloak_client_session_count",
+            "revoke client tokens, keycloak_client_revoke_tokens",
+            "dynamic client registration token, keycloak_client_initial_access_create",
+            "import idp from metadata url, keycloak_idp_import_config",
+            "reload idp keys after rotation, keycloak_idp_reload_keys", "sp metadata for partner, keycloak_idp_export",
+            "set max auth age, keycloak_auth_required_action_config_set",
+            "invite user to organization, keycloak_org_invite", "pending invitations, keycloak_org_invitations_list",
+            "which organization is the user in, keycloak_user_orgs_list", "org teams, keycloak_org_groups_list",
+            "export realm, keycloak_realm_partial_export", "bulk import users, keycloak_realm_partial_import",
+            "disable inactive users automatically, keycloak_workflow_create", "purge audit log, keycloak_events_clear",
+            "users created last week, keycloak_user_search", })
     void topHit(String query, String expected) {
         ToolIndex index = new ToolIndex(catalog.all());
         List<SearchHit> hits = index.search(query, null, 5, s -> true);

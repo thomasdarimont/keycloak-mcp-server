@@ -3,6 +3,7 @@ package com.github.thomasdarimont.keycloak.mcp.backend.tools;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -12,6 +13,7 @@ import org.keycloak.representations.idm.RealmRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
@@ -80,16 +82,30 @@ public class EventToolProvider extends AbstractToolProvider {
                     .synonyms("audit log", "who changed", "admin actions", "change history", "deleted by whom")
                     .schema(schema()
                         .enumeration("operationType", "Filter by operation", "CREATE", "UPDATE", "DELETE", "ACTION")
-                        .string("resourceType", "e.g. USER, CLIENT, REALM, GROUP, REALM_ROLE, AUTH_FLOW")
+                        .stringArray("resourceTypes", "e.g. [\"USER\", \"CLIENT\", \"REALM_ROLE\", \"AUTH_FLOW\"]")
                         .string("resourcePath", "Resource path filter, e.g. users/<id>")
                         .string("authUser", "Admin who did it: user id (UUID)")
+                        .string("authClient", "Client the admin used, e.g. admin-cli or its id")
+                        .string("authRealm", "Realm the admin signed in to, e.g. master")
                         .string("dateFrom", "From date, " + DATE)
                         .string("dateTo", "To date, " + DATE)
                         .pagination())
                     .handler(this::adminEvents)
                     .roles("view-events")
                     .api(get(R + "/admin-events").queryAs("operationTypes", "operationType")
-                        .query("authUser", "resourcePath", "dateFrom", "dateTo", "first", "max"))
+                        .query("resourceTypes", "authUser", "authClient", "authRealm", "resourcePath", "dateFrom",
+                                "dateTo", "first", "max"))
+                    .build(),
+                tool("keycloak_events_clear").title("Clear saved events")
+                    .description("Delete every saved login event or every saved admin event of the realm.")
+                    .category(Category.EVENTS)
+                    .destructive()
+                    .synonyms("delete events", "purge audit log", "clear login events", "remove event history")
+                    .schema(schema().enumeration("kind", "login or admin events", "login", "admin").required())
+                    .cost(ToolCost.HEAVY, "deletes the realm's whole event history of that kind")
+                    .handler(this::clear)
+                    .roles("manage-events")
+                    .api(delete(R + "/events"), delete(R + "/admin-events"))
                     .build());
     }
 
@@ -132,16 +148,24 @@ public class EventToolProvider extends AbstractToolProvider {
     ToolResult adminEvents(ToolCall call) {
         List<String> ops = call.has("operationType") ? List.of(Objects.requireNonNull(call.str("operationType")))
                 : null;
+        List<String> types = call.has("resourceTypes") ? Objects.requireNonNull(call.strings("resourceTypes"))
+            .stream()
+            .map(t -> t.trim().toUpperCase(Locale.ROOT))
+            .toList() : null;
+        // events record the realm and client ids, not their names
+        String authRealm = call.has("authRealm")
+                ? call.kc().realm(Objects.requireNonNull(call.str("authRealm"))).toRepresentation().getId() : null;
+        String authClient = null;
+        if (call.has("authClient")) {
+            String realmOfClient = call.has("authRealm") ? call.str("authRealm") : call.realm();
+            authClient = call.kc().findClient(realmOfClient, call.str("authClient")).getId();
+        }
         List<AdminEventRepresentation> events = call.kc()
-            .realm(call.realm())
-            .getAdminEvents(ops, null, null, call.str("authUser"), null, call.str("resourcePath"), call.str("dateFrom"),
-                    call.str("dateTo"), call.first(), call.max());
-        String resourceType = call.str("resourceType");
+            .queries()
+            .adminEvents(call.realm(), ops, types, authRealm, authClient, call.str("authUser"), null,
+                    call.str("resourcePath"), call.str("dateFrom"), call.str("dateTo"), call.first(), call.max());
         List<Map<String, Object>> items = new ArrayList<>();
         for (AdminEventRepresentation e : events) {
-            if (resourceType != null && !resourceType.equalsIgnoreCase(e.getResourceType())) {
-                continue;
-            }
             Map<String, Object> v = new LinkedHashMap<>();
             v.put("time", Views.iso(e.getTime()));
             v.put("operation", e.getOperationType());
@@ -164,5 +188,16 @@ public class EventToolProvider extends AbstractToolProvider {
             }
         }
         return ToolResult.ok(page);
+    }
+
+    ToolResult clear(ToolCall call) {
+        boolean admin = "admin".equals(call.str("kind"));
+        if (admin) {
+            call.kc().realm(call.realm()).clearAdminEvents();
+        }
+        else {
+            call.kc().realm(call.realm()).clearEvents();
+        }
+        return ToolResult.done(admin ? "Admin events deleted" : "Login events deleted", "realm", call.realm());
     }
 }

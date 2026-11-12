@@ -220,7 +220,63 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .roles("manage-users")
                     .api(put(R + "/groups/{group-id}").path("group-id", "id")
                         .body("GroupRepresentation", "name", "attributes"))
+                    .build(),
+                tool("keycloak_default_groups_list").title("List default groups")
+                    .description("Groups every new user of the realm joins automatically.")
+                    .category(Category.GROUPS)
+                    .read()
+                    .synonyms("default groups", "new users join", "automatic group", "auto assign group")
+                    .handler(this::defaultGroups)
+                    .roles("view-realm")
+                    .api(get(R + "/default-groups"))
+                    .build(),
+                tool("keycloak_default_group_add").title("Add default group")
+                    .description("Make every new user join a group; existing users are not changed.")
+                    .category(Category.GROUPS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("auto join group", "default group for new users", "assign group on registration")
+                    .schema(schema().string("groupId", GROUP_ID).required())
+                    .handler(this::defaultGroupAdd)
+                    .roles("manage-realm")
+                    .api(put(R + "/default-groups/{groupId}").path("groupId", "groupId"))
+                    .build(),
+                tool("keycloak_default_group_remove").title("Remove default group")
+                    .description("Stop new users joining a group; current members stay in it.")
+                    .category(Category.GROUPS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("remove default group", "stop auto join")
+                    .schema(schema().string("groupId", GROUP_ID).required())
+                    .handler(this::defaultGroupRemove)
+                    .roles("manage-realm")
+                    .api(delete(R + "/default-groups/{groupId}").path("groupId", "groupId"))
                     .build());
+    }
+
+    ToolResult defaultGroups(ToolCall call) {
+        List<GroupRepresentation> groups = call.kc().realm(call.realm()).getDefaultGroups();
+        return ToolResult.ok(Views.page(Views.list(groups, Views::group), Integer.MAX_VALUE));
+    }
+
+    ToolResult defaultGroupAdd(ToolCall call) {
+        GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
+        call.kc().realm(call.realm()).addDefaultGroup(g.getId());
+        return ToolResult.done("New users join the group", "group", g.getPath());
+    }
+
+    ToolResult defaultGroupRemove(ToolCall call) {
+        GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
+        boolean wasDefault = call.kc()
+            .realm(call.realm())
+            .getDefaultGroups()
+            .stream()
+            .anyMatch(d -> g.getId().equals(d.getId()));
+        if (!wasDefault) {
+            return ToolResult.done("The group was not a default group", "group", g.getPath(), "changed", false);
+        }
+        call.kc().realm(call.realm()).removeDefaultGroup(g.getId());
+        return ToolResult.done("New users no longer join the group", "group", g.getPath());
     }
 
     private static InputSchema.Builder groupClientRole(InputSchema.Builder b) {

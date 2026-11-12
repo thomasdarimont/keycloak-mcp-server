@@ -36,8 +36,8 @@ public final class GroupScopeCheck implements AccessCheck {
             Map.entry("keycloak_group_member_add", "groupId"), Map.entry("keycloak_group_member_remove", "groupId"),
             Map.entry("keycloak_group_role_assign", "groupId"), Map.entry("keycloak_group_role_unassign", "groupId"),
             Map.entry("keycloak_group_client_role_assign", "groupId"),
-            Map.entry("keycloak_group_client_role_unassign", "groupId"),
-            Map.entry("keycloak_group_create", "parentId"));
+            Map.entry("keycloak_group_client_role_unassign", "groupId"), Map.entry("keycloak_group_create", "parentId"),
+            Map.entry("keycloak_default_group_add", "groupId"), Map.entry("keycloak_default_group_remove", "groupId"));
 
     private final Function<Context, RealmDirectory> directories;
     private final PolicySettings settings;

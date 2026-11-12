@@ -1,5 +1,6 @@
 package com.github.thomasdarimont.keycloak.mcp.keycloak;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -56,6 +57,14 @@ public interface KeycloakAdmin extends AccessTokenSource {
     ScopeEvaluation scopeEvaluation();
 
     void close();
+
+    /**
+     * Admin API calls the admin client has no overload for; authenticated like every
+     * other call.
+     */
+    default AdminQueries queries() {
+        return client().proxy(AdminQueries.class, URI.create(system().url()));
+    }
 
     default RealmResource realm(String realm) {
         return client().realm(realm);

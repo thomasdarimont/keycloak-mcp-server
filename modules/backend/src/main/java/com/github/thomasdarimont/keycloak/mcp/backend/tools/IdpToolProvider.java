@@ -157,8 +157,9 @@ public class IdpToolProvider extends AbstractToolProvider {
                         .required()
                         .string("name", "Mapper name")
                         .required()
-                        .string("type", "Mapper type, e.g. oidc-user-attribute-idp-mapper, hardcoded-role-idp-mapper, "
-                                + "oidc-role-idp-mapper, oidc-username-idp-mapper, saml-user-attribute-idp-mapper")
+                        .string("type",
+                                "Mapper type, e.g. oidc-user-attribute-idp-mapper, oidc-hardcoded-role-idp-mapper, "
+                                        + "oidc-role-idp-mapper, oidc-username-idp-mapper, saml-user-attribute-idp-mapper")
                         .required()
                         .enumeration("syncMode", "When it applies (default INHERIT)", "INHERIT", "IMPORT", "LEGACY",
                                 "FORCE")
