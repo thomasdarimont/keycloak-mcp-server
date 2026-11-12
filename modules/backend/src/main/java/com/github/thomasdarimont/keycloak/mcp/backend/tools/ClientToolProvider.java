@@ -235,8 +235,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                             + "name, type, URIs, scopes.")
                     .category(Category.CLIENTS)
                     .read()
-                    .synonyms("authorization", "authz", "uma", "protected resources", "resource server",
-                            "fine grained permissions")
+                    .synonyms("authorization", "authz", "uma", "resource server", "fine grained permissions")
                     .schema(schema().string("clientId", CLIENT_ID).required().pagination())
                     .handler(this::authzResources)
                     .roles("view-authorization")
@@ -678,7 +677,7 @@ public class ClientToolProvider extends AbstractToolProvider {
      * The client's resource server, or an error result when authorization services are
      * off.
      */
-    private static AuthorizationResource authz(ToolCall call, ClientRepresentation c) {
+    static AuthorizationResource authz(ToolCall call, ClientRepresentation c) {
         if (!Boolean.TRUE.equals(c.getAuthorizationServicesEnabled())) {
             throw new ToolException("authorization_disabled",
                     "Client '" + c.getClientId()

@@ -57,9 +57,10 @@ class CatalogLintTest {
                     && refs.stream().anyMatch(r -> r.isRealmManagement() && r.role().startsWith("manage-"))) {
                 problems.add(spec.name() + ": READ tool requiring a manage-* role");
             }
-            if (!spec.isReadOnly() && refs.stream()
-                .anyMatch(r -> r.isRealmManagement()
-                        && (r.role().startsWith("view-") || r.role().startsWith("query-")))) {
+            if (!spec.isReadOnly() && !READS_THROUGH_POST.contains(spec.name())
+                    && refs.stream()
+                        .anyMatch(r -> r.isRealmManagement()
+                                && (r.role().startsWith("view-") || r.role().startsWith("query-")))) {
                 problems.add(spec.name() + ": write tool requiring only a view/query role");
             }
             JsonObject schema = spec.inputSchema();
@@ -118,6 +119,12 @@ class CatalogLintTest {
     }
 
     /**
+     * Tools that only read but must declare write, because Keycloak answers them through
+     * a POST; the view roles are what Keycloak checks for them.
+     */
+    static final Set<String> READS_THROUGH_POST = Set.of("keycloak_authz_evaluate");
+
+    /**
      * Daily administration the reference project lacks (roles and composites, client
      * scopes and mappers, group client roles, credentials, lockouts, consents, org
      * members, IdP updates and mappers).
@@ -140,7 +147,13 @@ class CatalogLintTest {
             "keycloak_user_profile_attribute_delete", "keycloak_user_profile_unmanaged_set",
             "keycloak_client_policies_get", "keycloak_client_policy_set_enabled", "keycloak_localization_locales_list",
             "keycloak_localization_texts_get", "keycloak_localization_texts_set", "keycloak_localization_text_delete",
-            "keycloak_scope_mappings_get", "keycloak_scope_mapping_add", "keycloak_scope_mapping_remove");
+            "keycloak_scope_mappings_get", "keycloak_scope_mapping_add", "keycloak_scope_mapping_remove",
+            // authorization services
+            "keycloak_authz_settings_get", "keycloak_authz_settings_update", "keycloak_authz_scopes_list",
+            "keycloak_authz_scope_create", "keycloak_authz_scope_delete", "keycloak_authz_resource_create",
+            "keycloak_authz_resource_update", "keycloak_authz_resource_delete", "keycloak_authz_policy_create",
+            "keycloak_authz_policy_delete", "keycloak_authz_permission_create", "keycloak_authz_permission_update",
+            "keycloak_authz_evaluate");
 
     static Set<String> referenceNames() throws IOException {
         Path file = Path.of("src/test/resources/reference-tool-names.txt");

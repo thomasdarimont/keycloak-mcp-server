@@ -1116,4 +1116,146 @@ class KeycloakIT {
         confirmed("keycloak_client_delete", new JsonObject().put("clientId", "it-scoped-app"));
         confirmed("keycloak_role_delete", new JsonObject().put("role", "it-scoped"));
     }
+
+    @Test
+    @Order(20)
+    void authorizationServices() {
+        call("keycloak_client_create",
+                new JsonObject().put("clientId", "it-invoices")
+                    .put("serviceAccountsEnabled", true)
+                    .put("authorizationServicesEnabled", true));
+        String c = "it-invoices";
+        assertEquals("ENFORCING", call("keycloak_authz_settings_get", new JsonObject().put("clientId", c))
+            .getString("policyEnforcementMode"));
+        JsonObject permissive = call("keycloak_authz_settings_update",
+                new JsonObject().put("clientId", c).put("policyEnforcementMode", "PERMISSIVE"));
+        assertEquals("PERMISSIVE", permissive.getJsonObject("now").getString("policyEnforcementMode"));
+        call("keycloak_authz_settings_update",
+                new JsonObject().put("clientId", c).put("policyEnforcementMode", "ENFORCING"));
+
+        JsonObject resource = call("keycloak_authz_resource_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Invoice")
+                    .put("type", "urn:it:invoice")
+                    .put("uris", new JsonArray().add("/invoices/*"))
+                    .put("scopes", new JsonArray().add("read").add("approve")));
+        assertEquals(List.of("read", "approve"), strings(resource.getJsonArray("scopesCreated")), resource.encode());
+        List<String> scopes = call("keycloak_authz_scopes_list", new JsonObject().put("clientId", c))
+            .getJsonArray("items")
+            .stream()
+            .map(x -> ((JsonObject) x).getString("name"))
+            .toList();
+        assertTrue(scopes.containsAll(List.of("read", "approve")), scopes.toString());
+        call("keycloak_authz_resource_update",
+                new JsonObject().put("clientId", c).put("resource", "Invoice").put("displayName", "Invoices"));
+
+        call("keycloak_role_create", new JsonObject().put("name", "it-approver"));
+        String manager = call("keycloak_user_create", new JsonObject().put("username", "it-manager")).getString("id");
+        String clerk = call("keycloak_user_create", new JsonObject().put("username", "it-clerk")).getString("id");
+        call("keycloak_user_role_assign", new JsonObject().put("userId", manager).put("role", "it-approver"));
+
+        call("keycloak_authz_policy_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Approvers")
+                    .put("type", "role")
+                    .put("roles", new JsonArray().add("it-approver")));
+        call("keycloak_authz_policy_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Manager only")
+                    .put("type", "user")
+                    .put("users", new JsonArray().add("it-manager")));
+        call("keycloak_authz_policy_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Expired")
+                    .put("type", "time")
+                    .put("notOnOrAfter", "2000-01-01 00:00:00"));
+        call("keycloak_authz_policy_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Approvers or manager")
+                    .put("type", "aggregate")
+                    .put("policies", new JsonArray().add("Approvers").add("Manager only"))
+                    .put("decisionStrategy", "AFFIRMATIVE"));
+        assertEquals("invalid_arguments", error("keycloak_authz_policy_create",
+                new JsonObject().put("clientId", c).put("name", "x").put("type", "role"))
+            .getString("error"));
+        assertEquals("not_found",
+                error("keycloak_authz_policy_create",
+                        new JsonObject().put("clientId", c)
+                            .put("name", "x")
+                            .put("type", "role")
+                            .put("roles", new JsonArray().add("no-such-role")))
+                    .getString("error"));
+
+        JsonObject permission = call("keycloak_authz_permission_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Approve invoices")
+                    .put("resources", new JsonArray().add("Invoice"))
+                    .put("scopes", new JsonArray().add("approve"))
+                    .put("policies", new JsonArray().add("Approvers or manager")));
+        assertEquals("scope", permission.getString("type"), permission.encode());
+        assertEquals("invalid_arguments",
+                error("keycloak_authz_permission_create",
+                        new JsonObject().put("clientId", c)
+                            .put("name", "y")
+                            .put("resources", new JsonArray().add("Invoice"))
+                            .put("policies", new JsonArray().add("Approve invoices")))
+                    .getString("error"));
+
+        JsonObject allowed = call("keycloak_authz_evaluate",
+                new JsonObject().put("clientId", c)
+                    .put("userId", "it-manager")
+                    .put("resources", new JsonArray().add("Invoice"))
+                    .put("scopes", new JsonArray().add("approve")));
+        assertEquals("PERMIT", allowed.getString("decision"), allowed.encode());
+        JsonObject denied = call("keycloak_authz_evaluate",
+                new JsonObject().put("clientId", c)
+                    .put("userId", "it-clerk")
+                    .put("resources", new JsonArray().add("Invoice"))
+                    .put("scopes", new JsonArray().add("approve")));
+        assertEquals("DENY", denied.getString("decision"), denied.encode());
+        assertTrue(denied.encode().contains("Approve invoices"), "names the deciding permission: " + denied.encode());
+
+        call("keycloak_authz_permission_update",
+                new JsonObject().put("clientId", c)
+                    .put("permission", "Approve invoices")
+                    .put("policies", new JsonArray().add("Expired")));
+        assertEquals("DENY",
+                call("keycloak_authz_evaluate",
+                        new JsonObject().put("clientId", c)
+                            .put("userId", "it-manager")
+                            .put("resources", new JsonArray().add("Invoice"))
+                            .put("scopes", new JsonArray().add("approve")))
+                    .getString("decision"),
+                "only the expired policy decides now");
+        JsonObject listed = call("keycloak_authz_permissions_list", new JsonObject().put("clientId", c));
+        JsonObject approve = listed.getJsonArray("items")
+            .stream()
+            .map(x -> (JsonObject) x)
+            .filter(p -> "Approve invoices".equals(p.getString("name")))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(List.of("Expired"), strings(approve.getJsonArray("policies")), approve.encode());
+        assertEquals(List.of("Invoice"), strings(approve.getJsonArray("resources")),
+                "resources kept: " + approve.encode());
+
+        // the admin permission clients are off limits
+        assertEquals("admin_permissions",
+                error("keycloak_authz_scope_create", new JsonObject().put("clientId", "master-realm").put("name", "x"))
+                    .getString("error"));
+
+        confirmed("keycloak_authz_policy_delete",
+                new JsonObject().put("clientId", c).put("policy", "Approve invoices"));
+        confirmed("keycloak_authz_policy_delete",
+                new JsonObject().put("clientId", c).put("policy", "Approvers or manager"));
+        confirmed("keycloak_authz_resource_delete", new JsonObject().put("clientId", c).put("resource", "Invoice"));
+        confirmed("keycloak_authz_scope_delete", new JsonObject().put("clientId", c).put("scope", "approve"));
+        assertEquals("not_found",
+                error("keycloak_authz_resource_delete",
+                        new JsonObject().put("clientId", c).put("resource", "Invoice").put("confirm", true))
+                    .getString("error"));
+        confirmed("keycloak_user_delete", new JsonObject().put("id", manager).put("username", "it-manager"));
+        confirmed("keycloak_user_delete", new JsonObject().put("id", clerk).put("username", "it-clerk"));
+        confirmed("keycloak_role_delete", new JsonObject().put("role", "it-approver"));
+        confirmed("keycloak_client_delete", new JsonObject().put("clientId", c));
+    }
 }

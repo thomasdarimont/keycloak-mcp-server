@@ -40,7 +40,12 @@ class EnglishSearchTest {
             "user profile configuration, keycloak_user_profile_get",
             "change login page text, keycloak_localization_texts_set",
             "which roles appear in token, keycloak_scope_mappings_get",
-            "enable fapi client policy, keycloak_client_policy_set_enabled", })
+            "enable fapi client policy, keycloak_client_policy_set_enabled",
+            "can alice access the invoice resource, keycloak_authz_evaluate",
+            "create role policy, keycloak_authz_policy_create",
+            "create scope permission, keycloak_authz_permission_create",
+            "protect resource, keycloak_authz_resource_create",
+            "policy enforcement mode, keycloak_authz_settings_get", })
     void topHit(String query, String expected) {
         ToolIndex index = new ToolIndex(catalog.all());
         List<SearchHit> hits = index.search(query, null, 5, s -> true);
