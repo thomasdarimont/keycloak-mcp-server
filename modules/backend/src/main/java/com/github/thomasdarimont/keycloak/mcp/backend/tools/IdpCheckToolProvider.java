@@ -433,22 +433,23 @@ public class IdpCheckToolProvider extends AbstractToolProvider {
                 .replace("a system registered at runtime", "a URL from an identity provider's settings"));
         }
         try (HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(TIMEOUT)
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build()) {
+            .connectTimeout(TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build()) {
             HttpRequest request = HttpRequest.newBuilder(uri)
-                    .timeout(TIMEOUT)
-                    .header("Accept", "application/json, application/samlmetadata+xml, application/xml")
-                    .GET()
-                    .build();
+                .timeout(TIMEOUT)
+                .header("Accept", "application/json, application/samlmetadata+xml, application/xml")
+                .GET()
+                .build();
             try {
                 HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
                 try (InputStream in = response.body()) {
                     int status = response.statusCode();
                     if (status >= 300 && status < 400) {
                         return new Fetch(null,
-                                "HTTP " + status + " redirect to " + response.headers().firstValue("Location").orElse("?")
-                                + "; redirects are not followed," + " configure the final URL");
+                                "HTTP " + status + " redirect to "
+                                        + response.headers().firstValue("Location").orElse("?")
+                                        + "; redirects are not followed," + " configure the final URL");
                     }
                     if (status != 200) {
                         return new Fetch(null, "HTTP " + status + " from " + url);
@@ -459,10 +460,12 @@ public class IdpCheckToolProvider extends AbstractToolProvider {
                     }
                     return new Fetch(body, null);
                 }
-            } catch (IOException e) {
+            }
+            catch (IOException e) {
                 return new Fetch(null, "Cannot reach " + uri.getHost() + ": " + e.getClass().getSimpleName()
-                                       + (e.getMessage() == null ? "" : " (" + e.getMessage() + ")"));
-            } catch (InterruptedException e) {
+                        + (e.getMessage() == null ? "" : " (" + e.getMessage() + ")"));
+            }
+            catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return new Fetch(null, "Interrupted while fetching " + url);
             }

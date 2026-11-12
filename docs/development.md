@@ -7,7 +7,7 @@ Building, running and testing the server; the modules; formatting; open items.
 ```shell
 ./mvnw quarkus:dev -pl modules/backend -am      # dev mode, http://localhost:8081/mcp
 ./mvnw test                                     # unit + in-process MCP tests, no Keycloak
-./mvnw verify -DskipITs=false                   # + Testcontainers Keycloak 26.8.2, + storage IT on Dev Services PostgreSQL
+./mvnw verify -DskipITs=false                   # + Testcontainers Keycloak 26.8.2 and 389 Directory Server, + storage IT on Dev Services PostgreSQL
 ./mvnw package && java -jar modules/backend/target/quarkus-app/quarkus-run.jar start
 ./mvnw package -Ppostgresql                     # PostgreSQL build
 ./mvnw spotless:apply                           # format; `verify` fails on unformatted code
