@@ -11,6 +11,9 @@ import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.idm.UserSessionRepresentation;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
@@ -29,6 +32,8 @@ import com.google.auto.service.AutoService;
  */
 @AutoService(ToolProvider.class)
 public class CredentialToolProvider extends AbstractToolProvider {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     @Override
     public String id() {
@@ -53,8 +58,8 @@ public class CredentialToolProvider extends AbstractToolProvider {
     @Override
     public List<ToolSpec> tools(ToolProviderContext context) {
         return List.of(tool("keycloak_user_credentials_list").title("List a user's credentials")
-            .description(
-                    "Credentials of a user: password, OTP, passkey or security key (WebAuthn), with label and date; no secrets.")
+            .description("Credentials of a user: password (hash algorithm, iterations), OTP, passkey or security key, "
+                    + "with label and date; no secrets.")
             .category(Category.USERS)
             .read()
             .synonyms("2fa", "mfa", "otp", "totp", "authenticator app", "passkey", "webauthn", "security key",
@@ -162,7 +167,36 @@ public class CredentialToolProvider extends AbstractToolProvider {
         m.put("type", c.getType());
         Views.put(m, "label", c.getUserLabel());
         Views.put(m, "created", Views.iso(c.getCreatedDate()));
+        Map<String, Object> hash = hash(c);
+        if (!hash.isEmpty()) {
+            m.put("hash", hash);
+        }
         return m;
+    }
+
+    /**
+     * How a password is hashed: the algorithm and its iterations, as stored when the
+     * password was set. No secret; it shows whether the realm's password policy has
+     * reached this credential, and what a login pays for checking it.
+     */
+    static Map<String, Object> hash(CredentialRepresentation c) {
+        Map<String, Object> hash = new LinkedHashMap<>();
+        if (!CredentialRepresentation.PASSWORD.equals(c.getType()) || c.getCredentialData() == null) {
+            return hash;
+        }
+        try {
+            JsonNode data = JSON.readTree(c.getCredentialData());
+            if (data.hasNonNull("algorithm")) {
+                hash.put("algorithm", data.get("algorithm").asText());
+            }
+            if (data.hasNonNull("hashIterations")) {
+                hash.put("iterations", data.get("hashIterations").asInt());
+            }
+        }
+        catch (JsonProcessingException e) {
+            // not JSON: a credential of a custom provider, nothing to show
+        }
+        return hash;
     }
 
     ToolResult credentials(ToolCall call) {

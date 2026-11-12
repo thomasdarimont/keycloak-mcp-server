@@ -8,6 +8,9 @@ conf/<name>.conf`, which adds that file on top of `kcmcp.conf`; a relative path 
 else from the distribution's directory. The templates themselves may be replaced by an upgrade. Every setting can also be an environment variable (`kc-mcp.systems.default.url` →
 `KC_MCP_SYSTEMS_DEFAULT_URL`) or a command line option (`--kc-mcp.systems.default.url=...`).
 
+`prompts/` takes prompts as text files, one per file (see the README there); a file with the name of a built-in
+prompt replaces it.
+
 `truststores/` holds additional trusted certificates, such as the private CA of your Keycloak (`docs/tls.md`).
 
 Private keys for `private_key_jwt` and TLS certificates can live here too; keep the directory readable by the user

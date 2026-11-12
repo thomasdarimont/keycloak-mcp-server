@@ -179,6 +179,9 @@ public class AcmeToolProvider implements ToolProvider {
 - Loaded by a class loader over the application: sees api and server classes, no CDI, no native image. CDI needed:
   Maven dependency instead.
 - Docker image: `/deployments/providers` (`docker-compose.yml` has the volume line).
+- Prompts without code: `.md` files under `META-INF/kc-mcp/prompts/` of a jar in the directory are registered as
+  prompts ([Prompts as text files](tools.md#prompts-as-text-files)); a jar may hold nothing else. Jars on the class
+  path are not searched, only those of the providers directory.
 
 ```shell
 ./mvnw package -DskipTests

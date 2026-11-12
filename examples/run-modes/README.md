@@ -121,8 +121,9 @@ only: `kcadm.sh update clients/<id> -r demo -s directAccessGrantsEnabled=true`. 
 
 ## MCP prompts
 
-The server also offers task recipes as MCP prompts (`keycloak_onboard_user`, `keycloak_login_troubleshoot`), each
-with the tools it needs attached. Clients that expose prompts show them in their prompt picker; for one that does
+The server also offers task recipes as MCP prompts (`keycloak_onboard_user`, `keycloak_login_troubleshoot` and two
+more for redirect loops and slow logins, see [troubleshooting](../troubleshooting/)), each with the tools it needs
+attached. Clients that expose prompts show them in their prompt picker; for one that does
 not, fetch the rendered text and paste it into the chat:
 
 ```shell

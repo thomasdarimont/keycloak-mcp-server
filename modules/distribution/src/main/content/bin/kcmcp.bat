@@ -214,7 +214,7 @@ if "%DEBUG_MODE%" == "true" (
 
 rem where this distribution keeps things; the configuration may refer to ${kcmcp.home.dir}
 set "HOME_OPTS=-Dkcmcp.home.dir="%KCMCP_HOME%" -Dkc-mcp.config-files="%CONFIG_FILES%""
-set "HOME_OPTS=%HOME_OPTS% -Dkc-mcp.providers-dir="%KCMCP_HOME%\providers" -Dkc-mcp.keys-dir="%KCMCP_HOME%\data\keys""
+set "HOME_OPTS=%HOME_OPTS% -Dkc-mcp.providers-dir="%KCMCP_HOME%\providers" -Dkc-mcp.keys-dir="%KCMCP_HOME%\data\keys" -Dkc-mcp.prompts-dir="%KCMCP_HOME%\conf\prompts""
 set "HOME_OPTS=%HOME_OPTS% -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 
 if "%KCMCP_PRINT_ENV%" == "true" (

@@ -8,6 +8,7 @@ this repository's build for convenience; as a project of your own, replace the p
 |---|---|---|
 | `AcmeToolProvider` | `ToolProvider` | two tools: a READ with `roles("view-users")`, a DESTRUCTIVE with a per-tool `access` check, `ticket` argument, `KeycloakAdmin` lookups, `Views` |
 | `AcmePrompts` | `PromptProvider` | a recipe with its tools attached |
+| `META-INF/kc-mcp/prompts/acme_access_review.md` | prompt as a text file | a recipe without code: header, placeholders, a step that depends on an argument |
 | `TicketConfirmer` | `Confirmer` | a change ticket confirms the offboarding, no ticket declines it, other tools abstain |
 | `ProtectedUsersCheck` | `AccessCheck` (global) | `svc-*` users cannot be changed, whatever the caller's roles |
 | `JsonLinesAuditListener` | `AuditListener` | one JSON line per call in a file |

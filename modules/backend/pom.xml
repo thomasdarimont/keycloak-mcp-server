@@ -74,6 +74,11 @@
             <artifactId>quarkus-rest-jackson</artifactId>
         </dependency>
         <dependency>
+            <!-- the header of a prompt file (backend.prompts.PromptFile) -->
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+        <dependency>
             <!-- serves the admin API's OpenAPI document (META-INF/openapi.yaml) at /q/openapi -->
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-openapi</artifactId>

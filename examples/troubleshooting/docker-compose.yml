@@ -1,0 +1,53 @@
+# Troubleshooting with read-only access: Keycloak 26.8.2 with a realm `shop` that has one planted fault per question
+# (a redirect loop, a user who cannot sign in, slow logins), and the MCP server as a service account that may only
+# read. See README.md.
+#
+#   docker compose up -d                          # Keycloak on http://localhost:8104 (admin / admin)
+#   ./seed.py                                     # produces the symptoms: failed logins, a lockout, the loop
+#   docker compose --profile mcp up -d --build    # also the MCP server from ../../modules/backend/target on :8105
+#   docker compose down -v                        # reset everything (the realm is re-imported on the next start)
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8104
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: identity-brokering-api:v2
+      KC_FEATURES_DISABLED: twitter-broker
+      KC_LOG_LEVEL: info
+    volumes:
+      - ./realms:/opt/keycloak/data/import:ro
+    ports:
+      - "127.0.0.1:8104:8080"
+    healthcheck:
+      # the image has no curl; talk HTTP to the management port with bash
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
+  # Optional: the MCP server itself, built from this repository (run ../../mvnw package -DskipTests first).
+  mcp:
+    profiles: ["mcp"]
+    build:
+      context: ../..
+      dockerfile: modules/backend/src/main/docker/Dockerfile.jvm
+    env_file:
+      - env/support.env
+    environment:
+      # inside the compose network Keycloak is reached as keycloak:8080; its tokens still name the public issuer
+      KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
+      KC_MCP_SYSTEMS_DEFAULT_ISSUER: http://localhost:8104/realms/shop
+      QUARKUS_HTTP_PORT: "8081"
+      QUARKUS_HTTP_HOST: 0.0.0.0
+    ports:
+      - "8105:8081"
+    depends_on:
+      keycloak:
+        condition: service_healthy

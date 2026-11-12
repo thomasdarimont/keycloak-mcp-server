@@ -174,6 +174,7 @@ HOME_OPTS="-Dkcmcp.home.dir=$(esceval "$(abs_path "$KCMCP_HOME")")"
 HOME_OPTS="$HOME_OPTS -Dkc-mcp.config-files=$(esceval "$CONFIG_LIST")"
 HOME_OPTS="$HOME_OPTS -Dkc-mcp.providers-dir=$(esceval "$(abs_path "$KCMCP_HOME/providers")")"
 HOME_OPTS="$HOME_OPTS -Dkc-mcp.keys-dir=$(esceval "$(abs_path "$KCMCP_HOME/data/keys")")"
+HOME_OPTS="$HOME_OPTS -Dkc-mcp.prompts-dir=$(esceval "$(abs_path "$KCMCP_HOME/conf/prompts")")"
 HOME_OPTS="$HOME_OPTS -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 
 JAR="$(esceval "$(abs_path "$KCMCP_HOME/lib/quarkus-run.jar")")"

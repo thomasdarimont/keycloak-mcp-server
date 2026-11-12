@@ -50,7 +50,7 @@ How the server presents its tools to a model, which tools exist, and the prompts
 
 | category        | tools |
 |-----------------|-------|
-| users, sessions | search, count (free text, enabled, email verified, IdP link, attribute), get, create, update, set_enabled, delete, reset_password, send_action_email, sessions_list, logout, credentials_list, credential_delete (by id, label or unique type; no secrets shown), brute_force_get/clear (lockout), consents_list, consent_revoke, offline_sessions_list, client_sessions_list, brute_force_clear_all |
+| users, sessions | search, count (free text, enabled, email verified, IdP link, attribute), get, create, update, set_enabled, delete, reset_password, send_action_email, sessions_list, logout, credentials_list (a password with its hash algorithm and iterations), credential_delete (by id, label or unique type; no secrets shown), brute_force_get/clear (lockout), consents_list, consent_revoke, offline_sessions_list, client_sessions_list, brute_force_clear_all |
 | user profile    | user_profile_get, user_profile_attribute_set (create or change: label, required, who views/edits, validations), user_profile_attribute_delete, user_profile_unmanaged_set |
 | groups          | list (search matches subgroups), get (granted roles incl. inherited), create, update (rename, attributes), delete, members_list, member_add, member_remove, user_groups_list, role_assign/unassign, client_role_assign/unassign |
 | roles           | role_list, role_get (attributes, included roles), role_create/update/delete, role_composite_add/remove, client_roles_list, client_role_create/delete, user_roles_get (direct + effective realm and client roles, groups, source per role), user_role_assign/unassign, user_client_roles_get, user_client_role_assign/unassign |
@@ -74,7 +74,14 @@ How the server presents its tools to a model, which tools exist, and the prompts
 | prompt | arguments | does |
 |---|---|---|
 | `keycloak_onboard_user` | `username`, `email`, `realm?`, `firstName?`, `lastName?`, `groups?`, `actions?` | duplicate check, create, groups, setup email, verification |
-| `keycloak_login_troubleshoot` | `username`, `realm?`, `client?` | read-only: account state, failed logins, brute force, realm/client settings, proposed fix |
+| `keycloak_login_troubleshoot` | `username`, `realm?`, `client?` | read-only: account state, failed logins, lockout status, realm/client settings, proposed fix |
+| `keycloak_redirect_loop_troubleshoot` | `client`, `realm?`, `username?` | read-only: classifies the loop by the client's login events, then client settings, admin events before the first failure, realm; says whether the fix is in Keycloak or the application |
+| `keycloak_slow_login_troubleshoot` | `realm?`, `username?`, `client?` | read-only: password hashing, federation, identity providers, flow steps, event listeners; ranked candidates and what to measure |
+
+The three troubleshooting prompts use read tools only, so they stay whole on a read-only server
+([scenario 10](scenarios.md#10-troubleshooting-with-read-only-access), `examples/troubleshooting/`).
+
+A prompt comes from a `PromptProvider` (code) or from a text file:
 
 ```java
 @AutoService(PromptProvider.class)
@@ -90,3 +97,54 @@ public class AcmePrompts implements PromptProvider {
     }
 }
 ```
+
+### Prompts as text files
+
+A header that declares the prompt, then the recipe. One `.md` file per prompt; a `README.md` is left alone.
+
+```markdown
+---
+name: acme_vpn_login_troubleshoot
+title: Why does the VPN login fail?
+description: Read-only check of a user's VPN login.
+arguments:
+  - name: username
+    description: Who cannot log in
+    required: true
+  - name: realm
+    description: Realm of the user
+  - name: days
+    description: How far to look back
+    default: 7
+tools: [keycloak_user_get, keycloak_events_login, keycloak_client_get]
+---
+Find out why {{username}} cannot log in to the VPN{{#realm}} in realm {{realm}}{{/realm}}.
+
+1. Read the user: enabled, required actions.
+{{^realm}}
+2. Use the default realm.
+{{/realm}}
+3. Read the login events of the last {{days}} days for the client vpn-gateway and name the error codes.
+```
+
+- Header (YAML): `name` (snake_case), `title`, `description` required; `arguments` with `name`, `description`,
+  `required` or `default`; `tools` as for any prompt. An unknown key is an error.
+- Text: `{{name}}` is the argument's value, `{{#name}}...{{/name}}` stays when the argument was given,
+  `{{^name}}...{{/name}}` when it was not; they nest. Such a tag alone on a line takes the line with it. Only declared
+  arguments; no expressions, loops or includes.
+- Where from: `META-INF/kc-mcp/prompts/` of the jars in the providers directory, so an extension can ship prompts
+  with or without code (`examples/extensions/`), and `kc-mcp.prompts-dir` (the distribution's `conf/prompts/`).
+- A file that does not parse stops the start, naming the file and the problem.
+- The text instructs the model: the directory deserves the protection of the configuration.
+
+### Overriding a prompt
+
+A prompt replaces an earlier one of the same name. The order: built-in prompts, other `PromptProvider`s by `order()`,
+text files of the extension jars, text files of the prompts directory; the installation's own files win. Each
+replacement is logged at startup:
+
+```
+Prompt 'keycloak_login_troubleshoot' of prompt provider 'built-in' is overridden by /opt/kcmcp/conf/prompts/login.md
+```
+
+`kc-mcp.prompt-overrides=false` turns a name used twice into a startup error.

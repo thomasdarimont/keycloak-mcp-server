@@ -163,7 +163,8 @@ class McpEndpointTest {
     @Test
     void promptsCarryTheirTools() {
         List<String> names = mcp.listPrompts().stream().map(p -> ((JsonObject) p).getString("name")).sorted().toList();
-        assertEquals(List.of("keycloak_login_troubleshoot", "keycloak_onboard_user"), names);
+        assertEquals(List.of("keycloak_login_troubleshoot", "keycloak_onboard_user",
+                "keycloak_redirect_loop_troubleshoot", "keycloak_slow_login_troubleshoot"), names);
         JsonObject onboard = mcp.listPrompts()
             .stream()
             .map(p -> (JsonObject) p)
@@ -192,6 +193,20 @@ class McpEndpointTest {
                 new JsonObject().put("username", "bob").put("client", "demo-app"));
         assertTrue(why.contains("client demo-app"), why);
         assertTrue(why.contains("- keycloak_client_evaluate_scopes (read):"), why);
+        assertTrue(why.contains("- keycloak_user_brute_force_get (read):"), why);
+
+        String loop = mcp.getPrompt("keycloak_redirect_loop_troubleshoot",
+                new JsonObject().put("client", "shop-web").put("username", "frank"));
+        assertTrue(loop.contains("the application shop-web and Keycloak for the user frank"), loop);
+        assertTrue(loop.contains("CODE_TO_TOKEN_ERROR"), loop);
+        assertTrue(loop.contains("- keycloak_events_admin (read):"), loop);
+        assertFalse(loop.contains("(write)") || loop.contains("(destructive)"), "a read-only recipe: " + loop);
+
+        String slow = mcp.getPrompt("keycloak_slow_login_troubleshoot", new JsonObject().put("username", "grace"));
+        assertTrue(slow.contains("slow for the user grace"), slow);
+        assertTrue(slow.contains("hashIterations"), slow);
+        assertTrue(slow.contains("- keycloak_user_credentials_list (read):"), slow);
+        assertFalse(slow.contains("(write)") || slow.contains("(destructive)"), "a read-only recipe: " + slow);
         assertTrue(mcp
             .request("prompts/get",
                     new JsonObject().put("name", "keycloak_onboard_user").put("arguments", new JsonObject()))

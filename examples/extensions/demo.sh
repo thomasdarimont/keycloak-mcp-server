@@ -42,6 +42,13 @@ curl -s "$MCP" -H "Mcp-Session-Id: $SESSION" -H 'Content-Type: application/json'
   -d '{"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"acme_offboard_user","arguments":{"username":"bob","ticket":"ACME-42"}}}' \
   | sed 's/^data: //' | jq -r '.result.messages[0].content.text'
 
+step "a prompt shipped as a text file: acme_access_review, with and without the optional reviewer"
+for ARGS in '{"username":"bob","reviewer":"carol"}' '{"username":"bob"}'; do
+  curl -s "$MCP" -H "Mcp-Session-Id: $SESSION" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -d '{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{"name":"acme_access_review","arguments":'"$ARGS"'}}' \
+    | sed 's/^data: //' | jq -r '.result.messages[0].content.text' | sed '/^Tools for this task/,$d'
+done
+
 step "restore bob for the next run"
 $CALL $MCP keycloak_user_set_enabled '{"id": "bob", "enabled": true}' | jq -c '{username, enabled}'
 for g in $BOB_GROUPS; do $CALL $MCP keycloak_group_member_add "{\"groupId\": \"$g\", \"userId\": \"bob\"}" | jq -c '{message}'; done

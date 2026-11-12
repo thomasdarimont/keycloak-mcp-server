@@ -110,7 +110,7 @@ for a complete stack.
 
 | page | what it covers |
 |---|---|
-| [Scenarios in pictures](docs/scenarios.md) | diagrams of the ways the server runs: service account, user login, delegated agent, several systems, a shared deployment, registration, CIBA, the call pipeline |
+| [Scenarios in pictures](docs/scenarios.md) | diagrams of the ways the server runs: service account, user login, delegated agent, several systems, a shared deployment, registration, CIBA, read-only troubleshooting, the call pipeline |
 | [Tools](docs/tools.md) | what the model sees, the tool areas, prompts |
 | [Integrations](docs/integrations.md) | adding the server to LM Studio, Claude Code, Claude Desktop, VS Code and Copilot, Cursor, Codex; the login's Keycloak side |
 | [Security](docs/security.md) | guardrails, profiles `local` and `shared`, access levels, per-tool checks, policies, callers and delegation |

@@ -21,6 +21,7 @@
               <entry key="KC_MCP_UI_ISSUER" value="http://localhost:8080/realms/demo" />
               <entry key="KC_MCP_UI_CLIENT_ID" value="keycloak-mcp-ui" />
               <entry key="KC_MCP_ADMIN_ROLE" value="realm-management.realm-admin" />
+              <entry key="KC_MCP_UI_VIEWER_ROLE" value="realm-management.view-users" />
               <entry key="KC_MCP_ADMIN_ENABLED" value="true" />
               <entry key="KC_MCP_ADMIN_ISSUER" value="http://localhost:8080/realms/demo" />
               <entry key="KC_MCP_ADMIN_AUDIENCE" value="mcp-admin" />

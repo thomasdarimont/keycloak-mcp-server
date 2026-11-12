@@ -374,6 +374,24 @@ public interface McpServerConfig {
     String providersDir();
 
     /**
+     * Directory with prompts as plain text files: every {@code .md} file in it is one
+     * prompt, a header that declares it followed by the recipe with placeholders
+     * ({@code docs/tools.md}). Resolved like {@code kc-mcp.providers-dir}; a missing
+     * directory loads nothing. Read once at startup, after the prompts of the extensions,
+     * so a file here replaces a prompt of the same name from anywhere else.
+     */
+    @WithDefault("prompts")
+    String promptsDir();
+
+    /**
+     * Whether a prompt may replace an earlier one of the same name: an extension's a
+     * built-in one, a file of the prompts directory any other. Each replacement is logged
+     * at startup. {@code false}: a name used twice stops the start.
+     */
+    @WithDefault("true")
+    boolean promptOverrides();
+
+    /**
      * Properties files read at startup, comma separated: the distribution's
      * {@code conf/kcmcp.conf} and the files its scripts pass with {@code --config}. They
      * rank above the server's defaults and below the environment and system properties; a

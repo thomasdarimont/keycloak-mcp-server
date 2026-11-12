@@ -340,7 +340,53 @@ sequenceDiagram
 
 [CIBA confirmation](ciba-confirmation.md).
 
-## 10. What every call goes through
+## 10. Troubleshooting with read-only access
+
+`examples/troubleshooting/`: a support engineer asks why a login misbehaves, and the model answers from what Keycloak
+records and how it is configured. The server cannot change anything, twice over: its service account holds only
+`view-*` roles, and `KC_MCP_READ_ONLY=true` leaves the read tools only and sends nothing but `GET` to the Admin API.
+A fix is proposed, not applied.
+
+```mermaid
+flowchart LR
+    U("Support engineer<br/>'what causes this<br/>redirect loop?'") --> M("MCP client<br/>free question or<br/>a troubleshooting prompt")
+    M -- "MCP over HTTP" --> S("keycloak-mcp-server<br/>KC_MCP_READ_ONLY=true:<br/>read tools, GET only")
+    S -- "client mcp-support<br/>view-* roles" --> K("Keycloak<br/>realm shop")
+    subgraph evidence["What the server reads"]
+        E1("login events<br/>the pattern, the error codes")
+        E2("admin events<br/>what changed, when, by whom")
+        E3("configuration<br/>client, realm, flows,<br/>password policy, federation")
+        E4("user state<br/>lockout, required actions,<br/>sessions, password hash")
+    end
+    K --- E1
+    K --- E2
+    K --- E3
+    K --- E4
+    X("not visible<br/>timings, Keycloak's log,<br/>application, proxy, browser")
+    classDef client fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef server fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+    classDef keycloak fill:#ccfbf1,stroke:#0d9488,color:#134e4a
+    classDef infra fill:#fef3c7,stroke:#d97706,color:#78350f
+    classDef confirm fill:#ffe4e6,stroke:#e11d48,color:#881337
+    classDef audit fill:#e2e8f0,stroke:#64748b,color:#1e293b
+    class U,M client
+    class S server
+    class K,E1,E2,E3,E4 keycloak
+    class X audit
+    style evidence fill:transparent,stroke:#0d9488,stroke-dasharray:5 4
+```
+
+| question | prompt | decided by |
+|---|---|---|
+| What causes this redirect loop? | `keycloak_redirect_loop_troubleshoot` | the pattern of the client's login events (`LOGIN` and `CODE_TO_TOKEN_ERROR` taking turns, both succeeding, `LOGIN_ERROR`, none), then the client's settings and what the admin events say was changed before |
+| Why can't the user sign in? | `keycloak_login_troubleshoot` | the user's state, the error codes of their login events, the lockout status |
+| Why is the login so slow? | `keycloak_slow_login_troubleshoot` | settings that cost time: password hashing, federation, identity providers, flow steps, event listeners; the Admin API has no timings, so the answer ranks candidates and says what to measure |
+
+The example's realm has one planted fault per question and a script that produces the symptoms.
+[Tools](tools.md#prompts) (the prompts), [Security](security.md#tool-restrictions-per-system-and-realm) (read-only for
+the server, a system or a realm).
+
+## 11. What every call goes through
 
 Whatever the scenario, a tool call runs the same pipeline; a refusal at any step is a structured error that says what to
 do next, and is audited like any other outcome. An outside policy service comes after the server's own checks, so it can

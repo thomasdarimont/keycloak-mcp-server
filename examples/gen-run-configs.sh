@@ -6,6 +6,7 @@
 #   dynamic-systems:  PostgreSQL build + stack, mounted-jar dev stack, demo, down
 #   delegated-auth:   one quarkus:dev per env file, stack up, demo, down
 #   xaa:              one quarkus:dev per env file, stack up, demo, down
+#   troubleshooting:  quarkus:dev read-only, stack up + seed, demo, down
 #   ciba-confirm:     one quarkus:dev per env file, stack up, demo, down
 #   management-ui:    mkcert, one quarkus:dev per env file with the UI on
 #   multi-tenant:     keys + stack, down
@@ -118,6 +119,14 @@ shell "dynamic-systems: restart servers from target/quarkus-app (dev stack)" "dy
 shell "dynamic-systems: demo.sh" "dynamic-systems-demo" "examples/dynamic-systems" "./demo.sh"
 shell "dynamic-systems: down -v" "dynamic-systems-down" "examples/dynamic-systems" \
   "docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v"
+
+# --- troubleshooting: read-only dev mode against a realm with planted faults (Keycloak :8104), seed and demo
+maven_dev "quarkus:dev (support: troubleshooting stack on :8104, MCP :8105)" "dev-support" \
+  < examples/troubleshooting/env/support.env
+shell "troubleshooting: stack up (Keycloak :8104) + seed" "troubleshooting-up" "examples/troubleshooting" \
+  "docker compose up -d --wait && ./seed.py"
+shell "troubleshooting: demo.sh" "troubleshooting-demo" "examples/troubleshooting" "./demo.sh"
+shell "troubleshooting: down -v" "troubleshooting-down" "examples/troubleshooting" "docker compose down -v"
 
 # --- delegated-auth: dev mode as the actor client against its own stack (Keycloak :8096 with delegation), the demo
 for f in examples/delegated-auth/env/*.env; do

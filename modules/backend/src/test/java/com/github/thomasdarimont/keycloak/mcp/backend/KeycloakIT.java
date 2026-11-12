@@ -895,6 +895,8 @@ class KeycloakIT {
         assertEquals(1, creds.getInteger("count"), creds.encode());
         JsonObject password = creds.getJsonArray("items").getJsonObject(0);
         assertEquals("password", password.getString("type"));
+        assertNotNull(password.getJsonObject("hash").getString("algorithm"), password.encode());
+        assertTrue(password.getJsonObject("hash").getInteger("iterations") > 0, password.encode());
         assertFalse(password.encode().contains("secretData") || password.encode().contains("value"),
                 "no secrets: " + password.encode());
 

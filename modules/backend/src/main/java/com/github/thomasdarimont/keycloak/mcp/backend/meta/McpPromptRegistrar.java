@@ -1,6 +1,7 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.meta;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,9 +15,13 @@ import com.github.thomasdarimont.keycloak.mcp.backend.catalog.ToolCatalog;
 import com.github.thomasdarimont.keycloak.mcp.backend.exposure.ExposurePolicy;
 import com.github.thomasdarimont.keycloak.mcp.backend.exposure.ProgressiveState;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessPolicy;
+import com.github.thomasdarimont.keycloak.mcp.backend.prompts.PromptFiles;
+import com.github.thomasdarimont.keycloak.mcp.backend.prompts.PromptFiles.Sourced;
+import com.github.thomasdarimont.keycloak.mcp.backend.spi.Extensions;
 import com.github.thomasdarimont.keycloak.mcp.catalog.PromptSpec;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.config.ExposureMode;
+import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.prompts.PromptProvider;
 import com.github.thomasdarimont.keycloak.mcp.spi.ExtensionContext;
 import com.github.thomasdarimont.keycloak.mcp.spi.ExtensionRegistry;
@@ -32,8 +37,12 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 /**
- * Registers the {@link PromptProvider}s' recipes with the Quarkus {@link PromptManager}.
- * A rendered prompt ends with the catalog entries of the tools it names (name, level,
+ * Registers the recipes with the Quarkus {@link PromptManager}: those of the
+ * {@link PromptProvider}s in their order, then the prompt files of the extension jars,
+ * then those of the prompts directory ({@link PromptFiles}). A later prompt replaces an
+ * earlier one of the same name, and the log says so;
+ * {@code kc-mcp.prompt-overrides=false} makes a name used twice stop the start instead. A
+ * rendered prompt ends with the catalog entries of the tools it names (name, level,
  * description, parameters), so the model skips {@code search_tools}; in progressive
  * exposure mode those tools are also surfaced in {@code tools/list} for the connection.
  */
@@ -63,19 +72,54 @@ public class McpPromptRegistrar {
     @Inject
     ExtensionRegistry registry;
 
+    @Inject
+    Extensions extensions;
+
+    @Inject
+    McpServerConfig config;
+
     private final List<PromptSpec> registered = new ArrayList<>();
 
     void onStart(@Observes StartupEvent event) {
+        List<Sourced> found = new ArrayList<>();
         for (PromptProvider p : registry.extensions(PromptProvider.class)) {
             ExtensionContext ctx = registry.context(p);
             for (PromptSpec spec : p.prompts(ctx)) {
-                register(spec);
+                found.add(new Sourced(spec, "prompt provider '" + p.id() + "'"));
             }
+        }
+        found.addAll(PromptFiles.fromJars(extensions.jars()));
+        found.addAll(PromptFiles.fromDirectory(Extensions.resolve(config.promptsDir())));
+        for (Sourced prompt : effective(found, config.promptOverrides())) {
+            register(prompt.spec());
         }
         if (!registered.isEmpty()) {
             LOG.infof("%d prompts registered: %s", registered.size(),
                     registered.stream().map(PromptSpec::name).toList());
         }
+    }
+
+    /**
+     * One prompt per name, at the place of the first of that name: a later one replaces
+     * it, which is logged, as an override should not go unnoticed.
+     *
+     * @throws IllegalStateException a name used twice while overrides are off
+     */
+    static List<Sourced> effective(List<Sourced> found, boolean overrides) {
+        Map<String, Sourced> byName = new LinkedHashMap<>();
+        for (Sourced prompt : found) {
+            Sourced earlier = byName.put(prompt.spec().name(), prompt);
+            if (earlier == null) {
+                continue;
+            }
+            if (!overrides) {
+                throw new IllegalStateException("Prompt '%s' of %s is also defined by %s, and kc-mcp.prompt-overrides"
+                    .formatted(prompt.spec().name(), earlier.origin(), prompt.origin())
+                        + " is false: rename or remove one of them");
+            }
+            LOG.infof("Prompt '%s' of %s is overridden by %s", prompt.spec().name(), earlier.origin(), prompt.origin());
+        }
+        return List.copyOf(byName.values());
     }
 
     /** The prompt's tools that exist and are permitted on this server. */

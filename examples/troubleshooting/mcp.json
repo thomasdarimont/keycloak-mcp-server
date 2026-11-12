@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "keycloak-support": {
+      "url": "http://localhost:8105/mcp"
+    }
+  }
+}

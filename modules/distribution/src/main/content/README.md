@@ -62,7 +62,7 @@ Templates in `conf/scenarios/`, each a complete configuration to copy and adjust
 | directory | holds |
 |---|---|
 | `bin/` | `kcmcp.sh`, `kcmcp.bat` |
-| `conf/` | `kcmcp.conf`, `scenarios/` (templates), `systems/` (one file per Keycloak system), `truststores/` (additional trusted certificates), your keys and certificates |
+| `conf/` | `kcmcp.conf`, `scenarios/` (templates), `systems/` (one file per Keycloak system), `prompts/` (your own prompts as text files), `truststores/` (additional trusted certificates), your keys and certificates |
 | `lib/` | the server (Quarkus fast-jar layout); nothing to edit |
 | `providers/` | extension jars, loaded at startup |
 | `data/` | the embedded database, per-system keys, logs |

@@ -1,0 +1,148 @@
+{
+  "realm": "shop",
+  "displayName": "Shop (troubleshooting demo)",
+  "enabled": true,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": true,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 3,
+  "waitIncrementSeconds": 900,
+  "maxFailureWaitSeconds": 3600,
+  "maxDeltaTimeSeconds": 43200,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "passwordPolicy": "length(8) and hashAlgorithm(pbkdf2-sha512) and hashIterations(5000000)",
+  "defaultLocale": "en",
+  "users": [
+    {
+      "username": "erin",
+      "enabled": true,
+      "email": "erin@shop.example",
+      "emailVerified": true,
+      "firstName": "Erin",
+      "lastName": "Eastwood",
+      "realmRoles": [
+        "default-roles-shop"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "erin-demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "frank",
+      "enabled": true,
+      "email": "frank@shop.example",
+      "emailVerified": true,
+      "firstName": "Frank",
+      "lastName": "Foster",
+      "realmRoles": [
+        "default-roles-shop"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "frank-demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "grace",
+      "enabled": true,
+      "email": "grace@shop.example",
+      "emailVerified": true,
+      "firstName": "Grace",
+      "lastName": "Garner",
+      "realmRoles": [
+        "default-roles-shop"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "grace-demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "service-account-mcp-support",
+      "enabled": true,
+      "serviceAccountClientId": "mcp-support",
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "view-clients",
+          "view-realm",
+          "view-events",
+          "view-identity-providers"
+        ]
+      },
+      "realmRoles": [
+        "default-roles-shop"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "shop-web",
+      "name": "Shop web application",
+      "description": "The application whose login loops: a confidential client, the app redeems the code with its secret",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "shop-web-secret",
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "/",
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "fullScopeAllowed": true,
+      "attributes": {}
+    },
+    {
+      "clientId": "mcp-support",
+      "name": "MCP server (support, read-only)",
+      "description": "Service account for keycloak-mcp-server, view-* only",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "mcp-support-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "fullScopeAllowed": true,
+      "attributes": {},
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email",
+        "service_account",
+        "kc-admin-api"
+      ]
+    }
+  ]
+}
