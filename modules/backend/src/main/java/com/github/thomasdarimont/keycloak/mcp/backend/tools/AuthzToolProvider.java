@@ -224,6 +224,19 @@ public class AuthzToolProvider extends AbstractToolProvider {
                     .roles("manage-authorization")
                     .api(typed("post", "/policy/{type}").path("client-uuid", "clientId").derivedPath("type"))
                     .build(),
+                tool("keycloak_authz_policy_update").title("Update authorization policy")
+                    .description("Change what a policy checks: its roles, users, groups, clients, times or policies.")
+                    .category(Category.CLIENTS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("edit policy", "add role to policy", "change policy", "add user to policy")
+                    .schema(policyUpdateFields(schema()))
+                    .handler(this::policyUpdate)
+                    .roles("manage-authorization")
+                    .api(typed("put", "/policy/{type}/{policy-id}").path("client-uuid", "clientId")
+                        .derivedPath("type")
+                        .path("policy-id", "policy"))
+                    .build(),
                 tool("keycloak_authz_policy_delete").title("Delete authorization policy or permission")
                     .description("Remove a policy or a permission by name or id; permissions using a policy lose it.")
                     .category(Category.CLIENTS)
@@ -324,6 +337,27 @@ public class AuthzToolProvider extends AbstractToolProvider {
             .stringArray("policies", "type aggregate: the policy names it combines")
             .enumeration("decisionStrategy", "type aggregate: how they combine (default UNANIMOUS)", "UNANIMOUS",
                     "AFFIRMATIVE", "CONSENSUS");
+    }
+
+    /**
+     * The ingredients of {@link #policyFields} for an existing policy; its type stays.
+     */
+    private static InputSchema.Builder policyUpdateFields(InputSchema.Builder b) {
+        return b.string("clientId", CLIENT_ID)
+            .required()
+            .string("policy", "Policy name or id")
+            .required()
+            .string("description", "Description")
+            .enumeration("logic", "positive or negative: the result is inverted", "positive", "negative")
+            .stringArray("roles", "role policies: the roles, replacing the old ones; client roles as client/role")
+            .stringArray("users", "user policies: user ids or usernames, replacing the old ones")
+            .stringArray("groups", "group policies: group paths, replacing the old ones")
+            .stringArray("clients", "client policies: clientIds, replacing the old ones")
+            .string("notBefore", "time policies: from, yyyy-MM-dd HH:mm:ss; empty clears it")
+            .string("notOnOrAfter", "time policies: until, yyyy-MM-dd HH:mm:ss; empty clears it")
+            .stringArray("policies", "aggregate policies: the policy names, replacing the old ones")
+            .enumeration("decisionStrategy", "aggregate policies: how they combine", "UNANIMOUS", "AFFIRMATIVE",
+                    "CONSENSUS");
     }
 
     private static InputSchema.Builder permissionFields(InputSchema.Builder b) {
@@ -574,11 +608,42 @@ public class AuthzToolProvider extends AbstractToolProvider {
         ClientRepresentation c = client(call);
         AuthorizationResource authz = writable(call, c);
         String type = call.str("type").toLowerCase(Locale.ROOT);
-        AbstractPolicyRepresentation policy;
-        switch (type) {
-            case "role" -> {
-                requireArg(call, "roles", type);
-                RolePolicyRepresentation p = new RolePolicyRepresentation();
+        AbstractPolicyRepresentation policy = switch (type) {
+            case "role" -> new RolePolicyRepresentation();
+            case "user" -> new UserPolicyRepresentation();
+            case "group" -> new GroupPolicyRepresentation();
+            case "client" -> new ClientPolicyRepresentation();
+            case "time" -> new TimePolicyRepresentation();
+            case "aggregate" -> new AggregatePolicyRepresentation();
+            default -> throw new ToolException("invalid_arguments", "Unknown policy type '" + type + "'.");
+        };
+        fill(call, authz, policy, true);
+        policy.setName(call.str("name"));
+        var policies = authz.policies();
+        Response response = switch (type) {
+            case "role" -> policies.role().create((RolePolicyRepresentation) policy);
+            case "user" -> policies.user().create((UserPolicyRepresentation) policy);
+            case "group" -> policies.group().create((GroupPolicyRepresentation) policy);
+            case "client" -> policies.client().create((ClientPolicyRepresentation) policy);
+            case "time" -> policies.time().create((TimePolicyRepresentation) policy);
+            default -> policies.aggregate().create((AggregatePolicyRepresentation) policy);
+        };
+        String id = created(response);
+        return ToolResult.done("Authorization policy created", "clientId", c.getClientId(), "id", id, "name",
+                policy.getName(), "type", type);
+    }
+
+    /**
+     * Sets what a policy checks from the call, each list replacing the old one. A new
+     * policy ({@code required}) must get the ingredient its type needs; an update changes
+     * only what is passed.
+     */
+    private static void fill(ToolCall call, AuthorizationResource authz, AbstractPolicyRepresentation policy,
+            boolean required) {
+        switch (policy) {
+            case RolePolicyRepresentation p when call.has("roles") || required -> {
+                requireArg(call, "roles", "role");
+                p.setRoles(new LinkedHashSet<>());
                 for (String role : strings(call, "roles")) {
                     int slash = role.indexOf('/');
                     if (slash > 0) {
@@ -592,70 +657,115 @@ public class AuthzToolProvider extends AbstractToolProvider {
                         p.addRole(role);
                     }
                 }
-                policy = p;
             }
-            case "user" -> {
-                requireArg(call, "users", type);
-                UserPolicyRepresentation p = new UserPolicyRepresentation();
+            case UserPolicyRepresentation p when call.has("users") || required -> {
+                requireArg(call, "users", "user");
+                p.setUsers(new LinkedHashSet<>());
                 for (String user : strings(call, "users")) {
-                    UserRepresentation u = call.kc().findUser(call.realm(), user);
-                    p.addUser(u.getId());
+                    p.addUser(call.kc().findUser(call.realm(), user).getId());
                 }
-                policy = p;
             }
-            case "group" -> {
-                requireArg(call, "groups", type);
-                GroupPolicyRepresentation p = new GroupPolicyRepresentation();
+            case GroupPolicyRepresentation p when call.has("groups") || required -> {
+                requireArg(call, "groups", "group");
+                p.setGroups(new LinkedHashSet<>());
                 for (String group : strings(call, "groups")) {
                     p.addGroup(call.kc().findGroup(call.realm(), group).getId(), true);
                 }
-                policy = p;
             }
-            case "client" -> {
-                requireArg(call, "clients", type);
-                ClientPolicyRepresentation p = new ClientPolicyRepresentation();
+            case ClientPolicyRepresentation p when call.has("clients") || required -> {
+                requireArg(call, "clients", "client");
+                p.setClients(new LinkedHashSet<>());
                 for (String client : strings(call, "clients")) {
                     p.addClient(call.kc().findClient(call.realm(), client).getId());
                 }
-                policy = p;
             }
-            case "time" -> {
-                if (!call.has("notBefore") && !call.has("notOnOrAfter")) {
+            case TimePolicyRepresentation p -> {
+                if (required && !call.has("notBefore") && !call.has("notOnOrAfter")) {
                     throw new ToolException("invalid_arguments", "A time policy needs notBefore or notOnOrAfter.");
                 }
-                TimePolicyRepresentation p = new TimePolicyRepresentation();
-                p.setNotBefore(call.str("notBefore"));
-                p.setNotOnOrAfter(call.str("notOnOrAfter"));
-                policy = p;
+                if (call.has("notBefore")) {
+                    p.setNotBefore(blankToNull(call.str("notBefore")));
+                }
+                if (call.has("notOnOrAfter")) {
+                    p.setNotOnOrAfter(blankToNull(call.str("notOnOrAfter")));
+                }
             }
-            case "aggregate" -> {
-                requireArg(call, "policies", type);
-                AggregatePolicyRepresentation p = new AggregatePolicyRepresentation();
-                for (String ref : strings(call, "policies")) {
-                    p.addPolicy(findPolicy(authz, ref).getId());
+            case AggregatePolicyRepresentation p -> {
+                if (call.has("policies") || required) {
+                    requireArg(call, "policies", "aggregate");
+                    p.setPolicies(new LinkedHashSet<>());
+                    for (String ref : strings(call, "policies")) {
+                        p.addPolicy(findPolicy(authz, ref).getId());
+                    }
                 }
                 if (call.has("decisionStrategy")) {
                     p.setDecisionStrategy(DecisionStrategy.valueOf(call.str("decisionStrategy")));
                 }
-                policy = p;
             }
-            default -> throw new ToolException("invalid_arguments", "Unknown policy type '" + type + "'.");
+            default -> {
+                // an update that leaves the ingredients alone
+            }
         }
-        policy.setName(call.str("name"));
-        policy.setDescription(call.str("description"));
-        policy.setLogic("negative".equalsIgnoreCase(call.str("logic")) ? Logic.NEGATIVE : Logic.POSITIVE);
+        if (call.has("description")) {
+            policy.setDescription(call.str("description"));
+        }
+        if (call.has("logic") || required) {
+            policy.setLogic("negative".equalsIgnoreCase(call.str("logic")) ? Logic.NEGATIVE : Logic.POSITIVE);
+        }
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v;
+    }
+
+    ToolResult policyUpdate(ToolCall call) {
+        ClientRepresentation c = client(call);
+        AuthorizationResource authz = writable(call, c);
+        PolicyRepresentation found = findPolicy(authz, call.str("policy"));
         var policies = authz.policies();
-        Response response = switch (type) {
-            case "role" -> policies.role().create((RolePolicyRepresentation) policy);
-            case "user" -> policies.user().create((UserPolicyRepresentation) policy);
-            case "group" -> policies.group().create((GroupPolicyRepresentation) policy);
-            case "client" -> policies.client().create((ClientPolicyRepresentation) policy);
-            case "time" -> policies.time().create((TimePolicyRepresentation) policy);
-            default -> policies.aggregate().create((AggregatePolicyRepresentation) policy);
-        };
-        String id = created(response);
-        return ToolResult.done("Authorization policy created", "clientId", c.getClientId(), "id", id, "name",
-                policy.getName(), "type", type);
+        String id = found.getId();
+        switch (found.getType()) {
+            case "role" -> {
+                RolePolicyRepresentation p = policies.role().findById(id).toRepresentation();
+                fill(call, authz, p, false);
+                policies.role().findById(id).update(p);
+            }
+            case "user" -> {
+                UserPolicyRepresentation p = policies.user().findById(id).toRepresentation();
+                fill(call, authz, p, false);
+                policies.user().findById(id).update(p);
+            }
+            case "group" -> {
+                GroupPolicyRepresentation p = policies.group().findById(id).toRepresentation();
+                fill(call, authz, p, false);
+                policies.group().findById(id).update(p);
+            }
+            case "client" -> {
+                ClientPolicyRepresentation p = policies.client().findById(id).toRepresentation();
+                fill(call, authz, p, false);
+                policies.client().findById(id).update(p);
+            }
+            case "time" -> {
+                TimePolicyRepresentation p = policies.time().findById(id).toRepresentation();
+                fill(call, authz, p, false);
+                policies.time().findById(id).update(p);
+            }
+            case "aggregate" -> {
+                AggregatePolicyRepresentation p = policies.aggregate().findById(id).toRepresentation();
+                fill(call, authz, p, false);
+                policies.aggregate().findById(id).update(p);
+            }
+            case "resource", "scope" -> {
+                return ToolResult.error("invalid_arguments",
+                        "'" + found.getName() + "' is a permission; change it with keycloak_authz_permission_update.");
+            }
+            default -> {
+                return ToolResult.error("unsupported", "Policies of type '" + found.getType()
+                        + "' are not changed through this server; use the admin console.");
+            }
+        }
+        return ToolResult.done("Authorization policy updated", "clientId", c.getClientId(), "name", found.getName(),
+                "type", found.getType());
     }
 
     ToolResult policyDelete(ToolCall call) {

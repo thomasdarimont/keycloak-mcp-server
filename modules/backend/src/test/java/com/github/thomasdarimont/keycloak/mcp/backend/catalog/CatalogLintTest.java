@@ -183,7 +183,12 @@ class CatalogLintTest {
             "keycloak_authz_scope_create", "keycloak_authz_scope_delete", "keycloak_authz_resource_create",
             "keycloak_authz_resource_update", "keycloak_authz_resource_delete", "keycloak_authz_policy_create",
             "keycloak_authz_policy_delete", "keycloak_authz_permission_create", "keycloak_authz_permission_update",
-            "keycloak_authz_evaluate");
+            "keycloak_authz_evaluate", "keycloak_authz_policy_update",
+            // realm lifecycle, incident actions and checks Keycloak lacks
+            "keycloak_realm_list", "keycloak_realm_create", "keycloak_realm_delete", "keycloak_realm_logout_all",
+            "keycloak_realm_revoke_tokens", "keycloak_brute_force_clear_all", "keycloak_auth_flow_delete",
+            "keycloak_protocol_mapper_update", "keycloak_user_count", "keycloak_federation_test_connection",
+            "keycloak_idp_check");
 
     static Set<String> referenceNames() throws IOException {
         Path file = Path.of("src/test/resources/reference-tool-names.txt");

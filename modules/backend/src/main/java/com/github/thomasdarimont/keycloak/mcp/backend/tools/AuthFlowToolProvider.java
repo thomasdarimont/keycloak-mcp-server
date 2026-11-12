@@ -104,6 +104,16 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
                             get(R + "/authentication/form-action-providers"),
                             get(R + "/authentication/client-authenticator-providers"))
                     .build(),
+                tool("keycloak_auth_flow_delete").title("Delete authentication flow")
+                    .description("Delete a custom top-level flow; built-in flows and flows still bound are refused.")
+                    .category(Category.AUTH_FLOWS)
+                    .destructive()
+                    .synonyms("remove flow", "drop login flow", "delete custom flow")
+                    .schema(schema().string("flow", "Flow alias, e.g. my browser").required())
+                    .handler(this::flowDelete)
+                    .roles("manage-realm")
+                    .api(delete(R + "/authentication/flows/{id}").derivedPath("id"))
+                    .build(),
                 tool("keycloak_auth_flow_create").title("Create authentication flow")
                     .description("Create an empty top-level flow to fill with executions and sub-flows.")
                     .category(Category.AUTH_FLOWS)
@@ -301,6 +311,51 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
 
     private static AuthenticationManagementResource flowsOf(ToolCall call) {
         return call.kc().realm(call.realm()).flows();
+    }
+
+    /**
+     * The realm settings and IdPs that use a flow, as {@code browserFlow} or
+     * {@code idp:google}.
+     */
+    private static List<String> bindings(ToolCall call, String alias) {
+        RealmRepresentation r = call.kc().realm(call.realm()).toRepresentation();
+        List<String> used = new ArrayList<>();
+        Map<String, String> realmBindings = new LinkedHashMap<>();
+        realmBindings.put("browserFlow", r.getBrowserFlow());
+        realmBindings.put("registrationFlow", r.getRegistrationFlow());
+        realmBindings.put("directGrantFlow", r.getDirectGrantFlow());
+        realmBindings.put("resetCredentialsFlow", r.getResetCredentialsFlow());
+        realmBindings.put("clientAuthenticationFlow", r.getClientAuthenticationFlow());
+        realmBindings.put("dockerAuthenticationFlow", r.getDockerAuthenticationFlow());
+        realmBindings.put("firstBrokerLoginFlow", r.getFirstBrokerLoginFlow());
+        realmBindings.forEach((binding, flow) -> {
+            if (alias.equals(flow)) {
+                used.add(binding);
+            }
+        });
+        for (var idp : call.kc().realm(call.realm()).identityProviders().findAll()) {
+            if (alias.equals(idp.getFirstBrokerLoginFlowAlias()) || alias.equals(idp.getPostBrokerLoginFlowAlias())) {
+                used.add("idp:" + idp.getAlias());
+            }
+        }
+        return used;
+    }
+
+    ToolResult flowDelete(ToolCall call) {
+        AuthenticationFlowRepresentation flow = findFlow(call, call.str("flow"));
+        if (flow.isBuiltIn()) {
+            return ToolResult.error("invalid_arguments",
+                    "'" + flow.getAlias() + "' is a built-in flow and cannot be deleted; copy it to change it.");
+        }
+        List<String> used = bindings(call, flow.getAlias());
+        if (!used.isEmpty()) {
+            return ToolResult.error("flow_in_use",
+                    "'" + flow.getAlias() + "' is still bound as " + used
+                            + "; bind another flow there first (keycloak_auth_flow_bind or keycloak_idp_update).",
+                    "boundAs", used);
+        }
+        flowsOf(call).deleteFlow(flow.getId());
+        return ToolResult.done("Authentication flow deleted", "flow", flow.getAlias());
     }
 
     /** Top-level flows only. */

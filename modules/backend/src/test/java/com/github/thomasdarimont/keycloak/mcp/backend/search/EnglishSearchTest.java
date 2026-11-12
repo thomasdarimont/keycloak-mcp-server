@@ -44,8 +44,10 @@ class EnglishSearchTest {
             "can alice access the invoice resource, keycloak_authz_evaluate",
             "create role policy, keycloak_authz_policy_create",
             "create scope permission, keycloak_authz_permission_create",
-            "protect resource, keycloak_authz_resource_create",
-            "policy enforcement mode, keycloak_authz_settings_get", })
+            "protect resource, keycloak_authz_resource_create", "policy enforcement mode, keycloak_authz_settings_get",
+            "how many users are there, keycloak_user_count", "list all realms, keycloak_realm_list",
+            "log out everyone, keycloak_realm_logout_all", "test ldap connection, keycloak_federation_test_connection",
+            "check idp saml metadata, keycloak_idp_check", "delete authentication flow, keycloak_auth_flow_delete", })
     void topHit(String query, String expected) {
         ToolIndex index = new ToolIndex(catalog.all());
         List<SearchHit> hits = index.search(query, null, 5, s -> true);

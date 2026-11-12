@@ -1258,4 +1258,194 @@ class KeycloakIT {
         confirmed("keycloak_role_delete", new JsonObject().put("role", "it-approver"));
         confirmed("keycloak_client_delete", new JsonObject().put("clientId", c));
     }
+
+    /** A call into another realm than master. */
+    static JsonObject callIn(String realm, String tool, JsonObject args) {
+        JsonObject result = mcp.callTool(tool, args.put("realm", realm));
+        JsonObject body = McpClient.text(result);
+        assertFalse(result.getBoolean("isError", false), tool + " -> " + body.encode());
+        return body;
+    }
+
+    @Test
+    @Order(21)
+    void realmLifecycleAndIncidentActions() {
+        List<String> realms = call("keycloak_realm_list", new JsonObject()).getJsonArray("items")
+            .stream()
+            .map(r -> ((JsonObject) r).getString("realm"))
+            .toList();
+        assertTrue(realms.contains("master"), realms.toString());
+        call("keycloak_realm_create", new JsonObject().put("name", "it-tenant").put("displayName", "IT Tenant"));
+        assertTrue(call("keycloak_realm_list", new JsonObject()).encode().contains("IT Tenant"));
+
+        callIn("it-tenant", "keycloak_user_create",
+                new JsonObject().put("username", "temp").put("password", "pw1!xyz"));
+        assertEquals(1, callIn("it-tenant", "keycloak_user_count", new JsonObject()).getInteger("count"));
+        JsonObject loggedOut = callIn("it-tenant", "keycloak_realm_logout_all", new JsonObject().put("confirm", true));
+        assertEquals("it-tenant", loggedOut.getString("realm"), loggedOut.encode());
+        JsonObject revoked = callIn("it-tenant", "keycloak_realm_revoke_tokens", new JsonObject().put("confirm", true));
+        assertNotNull(revoked.getString("notBefore"), revoked.encode());
+        callIn("it-tenant", "keycloak_brute_force_clear_all", new JsonObject());
+
+        JsonObject wrongName = McpClient.text(mcp.callTool("keycloak_realm_delete",
+                new JsonObject().put("realm", "it-tenant").put("name", "it-tenantt").put("confirm", true)));
+        assertEquals("invalid_arguments", wrongName.getString("error"), wrongName.encode());
+        callIn("it-tenant", "keycloak_realm_delete", new JsonObject().put("name", "it-tenant").put("confirm", true));
+        assertFalse(call("keycloak_realm_list", new JsonObject()).encode().contains("it-tenant"));
+        assertEquals("invalid_arguments",
+                error("keycloak_realm_delete", new JsonObject().put("name", "master").put("confirm", true))
+                    .getString("error"),
+                "master is never deleted");
+    }
+
+    @Test
+    @Order(22)
+    void smallUpdatesAndCounts() {
+        JsonObject all = call("keycloak_user_count", new JsonObject());
+        assertTrue(all.getInteger("count") >= 1, all.encode());
+        assertEquals(1, call("keycloak_user_count", new JsonObject().put("search", "admin")).getInteger("count"));
+
+        // flows: built-in refused, bound refused, a free copy deleted
+        assertEquals("invalid_arguments",
+                error("keycloak_auth_flow_delete", new JsonObject().put("flow", "browser").put("confirm", true))
+                    .getString("error"));
+        call("keycloak_auth_flow_copy", new JsonObject().put("flowAlias", "browser").put("newName", "it-doomed"));
+        call("keycloak_auth_flow_bind",
+                new JsonObject().put("binding", "browserFlow").put("flowAlias", "it-doomed").put("confirm", true));
+        JsonObject inUse = error("keycloak_auth_flow_delete",
+                new JsonObject().put("flow", "it-doomed").put("confirm", true));
+        assertEquals("flow_in_use", inUse.getString("error"), inUse.encode());
+        assertEquals(List.of("browserFlow"), strings(inUse.getJsonArray("boundAs")));
+        call("keycloak_auth_flow_bind",
+                new JsonObject().put("binding", "browserFlow").put("flowAlias", "browser").put("confirm", true));
+        confirmed("keycloak_auth_flow_delete", new JsonObject().put("flow", "it-doomed"));
+        assertEquals("not_found",
+                error("keycloak_auth_flow_delete", new JsonObject().put("flow", "it-doomed").put("confirm", true))
+                    .getString("error"));
+
+        // protocol mapper update
+        call("keycloak_client_create", new JsonObject().put("clientId", "it-mapped"));
+        call("keycloak_client_mapper_add",
+                new JsonObject().put("clientId", "it-mapped")
+                    .put("name", "tier")
+                    .put("type", "oidc-hardcoded-claim-mapper")
+                    .put("config", new JsonObject().put("claim.name", "tier").put("claim.value", "bronze")));
+        JsonObject updated = call("keycloak_protocol_mapper_update",
+                new JsonObject().put("clientId", "it-mapped")
+                    .put("mapper", "tier")
+                    .put("config", new JsonObject().put("claim.value", "gold").put("userinfo.token.claim", "false")));
+        assertEquals("gold", updated.getJsonObject("config").getString("claim.value"), updated.encode());
+        JsonObject mapper = call("keycloak_client_mappers_list", new JsonObject().put("clientId", "it-mapped"))
+            .getJsonArray("items")
+            .getJsonObject(0);
+        assertEquals("gold", mapper.getJsonObject("config").getString("claim.value"));
+        assertEquals("false", mapper.getJsonObject("config").getString("userinfo.token.claim"), mapper.encode());
+        confirmed("keycloak_client_delete", new JsonObject().put("clientId", "it-mapped"));
+
+        // LDAP: nothing configured here, so only the lookup is exercised
+        assertEquals("not_found", error("keycloak_federation_test_connection", new JsonObject().put("id", "corp-ldap"))
+            .getString("error"));
+    }
+
+    @Test
+    @Order(23)
+    void authorizationPolicyUpdateChangesTheDecision() {
+        String c = "it-docs";
+        call("keycloak_client_create",
+                new JsonObject().put("clientId", c)
+                    .put("serviceAccountsEnabled", true)
+                    .put("authorizationServicesEnabled", true));
+        String alice = call("keycloak_user_create", new JsonObject().put("username", "it-doc-a")).getString("id");
+        String bob = call("keycloak_user_create", new JsonObject().put("username", "it-doc-b")).getString("id");
+        call("keycloak_authz_resource_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Doc")
+                    .put("type", "urn:it:doc")
+                    .put("scopes", new JsonArray().add("view")));
+        call("keycloak_authz_policy_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "Readers")
+                    .put("type", "user")
+                    .put("users", new JsonArray().add("it-doc-a")));
+        call("keycloak_authz_permission_create",
+                new JsonObject().put("clientId", c)
+                    .put("name", "View docs")
+                    .put("resources", new JsonArray().add("Doc"))
+                    .put("scopes", new JsonArray().add("view"))
+                    .put("policies", new JsonArray().add("Readers")));
+        JsonObject ask = new JsonObject().put("clientId", c)
+            .put("userId", "it-doc-b")
+            .put("resources", new JsonArray().add("Doc"))
+            .put("scopes", new JsonArray().add("view"));
+        assertEquals("DENY", call("keycloak_authz_evaluate", ask.copy()).getString("decision"));
+        call("keycloak_authz_policy_update",
+                new JsonObject().put("clientId", c)
+                    .put("policy", "Readers")
+                    .put("users", new JsonArray().add("it-doc-b"))
+                    .put("description", "now bob"));
+        assertEquals("PERMIT", call("keycloak_authz_evaluate", ask.copy()).getString("decision"));
+        assertEquals("invalid_arguments",
+                error("keycloak_authz_policy_update",
+                        new JsonObject().put("clientId", c).put("policy", "View docs").put("description", "x"))
+                    .getString("error"),
+                "a permission is updated with authz_permission_update");
+        confirmed("keycloak_user_delete", new JsonObject().put("id", alice).put("username", "it-doc-a"));
+        confirmed("keycloak_user_delete", new JsonObject().put("id", bob).put("username", "it-doc-b"));
+        confirmed("keycloak_client_delete", new JsonObject().put("clientId", c));
+    }
+
+    @Test
+    @Order(24)
+    void identityProviderMetadataChecks() {
+        String issuer = keycloakUrl + "/realms/master";
+        call("keycloak_idp_create",
+                new JsonObject().put("alias", "it-self-oidc")
+                    .put("providerId", "oidc")
+                    .put("config",
+                            new JsonObject().put("clientId", "kc")
+                                .put("clientSecret", "x")
+                                .put("issuer", issuer)
+                                .put("authorizationUrl", issuer + "/protocol/openid-connect/auth")
+                                .put("tokenUrl", issuer + "/protocol/openid-connect/wrong")
+                                .put("validateSignature", "true")
+                                .put("useJwksUrl", "true")
+                                .put("jwksUrl", issuer + "/protocol/openid-connect/certs")));
+        JsonObject oidc = call("keycloak_idp_check", new JsonObject().put("alias", "it-self-oidc"));
+        assertEquals(true, oidc.getBoolean("reachable"), oidc.encode());
+        assertEquals(false, oidc.getBoolean("ok"), "the token URL is wrong: " + oidc.encode());
+        assertEquals("tokenUrl", oidc.getJsonArray("mismatches").getJsonObject(0).getString("setting"), oidc.encode());
+        assertTrue(strings(oidc.getJsonArray("matches")).containsAll(List.of("issuer", "authorizationUrl", "jwksUrl")),
+                oidc.encode());
+        assertFalse(oidc.getJsonObject("jwks").getJsonArray("keys").isEmpty(), oidc.encode());
+        call("keycloak_idp_update", new JsonObject().put("alias", "it-self-oidc")
+            // Keycloak wants the secret again when the token URL changes
+            .put("config", new JsonObject().put("tokenUrl", issuer + "/protocol/openid-connect/token")
+                .put("clientSecret", "x")));
+        assertEquals(true, call("keycloak_idp_check", new JsonObject().put("alias", "it-self-oidc")).getBoolean("ok"));
+
+        call("keycloak_idp_create",
+                new JsonObject().put("alias", "it-self-saml")
+                    .put("providerId", "saml")
+                    .put("config",
+                            new JsonObject().put("metadataDescriptorUrl", issuer + "/protocol/saml/descriptor")
+                                .put("singleSignOnServiceUrl", issuer + "/protocol/saml")
+                                .put("idpEntityId", issuer)
+                                .put("validateSignature", "true")));
+        JsonObject saml = call("keycloak_idp_check", new JsonObject().put("alias", "it-self-saml"));
+        assertEquals(true, saml.getBoolean("ok"), saml.encode());
+        assertTrue(strings(saml.getJsonArray("matches")).containsAll(List.of("idpEntityId", "singleSignOnServiceUrl")),
+                saml.encode());
+        JsonObject cert = saml.getJsonArray("signingCertificates").getJsonObject(0);
+        assertTrue(cert.getLong("daysLeft") > 0, cert.encode());
+
+        call("keycloak_idp_create",
+                new JsonObject().put("alias", "it-github")
+                    .put("providerId", "github")
+                    .put("config", new JsonObject().put("clientId", "x").put("clientSecret", "y")));
+        assertEquals("not_checkable",
+                error("keycloak_idp_check", new JsonObject().put("alias", "it-github")).getString("error"));
+        for (String alias : List.of("it-self-oidc", "it-self-saml", "it-github")) {
+            confirmed("keycloak_idp_delete", new JsonObject().put("alias", alias));
+        }
+    }
 }

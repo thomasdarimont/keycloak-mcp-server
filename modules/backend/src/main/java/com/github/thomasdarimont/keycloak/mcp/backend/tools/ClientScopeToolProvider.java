@@ -179,6 +179,29 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                         .path("client-uuid", "clientId")
                         .path("id", "mapper"))
                     .build(),
+                tool("keycloak_protocol_mapper_update").title("Update protocol mapper")
+                    .description(
+                            "Change a mapper of a client scope or client: its name or config keys (merged; false switches a token off).")
+                    .category(Category.CLIENT_SCOPES)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("edit mapper", "change claim name", "mapper config", "add claim to id token",
+                            "change token claim")
+                    .schema(schema().string("scope", "Client scope name or id; or pass clientId instead")
+                        .string("clientId", "Client whose mapper it is; or pass scope instead")
+                        .string("mapper", "Mapper id or name")
+                        .required()
+                        .string("name", "New mapper name")
+                        .stringMap("config", "Config keys to set, e.g. {\"id.token.claim\": \"true\"}"))
+                    .handler(this::mapperUpdate)
+                    .roles("manage-clients")
+                    .api(put(R + "/client-scopes/{client-scope-id}/protocol-mappers/models/{id}")
+                        .path("client-scope-id", "scope")
+                        .path("id", "mapper"),
+                            put(R + "/clients/{client-uuid}/protocol-mappers/models/{id}")
+                                .path("client-uuid", "clientId")
+                                .path("id", "mapper"))
+                    .build(),
                 tool("keycloak_scope_mappings_get").title("Get role scope mappings")
                     .description(
                             "Roles a client scope, or a client itself, lets into tokens; with fullScopeAllowed for a client.")
@@ -527,6 +550,57 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
             .filter(m -> ref.equals(m.getId()) || ref.equals(m.getName()))
             .findFirst()
             .orElseThrow(() -> ToolException.notFound("Protocol mapper", ref));
+    }
+
+    ToolResult mapperUpdate(ToolCall call) {
+        boolean byScope = call.has("scope");
+        if (byScope == call.has("clientId")) {
+            return ToolResult.error("invalid_arguments", "Pass either scope (a client scope) or clientId (a client).");
+        }
+        ProtocolMappersResource mappers;
+        Map<String, Object> where = new LinkedHashMap<>();
+        if (byScope) {
+            ClientScopeRepresentation s = ClientToolProvider.findScope(call, call.str("scope"));
+            mappers = call.kc().realm(call.realm()).clientScopes().get(s.getId()).getProtocolMappers();
+            where.put("scope", s.getName());
+        }
+        else {
+            ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+            mappers = call.kc().realm(call.realm()).clients().get(c.getId()).getProtocolMappers();
+            where.put("clientId", c.getClientId());
+        }
+        ProtocolMapperRepresentation m = findMapper(mappers, call.str("mapper"));
+        List<String> changed = new ArrayList<>();
+        if (call.has("name")) {
+            m.setName(call.str("name"));
+            changed.add("name");
+        }
+        if (call.has("config")) {
+            Map<String, String> config = m.getConfig() == null ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(m.getConfig());
+            Objects.requireNonNull(call.stringMap("config")).forEach((k, v) -> {
+                if (v == null || v.isEmpty()) {
+                    config.remove(k);
+                }
+                else {
+                    config.put(k, v);
+                }
+            });
+            m.setConfig(config);
+            changed.add("config");
+        }
+        if (changed.isEmpty()) {
+            return ToolResult.error("invalid_arguments", "Nothing to update: pass name or config.");
+        }
+        mappers.update(m.getId(), m);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", true);
+        out.put("message", "Mapper updated");
+        out.putAll(where);
+        out.put("name", m.getName());
+        out.put("changed", changed);
+        out.put("config", m.getConfig());
+        return ToolResult.ok(out);
     }
 
     ToolResult scopeMapperAdd(ToolCall call) {

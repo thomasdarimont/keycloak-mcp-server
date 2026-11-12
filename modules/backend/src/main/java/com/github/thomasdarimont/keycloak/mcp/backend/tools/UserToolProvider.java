@@ -58,6 +58,22 @@ public class UserToolProvider extends AbstractToolProvider {
     @Override
     public List<ToolSpec> tools(ToolProviderContext context) {
         return List.of(
+                tool("keycloak_user_count").title("Count users")
+                    .description(
+                            "How many users match: all, by free text, enabled, email verified, IdP link or attribute.")
+                    .category(Category.USERS)
+                    .read()
+                    .synonyms("how many users", "number of users", "user count", "total users", "statistics")
+                    .schema(schema().string("search", "Free text over username, email, first and last name")
+                        .bool("enabled", "Only enabled (true) or disabled (false) users")
+                        .bool("emailVerified", "Only users whose email is (not) verified")
+                        .string("idpAlias", "Only users linked to this identity provider")
+                        .string("attribute", "Only users with this attribute value, as key:value"))
+                    .handler(this::count)
+                    .roles("query-users")
+                    .api(get(R + "/users/count").query("search", "enabled", "emailVerified", "idpAlias")
+                        .queryAs("q", "attribute"))
+                    .build(),
                 tool("keycloak_user_search").title("Search users")
                     .description("Find users by free text, username or email; returns id, username, email, enabled.")
                     .category(Category.USERS)
@@ -216,6 +232,22 @@ public class UserToolProvider extends AbstractToolProvider {
 
     // ---- handlers
     // -----------------------------------------------------------------------------------------------
+
+    ToolResult count(ToolCall call) {
+        Integer n = call.kc()
+            .realm(call.realm())
+            .users()
+            .count(call.str("search"), null, null, null, call.bool("emailVerified"), null, call.bool("enabled"),
+                    call.str("idpAlias"), null, call.str("attribute"));
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("count", n);
+        for (String filter : List.of("search", "enabled", "emailVerified", "idpAlias", "attribute")) {
+            if (call.has(filter)) {
+                m.put(filter, call.args().get(filter));
+            }
+        }
+        return ToolResult.ok(m);
+    }
 
     ToolResult search(ToolCall call) {
         UsersResource users = call.kc().realm(call.realm()).users();

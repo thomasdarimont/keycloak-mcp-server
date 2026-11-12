@@ -201,7 +201,7 @@ public class IdpToolProvider extends AbstractToolProvider {
         return m;
     }
 
-    private static IdentityProviderRepresentation find(ToolCall call, String alias) {
+    static IdentityProviderRepresentation find(ToolCall call, String alias) {
         try {
             return call.kc().realm(call.realm()).identityProviders().get(alias).toRepresentation();
         }

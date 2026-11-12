@@ -4,10 +4,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import jakarta.ws.rs.core.Response;
 
 import org.keycloak.common.util.MultivaluedHashMap;
 import org.keycloak.representations.idm.ComponentRepresentation;
 import org.keycloak.representations.idm.SynchronizationResultRepresentation;
+import org.keycloak.representations.idm.TestLdapConnectionRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Delegation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
@@ -91,7 +93,64 @@ public class FederationToolProvider extends AbstractToolProvider {
                     .roles("manage-realm")
                     .api(ApiOperation.unspecified("post", R + "/user-storage/{id}/sync",
                             "UserStorageProviderResource is not part of the published OpenAPI document"))
+                    .build(),
+                tool("keycloak_federation_test_connection").title("Test LDAP connection")
+                    .description(
+                            "Check that Keycloak reaches an LDAP provider, and can bind with its stored credentials.")
+                    .category(Category.FEDERATION)
+                    // Keycloak tests through a POST, which a read-only tool may not send;
+                    // it
+                    // changes nothing
+                    .write()
+                    .idempotent(true)
+                    .synonyms("ldap down", "test ldap", "bind failed", "active directory unreachable", "check ldap")
+                    .schema(schema().string("id", PROVIDER_ID)
+                        .required()
+                        .enumeration("check", "connection: reach the server; authentication: also bind (default)",
+                                "connection", "authentication")
+                        .def("authentication"))
+                    .handler(this::testConnection)
+                    .delegation(Delegation.FORBIDDEN)
+                    .roles("manage-realm")
+                    .api(ApiOperation.unspecified("post", R + "/testLDAPConnection",
+                            "the LDAP test endpoint is not part of the published OpenAPI document"))
                     .build());
+    }
+
+    ToolResult testConnection(ToolCall call) {
+        ComponentRepresentation c = find(call, call.str("id"));
+        if (!"ldap".equals(c.getProviderId())) {
+            return ToolResult.error("unsupported", "'" + c.getName() + "' is a " + c.getProviderId()
+                    + " provider; only LDAP connections can be tested.");
+        }
+        var cfg = c.getConfig();
+        TestLdapConnectionRepresentation test = new TestLdapConnectionRepresentation();
+        boolean bind = "authentication".equals(call.str("check", "authentication"));
+        test.setAction(bind ? "testAuthentication" : "testConnection");
+        test.setComponentId(c.getId());
+        test.setConnectionUrl(first(cfg, "connectionUrl"));
+        test.setBindDn(first(cfg, "bindDn"));
+        // the masked value: Keycloak takes the stored credential of componentId
+        test.setBindCredential("**********");
+        test.setAuthType(first(cfg, "authType"));
+        test.setUseTruststoreSpi(first(cfg, "useTruststoreSpi"));
+        test.setConnectionTimeout(first(cfg, "connectionTimeout"));
+        test.setStartTls(first(cfg, "startTls"));
+        try (Response r = call.kc().realm(call.realm()).testLDAPConnection(test)) {
+            if (r.getStatus() < 300) {
+                return ToolResult.ok(Map.of("provider", c.getName(), "check", bind ? "authentication" : "connection",
+                        "ok", true, "connectionUrl", String.valueOf(first(cfg, "connectionUrl"))));
+            }
+            String detail = r.hasEntity() ? r.readEntity(String.class) : "";
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("provider", c.getName());
+            m.put("check", bind ? "authentication" : "connection");
+            m.put("ok", false);
+            m.put("status", r.getStatus());
+            Views.put(m, "error", detail.isBlank() ? null : detail);
+            Views.put(m, "connectionUrl", first(cfg, "connectionUrl"));
+            return ToolResult.ok(m);
+        }
     }
 
     private static List<ComponentRepresentation> providers(ToolCall call) {
