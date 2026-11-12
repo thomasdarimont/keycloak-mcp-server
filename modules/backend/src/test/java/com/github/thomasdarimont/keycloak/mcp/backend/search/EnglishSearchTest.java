@@ -34,7 +34,13 @@ class EnglishSearchTest {
             "rename group, keycloak_group_update", "assign client role to group, keycloak_group_client_role_assign",
             "add user to organization, keycloak_org_member_add", "members of organization, keycloak_org_members_list",
             "service account roles, keycloak_client_service_account_get",
-            "update identity provider, keycloak_idp_update", })
+            "update identity provider, keycloak_idp_update", "enable admin events, keycloak_realm_events_config_update",
+            "are login events saved, keycloak_realm_events_config_get", "realm signing keys, keycloak_realm_keys_list",
+            "add custom user attribute, keycloak_user_profile_attribute_set",
+            "user profile configuration, keycloak_user_profile_get",
+            "change login page text, keycloak_localization_texts_set",
+            "which roles appear in token, keycloak_scope_mappings_get",
+            "enable fapi client policy, keycloak_client_policy_set_enabled", })
     void topHit(String query, String expected) {
         ToolIndex index = new ToolIndex(catalog.all());
         List<SearchHit> hits = index.search(query, null, 5, s -> true);

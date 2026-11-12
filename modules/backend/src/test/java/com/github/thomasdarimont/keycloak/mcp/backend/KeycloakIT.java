@@ -984,4 +984,136 @@ class KeycloakIT {
         confirmed("keycloak_idp_delete", new JsonObject().put("alias", "corp2"));
         confirmed("keycloak_user_delete", new JsonObject().put("id", peterId).put("username", "peter"));
     }
+
+    @Test
+    @Order(18)
+    void realmSettings() {
+        // events: switch admin events on, check, and put the old settings back
+        JsonObject before = call("keycloak_realm_events_config_get", new JsonObject());
+        JsonObject updated = confirmed("keycloak_realm_events_config_update",
+                new JsonObject().put("adminEventsEnabled", true)
+                    .put("eventsEnabled", true)
+                    .put("eventsExpiration", 3600)
+                    .put("enabledEventTypes", new JsonArray().add("LOGIN").add("LOGIN_ERROR")));
+        assertEquals(true, updated.getJsonObject("now").getBoolean("adminEventsEnabled"), updated.encode());
+        assertEquals(3600, updated.getJsonObject("now").getInteger("eventsExpiration"));
+        assertEquals(List.of("LOGIN", "LOGIN_ERROR"),
+                strings(updated.getJsonObject("now").getJsonArray("enabledEventTypes")));
+        confirmed("keycloak_realm_events_config_update",
+                new JsonObject().put("adminEventsEnabled", before.getBoolean("adminEventsEnabled"))
+                    .put("eventsEnabled", before.getBoolean("eventsEnabled"))
+                    .put("eventsExpiration", 0));
+
+        JsonObject keys = call("keycloak_realm_keys_list", new JsonObject().put("activeOnly", true));
+        assertTrue(
+                keys.getJsonArray("items")
+                    .stream()
+                    .map(k -> (JsonObject) k)
+                    .anyMatch(k -> "RS256".equals(k.getString("algorithm")) && "ACTIVE".equals(k.getString("status"))),
+                keys.encode());
+        assertFalse(keys.encode().contains("publicKey") || keys.encode().contains("certificate"), keys.encode());
+
+        // user profile: declare an attribute, change it, drop it
+        JsonObject added = call("keycloak_user_profile_attribute_set",
+                new JsonObject().put("name", "phoneNumber")
+                    .put("displayName", "Phone number")
+                    .put("required", true)
+                    .put("requiredFor", new JsonArray().add("user"))
+                    .put("validations", new JsonObject().put("length", new JsonObject().put("max", 30))));
+        assertEquals("Attribute added to the user profile", added.getString("message"), added.encode());
+        JsonObject profile = call("keycloak_user_profile_get", new JsonObject());
+        JsonObject phone = profile.getJsonArray("attributes")
+            .stream()
+            .map(a -> (JsonObject) a)
+            .filter(a -> "phoneNumber".equals(a.getString("name")))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(List.of("user"), strings(phone.getJsonObject("required").getJsonArray("roles")), phone.encode());
+        assertEquals(30, phone.getJsonObject("validations").getJsonObject("length").getInteger("max"));
+        JsonObject changed = call("keycloak_user_profile_attribute_set",
+                new JsonObject().put("name", "phoneNumber")
+                    .put("required", false)
+                    .put("editableBy", new JsonArray().add("admin")));
+        assertFalse(changed.getJsonObject("attribute").containsKey("required"), changed.encode());
+        assertEquals(List.of("admin"), strings(changed.getJsonObject("attribute").getJsonArray("editableBy")));
+        assertEquals("invalid_arguments",
+                error("keycloak_user_profile_attribute_set",
+                        new JsonObject().put("name", "phoneNumber").put("editableBy", new JsonArray().add("everyone")))
+                    .getString("error"));
+        confirmed("keycloak_user_profile_attribute_delete", new JsonObject().put("name", "phoneNumber"));
+        assertEquals("not_found", error("keycloak_user_profile_attribute_delete",
+                new JsonObject().put("name", "phoneNumber").put("confirm", true))
+            .getString("error"));
+        assertEquals("invalid_arguments", error("keycloak_user_profile_attribute_delete",
+                new JsonObject().put("name", "email").put("confirm", true))
+            .getString("error"));
+        String policy = profile.getString("unmanagedAttributePolicy");
+        call("keycloak_user_profile_unmanaged_set", new JsonObject().put("policy", "ADMIN_EDIT"));
+        assertEquals("ADMIN_EDIT",
+                call("keycloak_user_profile_get", new JsonObject()).getString("unmanagedAttributePolicy"));
+        call("keycloak_user_profile_unmanaged_set", new JsonObject().put("policy", policy));
+
+        // client policies: the realm has none of its own, the global ones are listed on
+        // request
+        JsonObject policies = call("keycloak_client_policies_get", new JsonObject().put("includeGlobal", true));
+        assertFalse(policies.getJsonArray("profiles").isEmpty(), policies.encode());
+        assertEquals("not_found",
+                error("keycloak_client_policy_set_enabled", new JsonObject().put("name", "nope").put("enabled", true))
+                    .getString("error"));
+
+        // translations
+        call("keycloak_localization_texts_set", new JsonObject().put("locale", "en")
+            .put("texts", new JsonObject().put("loginTitle", "Sign in to ACME").put("it.other", "x")));
+        JsonObject texts = call("keycloak_localization_texts_get",
+                new JsonObject().put("locale", "en").put("search", "acme"));
+        assertEquals(1, texts.getInteger("count"), texts.encode());
+        assertEquals("Sign in to ACME", texts.getJsonObject("texts").getString("loginTitle"));
+        assertTrue(strings(call("keycloak_localization_locales_list", new JsonObject()).getJsonArray("withRealmTexts"))
+            .contains("en"));
+        confirmed("keycloak_localization_text_delete",
+                new JsonObject().put("locale", "en").put("message", "loginTitle"));
+        confirmed("keycloak_localization_text_delete", new JsonObject().put("locale", "en").put("message", "it.other"));
+        assertEquals(0,
+                call("keycloak_localization_texts_get", new JsonObject().put("locale", "en")).getInteger("count"));
+    }
+
+    @Test
+    @Order(19)
+    void roleScopeMappings() {
+        call("keycloak_role_create", new JsonObject().put("name", "it-scoped"));
+        call("keycloak_client_create", new JsonObject().put("clientId", "it-scoped-app"));
+        call("keycloak_client_role_create", new JsonObject().put("clientId", "it-scoped-app").put("name", "reader"));
+        call("keycloak_client_scope_create", new JsonObject().put("name", "it-scope"));
+
+        JsonObject added = call("keycloak_scope_mapping_add",
+                new JsonObject().put("clientId", "it-scoped-app").put("role", "it-scoped"));
+        assertTrue(added.getString("hint").contains("fullScopeAllowed"), added.encode());
+        call("keycloak_client_update",
+                new JsonObject().put("clientId", "it-scoped-app").put("fullScopeAllowed", false));
+        JsonObject own = call("keycloak_scope_mappings_get", new JsonObject().put("clientId", "it-scoped-app"));
+        assertEquals(false, own.getBoolean("fullScopeAllowed"), own.encode());
+        assertEquals(List.of("it-scoped"), strings(own.getJsonArray("realmRoles")));
+        assertEquals(false, call("keycloak_client_get", new JsonObject().put("clientId", "it-scoped-app"))
+            .getBoolean("fullScopeAllowed"));
+
+        call("keycloak_scope_mapping_add",
+                new JsonObject().put("scope", "it-scope").put("role", "reader").put("roleClientId", "it-scoped-app"));
+        JsonObject scope = call("keycloak_scope_mappings_get", new JsonObject().put("scope", "it-scope"));
+        assertEquals(List.of("reader"), strings(scope.getJsonObject("clientRoles").getJsonArray("it-scoped-app")),
+                scope.encode());
+        confirmed("keycloak_scope_mapping_remove",
+                new JsonObject().put("scope", "it-scope").put("role", "reader").put("roleClientId", "it-scoped-app"));
+        assertTrue(call("keycloak_scope_mappings_get", new JsonObject().put("scope", "it-scope"))
+            .getJsonObject("clientRoles")
+            .isEmpty());
+        confirmed("keycloak_scope_mapping_remove",
+                new JsonObject().put("clientId", "it-scoped-app").put("role", "it-scoped"));
+        assertEquals("invalid_arguments", error("keycloak_scope_mappings_get",
+                new JsonObject().put("clientId", "it-scoped-app").put("scope", "it-scope"))
+            .getString("error"));
+
+        confirmed("keycloak_client_scope_delete", new JsonObject().put("scope", "it-scope"));
+        confirmed("keycloak_client_delete", new JsonObject().put("clientId", "it-scoped-app"));
+        confirmed("keycloak_role_delete", new JsonObject().put("role", "it-scoped"));
+    }
 }

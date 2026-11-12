@@ -5,14 +5,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
+import java.util.function.Function;
 
 import org.keycloak.admin.client.resource.ClientScopeResource;
 import org.keycloak.admin.client.resource.ProtocolMappersResource;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.RoleMappingResource;
+import org.keycloak.admin.client.resource.RoleScopeResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.ProtocolMapperRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
 
+import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
@@ -171,7 +177,70 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                     .api(delete(R + "/clients/{client-uuid}/protocol-mappers/models/{id}")
                         .path("client-uuid", "clientId")
                         .path("id", "mapper"))
+                    .build(),
+                tool("keycloak_scope_mappings_get").title("Get role scope mappings")
+                    .description(
+                            "Roles a client scope, or a client itself, lets into tokens; with fullScopeAllowed for a client.")
+                    .category(Category.CLIENT_SCOPES)
+                    .read()
+                    .synonyms("role scope", "roles in token", "full scope allowed", "dedicated scope",
+                            "which roles appear in token")
+                    .schema(mappingTarget(schema()))
+                    .handler(this::scopeMappings)
+                    .roles("view-clients")
+                    .api(get(R + "/client-scopes/{client-scope-id}/scope-mappings/realm").path("client-scope-id",
+                            "scope"),
+                            get(R + "/client-scopes/{client-scope-id}/scope-mappings/clients/{client}")
+                                .path("client-scope-id", "scope")
+                                .derivedPath("client"),
+                            get(R + "/clients/{client-uuid}/scope-mappings/realm").path("client-uuid", "clientId"),
+                            get(R + "/clients/{client-uuid}/scope-mappings/clients/{client}")
+                                .path("client-uuid", "clientId")
+                                .derivedPath("client"))
+                    .build(),
+                tool("keycloak_scope_mapping_add").title("Add role scope mapping")
+                    .description(
+                            "Let a role into the tokens of a client scope or client; needs fullScopeAllowed=false to matter.")
+                    .category(Category.CLIENT_SCOPES)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("allow role in token", "role scope", "restrict roles in token", "scope mapping")
+                    .schema(mappingRole(mappingTarget(schema())))
+                    .handler(this::scopeMappingAdd)
+                    .roles("manage-clients")
+                    .api(mappingOps("post"))
+                    .build(),
+                tool("keycloak_scope_mapping_remove").title("Remove role scope mapping")
+                    .description("Keep a role out of the tokens of a client scope or client.")
+                    .category(Category.CLIENT_SCOPES)
+                    .destructive()
+                    .synonyms("remove role from token", "role scope", "scope mapping")
+                    .schema(mappingRole(mappingTarget(schema())))
+                    .handler(this::scopeMappingRemove)
+                    .roles("manage-clients")
+                    .api(mappingOps("delete"))
                     .build());
+    }
+
+    private static InputSchema.Builder mappingTarget(InputSchema.Builder b) {
+        return b.string("scope", "Client scope name or id; or pass clientId instead")
+            .string("clientId", "The client whose own (dedicated) scope it is; or pass scope instead");
+    }
+
+    private static InputSchema.Builder mappingRole(InputSchema.Builder b) {
+        return b.string("role", "Role name: a realm role, or a role of roleClientId")
+            .required()
+            .string("roleClientId", "Client of the role, when it is a client role");
+    }
+
+    private static ApiOperation[] mappingOps(String method) {
+        String cs = R + "/client-scopes/{client-scope-id}/scope-mappings";
+        String c = R + "/clients/{client-uuid}/scope-mappings";
+        Function<String, ApiOperation> op = path -> "post".equals(method) ? post(path) : delete(path);
+        return new ApiOperation[] { op.apply(cs + "/realm").path("client-scope-id", "scope"),
+                op.apply(cs + "/clients/{client}").path("client-scope-id", "scope").path("client", "roleClientId"),
+                op.apply(c + "/realm").path("client-uuid", "clientId"),
+                op.apply(c + "/clients/{client}").path("client-uuid", "clientId").path("client", "roleClientId") };
     }
 
     private static InputSchema.Builder scopeFields(InputSchema.Builder b) {
@@ -341,6 +410,88 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
         setRealmDefault(realm, s.getId(), "none");
         realm.clientScopes().get(s.getId()).remove();
         return ToolResult.done("Client scope deleted", "id", s.getId(), "name", s.getName());
+    }
+
+    /** The scope mappings of the client scope or client the call names. */
+    private static RoleMappingResource mappings(ToolCall call, Map<String, Object> out) {
+        boolean byScope = call.has("scope");
+        if (byScope == call.has("clientId")) {
+            throw new ToolException("invalid_arguments", "Pass either scope (a client scope) or clientId (a client).");
+        }
+        RealmResource realm = call.kc().realm(call.realm());
+        if (byScope) {
+            ClientScopeRepresentation s = ClientToolProvider.findScope(call, call.str("scope"));
+            out.put("scope", s.getName());
+            return realm.clientScopes().get(s.getId()).getScopeMappings();
+        }
+        ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
+        out.put("clientId", c.getClientId());
+        out.put("fullScopeAllowed", Boolean.TRUE.equals(c.isFullScopeAllowed()));
+        return realm.clients().get(c.getId()).getScopeMappings();
+    }
+
+    ToolResult scopeMappings(ToolCall call) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        RoleMappingResource mappings = mappings(call, m);
+        Map<String, List<String>> clientRoles = new TreeMap<>();
+        // the combined read is deprecated: the realm level, then each client's
+        m.put("realmRoles", names(mappings.realmLevel().listAll()));
+        for (ClientRepresentation c : call.kc().realm(call.realm()).clients().findAll()) {
+            List<String> roles = names(mappings.clientLevel(c.getId()).listAll());
+            if (!roles.isEmpty()) {
+                clientRoles.put(c.getClientId(), roles);
+            }
+        }
+        m.put("clientRoles", clientRoles);
+        if (Boolean.TRUE.equals(m.get("fullScopeAllowed"))) {
+            m.put("hint", "fullScopeAllowed is on: every role of the user goes into the token, mappings or not.");
+        }
+        return ToolResult.ok(m);
+    }
+
+    private static List<String> names(List<RoleRepresentation> roles) {
+        return roles == null ? List.of() : roles.stream().map(RoleRepresentation::getName).sorted().toList();
+    }
+
+    private ToolResult changeMapping(ToolCall call, boolean add) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        RoleMappingResource mappings = mappings(call, m);
+        RoleRepresentation role;
+        RoleScopeResource level;
+        if (call.has("roleClientId")) {
+            ClientRepresentation rc = call.kc().findClient(call.realm(), call.str("roleClientId"));
+            role = RoleToolProvider.clientRole(call.kc(), call.realm(), rc.getId(), call.str("role"));
+            level = mappings.clientLevel(rc.getId());
+            m.put("role", rc.getClientId() + "/" + role.getName());
+        }
+        else {
+            role = RoleToolProvider.realmRole(call.kc(), call.realm(), call.str("role"));
+            level = mappings.realmLevel();
+            m.put("role", role.getName());
+        }
+        if (add) {
+            level.add(List.of(role));
+        }
+        else {
+            level.remove(List.of(role));
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", true);
+        result.put("message", add ? "Role scope mapping added" : "Role scope mapping removed");
+        result.putAll(m);
+        if (add && Boolean.TRUE.equals(m.get("fullScopeAllowed"))) {
+            result.put("hint", "fullScopeAllowed is on, so the mapping has no effect until keycloak_client_update "
+                    + "fullScopeAllowed=false.");
+        }
+        return ToolResult.ok(result);
+    }
+
+    ToolResult scopeMappingAdd(ToolCall call) {
+        return changeMapping(call, true);
+    }
+
+    ToolResult scopeMappingRemove(ToolCall call) {
+        return changeMapping(call, false);
     }
 
     /**

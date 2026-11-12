@@ -130,7 +130,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .api(post(R + "/clients").body("ClientRepresentation", "clientId", "protocol", "name",
                             "description", "enabled", "publicClient", "redirectUris", "webOrigins", "rootUrl",
                             "baseUrl", "standardFlowEnabled", "implicitFlowEnabled", "directAccessGrantsEnabled",
-                            "serviceAccountsEnabled", "bearerOnly", "attributes"))
+                            "serviceAccountsEnabled", "bearerOnly", "fullScopeAllowed", "attributes"))
                     .build(),
                 tool("keycloak_client_update").title("Update client")
                     .description("Change client settings; omitted fields stay, lists replace the old list.")
@@ -144,7 +144,8 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .api(put(R + "/clients/{client-uuid}").path("client-uuid", "clientId")
                         .body("ClientRepresentation", "name", "description", "enabled", "publicClient", "redirectUris",
                                 "webOrigins", "rootUrl", "baseUrl", "standardFlowEnabled", "implicitFlowEnabled",
-                                "directAccessGrantsEnabled", "serviceAccountsEnabled", "bearerOnly", "attributes"))
+                                "directAccessGrantsEnabled", "serviceAccountsEnabled", "bearerOnly", "fullScopeAllowed",
+                                "attributes"))
                     .build(),
                 tool("keycloak_client_delete").title("Delete client")
                     .description("Permanently delete a client and its roles, mappers and service account.")
@@ -356,6 +357,8 @@ public class ClientToolProvider extends AbstractToolProvider {
             .bool("serviceAccountsEnabled", "Client credentials grant / service account")
             .bool("pkce", "Require PKCE with S256")
             .bool("bearerOnly", "Bearer-only (resource server, no login)")
+            .bool("fullScopeAllowed",
+                    "Put all the user's roles into tokens (default true); false: only the scope mappings")
             .bool("authorizationServicesEnabled",
                     "Authorization services (fine-grained permissions, UMA); " + "needs a confidential client")
             .stringMap("attributes",
@@ -380,6 +383,7 @@ public class ClientToolProvider extends AbstractToolProvider {
         Map<String, Object> m = Views.client(c);
         Views.put(m, "description", c.getDescription());
         Views.put(m, "bearerOnly", c.isBearerOnly());
+        Views.put(m, "fullScopeAllowed", c.isFullScopeAllowed());
         Views.put(m, "standardFlowEnabled", c.isStandardFlowEnabled());
         Views.put(m, "implicitFlowEnabled", c.isImplicitFlowEnabled());
         Views.put(m, "directAccessGrantsEnabled", c.isDirectAccessGrantsEnabled());
@@ -515,6 +519,10 @@ public class ClientToolProvider extends AbstractToolProvider {
         if (call.has("bearerOnly")) {
             c.setBearerOnly(call.bool("bearerOnly"));
             changed.add("bearerOnly");
+        }
+        if (call.has("fullScopeAllowed")) {
+            c.setFullScopeAllowed(call.bool("fullScopeAllowed"));
+            changed.add("fullScopeAllowed");
         }
         if (call.has("authorizationServicesEnabled")) {
             c.setAuthorizationServicesEnabled(call.bool("authorizationServicesEnabled"));

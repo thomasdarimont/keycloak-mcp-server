@@ -133,7 +133,14 @@ class CatalogLintTest {
             "keycloak_user_brute_force_get", "keycloak_user_brute_force_clear", "keycloak_user_consents_list",
             "keycloak_user_consent_revoke", "keycloak_user_offline_sessions_list", "keycloak_client_sessions_list",
             "keycloak_org_update", "keycloak_org_members_list", "keycloak_org_member_add", "keycloak_org_member_remove",
-            "keycloak_idp_update", "keycloak_idp_mapper_create", "keycloak_idp_mapper_delete");
+            "keycloak_idp_update", "keycloak_idp_mapper_create", "keycloak_idp_mapper_delete",
+            // realm settings and role scope mappings
+            "keycloak_realm_events_config_get", "keycloak_realm_events_config_update", "keycloak_realm_keys_list",
+            "keycloak_user_profile_get", "keycloak_user_profile_attribute_set",
+            "keycloak_user_profile_attribute_delete", "keycloak_user_profile_unmanaged_set",
+            "keycloak_client_policies_get", "keycloak_client_policy_set_enabled", "keycloak_localization_locales_list",
+            "keycloak_localization_texts_get", "keycloak_localization_texts_set", "keycloak_localization_text_delete",
+            "keycloak_scope_mappings_get", "keycloak_scope_mapping_add", "keycloak_scope_mapping_remove");
 
     static Set<String> referenceNames() throws IOException {
         Path file = Path.of("src/test/resources/reference-tool-names.txt");

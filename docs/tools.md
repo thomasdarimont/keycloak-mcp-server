@@ -44,15 +44,16 @@ How the server presents its tools to a model, which tools exist, and the prompts
 | category        | tools |
 |-----------------|-------|
 | users, sessions | search, get, create, update, set_enabled, delete, reset_password, send_action_email, sessions_list, logout, credentials_list, credential_delete (by id, label or unique type; no secrets shown), brute_force_get/clear (lockout), consents_list, consent_revoke, offline_sessions_list, client_sessions_list |
+| user profile    | user_profile_get, user_profile_attribute_set (create or change: label, required, who views/edits, validations), user_profile_attribute_delete, user_profile_unmanaged_set |
 | groups          | list (search matches subgroups), get (granted roles incl. inherited), create, update (rename, attributes), delete, members_list, member_add, member_remove, user_groups_list, role_assign/unassign, client_role_assign/unassign |
 | roles           | role_list, role_get (attributes, included roles), role_create/update/delete, role_composite_add/remove, client_roles_list, client_role_create/delete, user_roles_get (direct + effective realm and client roles, groups, source per role), user_role_assign/unassign, user_client_roles_get, user_client_role_assign/unassign |
-| clients, scopes | list, get, get_secret, service_account_get, regenerate_secret, create, update (incl. `attributes`: ACR/LoA, logout URIs, lifespans), delete, mappers_list, mapper_add/delete, scopes_list, scope_get/create/update/delete (realm default type), scope_mapper_add/delete (OIDC mappers default to all tokens, an audience to the access token), default_scopes_get, scope_assign/unassign, example_token (access/ID token, userinfo or SAML response, like the console's *Evaluate*), evaluate_scopes, authz_resources_list, authz_policies_list, authz_permissions_list |
+| clients, scopes | list, get, get_secret, service_account_get, regenerate_secret, create, update (incl. `attributes`: ACR/LoA, logout URIs, lifespans), delete, mappers_list, mapper_add/delete, scopes_list, scope_get/create/update/delete (realm default type), scope_mapper_add/delete (OIDC mappers default to all tokens, an audience to the access token), default_scopes_get, scope_assign/unassign, scope_mappings_get, scope_mapping_add/remove (role scope of a client scope or of a client; `client_update fullScopeAllowed=false` makes them count), client_policies_get, client_policy_set_enabled, example_token (access/ID token, userinfo or SAML response, like the console's *Evaluate*), evaluate_scopes, authz_resources_list, authz_policies_list, authz_permissions_list |
 | idp             | list, get, update (config merged; a masked secret echoed back is kept), mappers_list, mapper_create, mapper_delete, create, delete |
 | orgs            | list, get, create, update, delete, members_list, member_add, member_remove, idp_list, idp_link, idp_unlink |
 | federation      | list, get, sync |
 | auth flows      | flows_list, executions_list, authenticator_providers_list, flow_create/copy/bind, execution_add/update/raise/lower/delete, execution_config_get/set (provider setting names and help), subflow_add, required_actions_list, required_action_set_enabled |
-| events          | events_login, events_admin |
-| realm           | server_info (version per system), server_features (all flags, or one by name), realm_get_config, realm_update |
+| events          | events_login, events_admin, realm_events_config_get, realm_events_config_update (destructive: it can switch recording off) |
+| realm           | server_info (version per system), server_features (all flags, or one by name), realm_get_config, realm_update, realm_keys_list (no key material), localization_locales_list, localization_texts_get/set, localization_text_delete |
 
 ## Prompts
 
