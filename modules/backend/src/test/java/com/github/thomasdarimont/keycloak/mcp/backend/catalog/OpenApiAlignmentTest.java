@@ -3,8 +3,11 @@ package com.github.thomasdarimont.keycloak.mcp.backend.catalog;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -55,6 +58,7 @@ class OpenApiAlignmentTest {
         List<String> problems = new ArrayList<>();
         Map<String, Set<String>> unexposed = new TreeMap<>();
         List<String> unspecified = new ArrayList<>();
+        Set<String> bindings = new TreeSet<>();
         int operations = 0;
 
         for (ToolSpec tool : catalog.all()) {
@@ -73,6 +77,7 @@ class OpenApiAlignmentTest {
                     unspecified.add(where + " (" + op.unspecified() + ")");
                     continue;
                 }
+                bindings.add(op.method() + " " + op.path());
                 JsonObject pathItem = paths.getJsonObject(op.path());
                 JsonObject operation = pathItem == null ? null : pathItem.getJsonObject(op.method());
                 if (operation == null) {
@@ -167,8 +172,69 @@ class OpenApiAlignmentTest {
                 "OpenAPI " + VERSION + ": " + operations + " operations checked across " + catalog.size() + " tools");
         unspecified.forEach(u -> System.out.println("  not in spec: " + u));
         unexposed.forEach((t, ps) -> System.out.println("  " + t + " does not expose " + ps));
+        writeCoverage(paths, bindings);
         assertTrue(problems.isEmpty(),
                 "OpenAPI " + VERSION + " alignment problems:\n  " + String.join("\n  ", problems));
+    }
+
+    static final Set<String> METHODS = Set.of("get", "put", "post", "delete", "patch", "head", "options");
+
+    /**
+     * The other direction, reported and not failed: the spec's operations no tool binds,
+     * by tag, in {@code target/openapi-coverage-<version>.txt}. Deprecated operations are
+     * counted apart, as no tool may bind them.
+     */
+    private static void writeCoverage(JsonObject paths, Set<String> bound) throws IOException {
+        Map<String, List<String>> missing = new TreeMap<>();
+        Map<String, int[]> perTag = new TreeMap<>();
+        int total = 0;
+        int covered = 0;
+        int deprecated = 0;
+        for (String path : new TreeSet<>(paths.fieldNames())) {
+            JsonObject item = paths.getJsonObject(path);
+            for (String method : new TreeSet<>(item.fieldNames())) {
+                if (!METHODS.contains(method)) {
+                    continue;
+                }
+                JsonObject operation = item.getJsonObject(method);
+                if (Boolean.TRUE.equals(operation.getBoolean("deprecated"))) {
+                    deprecated++;
+                    continue;
+                }
+                JsonArray tags = operation.getJsonArray("tags", new JsonArray());
+                String tag = tags.isEmpty() ? "(untagged)" : tags.getString(0);
+                int[] counts = perTag.computeIfAbsent(tag, k -> new int[2]);
+                total++;
+                counts[0]++;
+                if (bound.contains(method + " " + path)) {
+                    covered++;
+                    counts[1]++;
+                }
+                else {
+                    missing.computeIfAbsent(tag, k -> new ArrayList<>())
+                        .add(method.toUpperCase(Locale.ROOT) + " " + path);
+                }
+            }
+        }
+        StringBuilder out = new StringBuilder();
+        out.append("OpenAPI ")
+            .append(VERSION)
+            .append(": ")
+            .append(covered)
+            .append(" of ")
+            .append(total)
+            .append(" operations bound by a tool (")
+            .append(deprecated)
+            .append(" deprecated not counted)\n\n");
+        perTag.forEach((tag, c) -> out.append(String.format("%-36s %3d / %3d%n", tag, c[1], c[0])));
+        missing.forEach((tag, ops) -> {
+            out.append("\n").append(tag).append(" (").append(ops.size()).append(" unbound)\n");
+            ops.forEach(o -> out.append("  ").append(o).append('\n'));
+        });
+        Path file = Path.of("target", "openapi-coverage-" + VERSION + ".txt");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, out);
+        System.out.println("  coverage: " + covered + " / " + total + " operations, report in " + file);
     }
 
     private static void collectParams(JsonArray params, Map<String, JsonObject> out) {
