@@ -29,3 +29,5 @@ delet = "delet"
 disabl = "disabl"
 # the misspelled setting the unknown-key tests of the extension settings write on purpose
 mdoe = "mdoe"
+# the misspelled argument key the prompt file test writes on purpose
+requierd = "requierd"
