@@ -102,8 +102,18 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends Extension> List<T> extensions(Class<T> type) {
-        return (List<T>) byType.computeIfAbsent(type,
-                t -> prepare(type, discovery == null ? List.of() : discovery.discover(type)));
+        List<?> known = byType.get(type);
+        if (known != null) {
+            return (List<T>) known;
+        }
+        // not computeIfAbsent: preparing an extension may ask for the extensions of
+        // another type (the CIBA confirmer asks for the PendingApprovalStore), and a
+        // nested computeIfAbsent on the same map fails with "Recursive update" whenever
+        // both keys share a bin. Two callers racing here prepare twice; admitting is
+        // decided once per extension, and the first list published wins.
+        List<T> prepared = prepare(type, discovery == null ? List.of() : discovery.discover(type));
+        List<?> published = byType.putIfAbsent(type, prepared);
+        return (List<T>) (published != null ? published : prepared);
     }
 
     /** Deduplicates by id, drops the disabled, sorts by order then id. */
