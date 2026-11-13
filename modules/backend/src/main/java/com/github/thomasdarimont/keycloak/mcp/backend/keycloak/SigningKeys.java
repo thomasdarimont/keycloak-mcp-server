@@ -31,7 +31,8 @@ import io.vertx.core.json.JsonObject;
  * or {@code keystore-file}) serves every system; without one, each system signs with its
  * own key from the {@link KeyVault} (a registered one, else the read-only
  * {@link FileKeyVault} with provisioned PEM files), created on first use only when the
- * vault can create keys, and published at {@code /auth/keys/<system>/jwks.json}.
+ * vault can create keys, and published at {@code /auth/keys/<key set>/jwks.json}
+ * ({@link #keySet}).
  * <p>
  * Several instances of the server may share one vault (the database). The signer of a
  * system is therefore checked against the vault whenever a token is requested (one
@@ -132,6 +133,18 @@ public class SigningKeys {
     }
 
     /**
+     * The name a system's keys go by in the vault and in its JWKS path
+     * ({@code /auth/keys/<key set>/jwks.json}): the stored system's id when the vault
+     * creates keys, so a system registered again under a deleted one's name starts with
+     * keys and a JWKS URL of its own, and the trust Keycloak placed in the old ones ends
+     * with them; else the name (configured systems, keys provisioned as
+     * {@code <name>.pem}).
+     */
+    public String keySet(KeycloakSystem system) {
+        return vault.supportsKeyCreation() ? system.id().orElse(system.name()) : system.name();
+    }
+
+    /**
      * The signer for a system: the configured key, else the system's own current key from
      * the vault, which is read again on every call (a token request) so a rotation done
      * by another instance is picked up; the signer object is reused while the key is the
@@ -142,9 +155,9 @@ public class SigningKeys {
         if (configuredKey()) {
             return configured();
         }
-        String name = system.name();
+        String name = keySet(system);
         SigningKey key = resolve(vault, name).orElseThrow(() -> new IllegalStateException(
-                "[" + name + "] no private_key_jwt signing key in the read-only KeyVault '" + vault.id()
+                "[" + system.name() + "] no private_key_jwt signing key in the read-only KeyVault '" + vault.id()
                         + "': provision one for this system (or use a vault that can create keys)"));
         JwtSigner cached = perSystem.get(name);
         if (cached != null && sameKey(cached, key)) {
@@ -159,7 +172,7 @@ public class SigningKeys {
             }
             JwtSigner signer = new JwtSigner(key.privateKey(), key.publicKey(), key.algorithm(), key.keyId());
             perSystem.put(name, signer);
-            LOG.infof("[%s] private_key_jwt key %s from %s%s", name, signer.jwk().getString("kid"), vault.id(),
+            LOG.infof("[%s] private_key_jwt key %s from %s%s", system.name(), signer.jwk().getString("kid"), vault.id(),
                     cached == null ? "" : " (rotated elsewhere, previous kid " + cached.jwk().getString("kid") + ")");
             return signer;
         }
@@ -182,12 +195,13 @@ public class SigningKeys {
         if (configuredKey()) {
             return Optional.of(jwks(configured()));
         }
-        List<SigningKey> published = vault.publishedSigningKeys(system.name());
+        String name = keySet(system);
+        List<SigningKey> published = vault.publishedSigningKeys(name);
         if (published.isEmpty()) {
-            if (resolve(vault, system.name()).isEmpty()) {
+            if (resolve(vault, name).isEmpty()) {
                 return Optional.empty();
             }
-            published = vault.publishedSigningKeys(system.name());
+            published = vault.publishedSigningKeys(name);
         }
         JsonArray keys = new JsonArray();
         for (SigningKey key : published) {
@@ -215,15 +229,15 @@ public class SigningKeys {
      */
     public boolean awaitsFirstKey(KeycloakSystem system) {
         return system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT && !configuredKey() && vault.supportsKeyCreation()
-                && vault.findSigningKey(system.name()).isEmpty();
+                && vault.findSigningKey(keySet(system)).isEmpty();
     }
 
     /**
      * The current key of a system from the vault without creating one; empty for a system
      * without a key (and always when one configured key serves every system).
      */
-    public Optional<SigningKey> currentKey(String system) {
-        return configuredKey() ? Optional.empty() : vault.findSigningKey(system);
+    public Optional<SigningKey> currentKey(KeycloakSystem system) {
+        return configuredKey() ? Optional.empty() : vault.findSigningKey(keySet(system));
     }
 
     /**
@@ -235,24 +249,39 @@ public class SigningKeys {
      * @throws UnsupportedOperationException when the vault is read-only or one configured
      * key serves every system
      */
-    public SigningKey rotate(String system) {
+    public SigningKey rotate(KeycloakSystem system) {
         if (configuredKey()) {
             throw new UnsupportedOperationException("One configured key (kc-mcp.jwt.key-file) serves every system");
         }
         if (!vault.supportsKeyCreation()) {
-            throw new UnsupportedOperationException(
-                    "KeyVault '" + vault.id() + "' is read-only: provision the new key for '" + system + "' there");
+            throw new UnsupportedOperationException("KeyVault '" + vault.id()
+                    + "' is read-only: provision the new key for '" + system.name() + "' there");
         }
-        SigningKey key = vault.createSigningKey(system);
-        perSystem.put(system, new JwtSigner(key.privateKey(), key.publicKey(), key.algorithm(), key.keyId()));
-        LOG.infof("[%s] private_key_jwt key rotated in %s", system, vault.id());
+        String name = keySet(system);
+        SigningKey key = vault.createSigningKey(name);
+        perSystem.put(name, new JwtSigner(key.privateKey(), key.publicKey(), key.algorithm(), key.keyId()));
+        LOG.infof("[%s] private_key_jwt key rotated in %s", system.name(), vault.id());
         return key;
     }
 
-    /** Drops the cached signer of a removed system; its key stays in the vault. */
-    public void forget(String system) {
-        perSystem.remove(system);
-        perSystemLocks.remove(system);
+    /** Drops the cached signer of a system that changed or went away. */
+    public void forget(KeycloakSystem system) {
+        String name = keySet(system);
+        perSystem.remove(name);
+        perSystemLocks.remove(name);
+    }
+
+    /**
+     * Removes the keys of a deleted system from a creating vault: its JWKS answers 404
+     * from now on, so Keycloak refuses assertions in its name until a client is set up
+     * again. A read-only vault keeps what operations provisioned.
+     */
+    public void removeKeys(KeycloakSystem system) {
+        forget(system);
+        if (!configuredKey() && vault.supportsKeyCreation()) {
+            int removed = vault.deleteSigningKeys(keySet(system));
+            LOG.infof("[%s] %d private_key_jwt key(s) removed from %s", system.name(), removed, vault.id());
+        }
     }
 
     /** The JWK Set of the configured key; empty when every system has its own. */

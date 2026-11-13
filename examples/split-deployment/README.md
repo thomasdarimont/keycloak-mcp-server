@@ -27,7 +27,7 @@ The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client and `m
 ## What `demo.sh` shows
 
 1. `acme` is registered on the admin instance, and its key pair is generated there. Keycloak fetches the JWKS from
-   the admin instance (`http://admin:8081/auth/keys/acme/jwks.json`). The MCP instance signs with the same key,
+   the admin instance (`http://admin:8081/auth/keys/<id>/jwks.json`, `signingKey.jwksPath` of the registration). The MCP instance signs with the same key,
    which it reads from the database.
 2. The MCP instance knows `acme` only through the database, within `cache-seconds` (10). alice and sam call tools with
    their own tokens; sam's write is `forbidden` by Keycloak.

@@ -54,8 +54,12 @@ kc-mcp.default-system=prod
 Credentials by convention, no secret per tenant:
 
 - Each system registers a confidential client (e.g. `keycloak-mcp-server`): service account, "Signed JWT", JWKS URL
-  `https://<this server>/auth/keys/<system>/jwks.json`, the `realm-management` roles needed.
+  `https://<this server>/auth/keys/<key set>/jwks.json`, the `realm-management` roles needed.
 - The server signs with a key pair per system from a `KeyVault`, publishes the public half at that URL.
+- The key set is a stored system's id when the vault creates keys, else the system's name (provisioned
+  `<alias>.pem`). Deleting a stored system removes its keys, so its JWKS answers 404; a new system of the same name
+  gets another id, key and URL and inherits none of the trust Keycloak placed in the old one. The client in Keycloak
+  stays until it is deleted there.
 - Built-in vault: read-only PKCS#8 PEM files under `kc-mcp.keys-dir` (default `data/keys`, next to `quarkus-run.jar`
   when packaged): `<system>.pem`, secrets as `secrets/<name>` files.
 - Own `KeyVault`: `findSigningKey`, `createSigningKey` when `supportsKeyCreation()`, `findSecret`, `putSecret` when
@@ -115,7 +119,7 @@ instances on the same database ([Several instances](storage.md#several-instances
 - `signingKey`: `generate` (new pair in a creating vault), `existing` (vault already has one), absent (existing, else generate).
 - `"clientSecret": "vault:<name>"`: checked on registration, resolved on every connection; rotating the secret needs no
   system change.
-- Response: no secrets; `kid`, `jwksPath` (`/auth/keys/<alias>/jwks.json`), `jwksUrl`, entries, `createdAt` /
+- Response: no secrets; `kid`, `jwksPath` (`/auth/keys/<id>/jwks.json`), `jwksUrl`, entries, `createdAt` /
   `updatedAt` (ISO-8601, from repositories that keep them: the database, not the static configuration).
 - `GET /admin/systems[/<alias>]`: all systems with `source` repository (configured ones read-only). `DELETE`: removes a
   registered system, keys stay. `POST /admin/systems/<alias>/signing-key`: rotates; JWKS lists the new key first, keeps
@@ -171,26 +175,54 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
            "defaultRealm": "acme", "allowedRealms": ["acme"], "signingKey": "generate" }'
    ```
 
-   The answer carries no secret: `signingKey.kid`, `signingKey.jwksPath` (`/auth/keys/acme/jwks.json`) and
+   The answer carries no secret: `signingKey.kid`, `signingKey.jwksPath` (`/auth/keys/<id>/jwks.json`) and
    `signingKey.jwksUrl`, the full URL as the caller reached the server, so an internal hostname needs
    `X-Forwarded-Proto` and `X-Forwarded-Host` from the proxy to come out right. The JWKS is public and lists the
    current key, after a rotation also the retired one for the grace period.
 3. **Client in Keycloak**, in the realm named as `authRealm`: a confidential client `keycloak-mcp-server` with
    *Service accounts roles* on and the `realm-management` roles (or master `admin`) it needs; under *Credentials*
-   choose *Signed JWT*, switch *Use JWKS URL* on and enter `https://mcp.example.com/auth/keys/acme/jwks.json`. On
+   choose *Signed JWT*, switch *Use JWKS URL* on and enter `jwksUrl` from the answer (`https://mcp.example.com/auth/keys/<id>/jwks.json`). On
    Keycloak 26.8.2 and later add the client scope `kc-admin-api` as a default scope. Keycloak fetches the key on the
    first token request and again whenever it meets an unknown `kid`.
 4. **Check.** `GET /admin/systems/acme` shows the system with `source: db`; a call to
    `/mcp/systems/acme` (`whoami`) runs as the new service account. A failing token request answers
    `keycloak_unreachable` or `unauthorized` with the Keycloak error: `invalid_client` usually means the JWKS URL is
-   not reachable from Keycloak or the `kid` is unknown, `Invalid token audience` that `issuer` must be set because
-   the server reaches Keycloak at an internal URL.
+   not reachable from Keycloak or the `kid` is unknown, `Invalid token audience` that `issuer` is wrong or missing:
+   it is the auth realm's issuer (`https://sso.example.com/realms/master`, not the base URL; a save refuses anything
+   else with `invalid_issuer`), needed only when the server reaches Keycloak at an internal URL.
 5. **Rotate** with `POST /admin/systems/acme/signing-key`: the JWKS lists the new key first and keeps the retired one
    for `kc-mcp.spi.key-vault.db.retired-key-grace-seconds`, so Keycloak switches without a gap.
 
+### Adopting a Keycloak's realms
+
+Register the system first (step 2 above), then:
+
+- `GET /admin/systems/<alias>/client-setup[?roles=admin|read|manage&realms=a,b&credential=jwks-url|public-key]`: the
+  client for the system's `authRealm` as JSON (`POST /admin/realms/<realm>/clients`), the roles of its service account
+  and a `kcadm.sh` script doing both (role and role scope; full scope is off). The server creates nothing in Keycloak.
+  - `roles=admin` (default): master's `admin` role, every realm, later ones too, incl. creating realms;
+    `read` / `manage`: view/query (and manage) roles of the `<realm>-realm` clients of `realms` only. Outside master:
+    `realm-management` roles of that realm.
+  - `credential=public-key`: the current key copied into the client (`jwt.credential.public.key`), for a Keycloak that
+    cannot reach the JWKS URL; a rotation needs a client update.
+- `GET /admin/systems/<alias>/keycloak-realms`: `GET /admin/realms` with the system's credentials, i.e. the realms the
+  account may see, with `adopted` (settings kept), `allowed` (reachable), `renamedFrom` (same realm id under another
+  name); `notListed`: known here, not listed there. Keycloak failures answer 502: `token_refused`,
+  `admin_api_unauthorized` (kc-admin-api scope), `admin_api_forbidden` (roles), `keycloak_unreachable`.
+- `POST /admin/systems/<alias>/adoption` `{"realms": [...], "restrict": true, "preset": "read-only"}`: realm id and
+  display name become realm settings (`preset` for new ones), the realms go on the allowlist. Existing settings keep
+  theirs, gain the realm id. On a system without an allowlist a selection restricts it: 409 `would_restrict` without
+  `restrict: true`. `{"allRealms": true}`: every listed realm, allowlist cleared (later realms reachable).
+- `DELETE /admin/systems/<alias>/adoption/<realm>[?restrict=true]`: gives a realm up. It leaves the allowlist (the
+  access ends) and its realm settings go; Keycloak keeps the client and its roles. Without an allowlist the system
+  reaches every realm, so leaving one out makes the allowlist the other listed realms: 409 `would_restrict` without
+  `restrict=true`. Refused: the last realm on the allowlist (`last_realm`, an empty allowlist means every realm) and
+  the default realm (`default_realm`).
+- UI: system → **Adopt** tab, the same steps; **Unadopt** on an adopted or allowed realm.
+
 Without the database, the systems file does the same with a provisioned key: the entry in `kc-mcp.systems-file`
 names `"clientAuth": "private_key_jwt"`, the private key lies in `kc-mcp.keys-dir` as `<alias>.pem` (PKCS#8 PEM), and
-the JWKS of that key is served at the same `/auth/keys/<alias>/jwks.json`. `examples/multi-tenant/` provisions keys
+the JWKS of that key is served at `/auth/keys/<alias>/jwks.json`: a provisioned key goes by the name. `examples/multi-tenant/` provisions keys
 this way.
 
 Caller authentication is per MCP entry, not per system: one login per server URL. Several systems: one central identity

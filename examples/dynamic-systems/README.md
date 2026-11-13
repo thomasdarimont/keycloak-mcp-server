@@ -46,7 +46,8 @@ curl -s -X PUT localhost:8091/admin/systems/acme \
 - Stored in `kc_mcp_system`; key pair generated in `kc_mcp_signing_key`, encrypted with `KC_MCP_STORAGE_SECRET_KEY`
 - `signingKey`: `generate` (new pair), `existing` (already in the vault), absent (existing, else generate)
 - Response: no secrets; `signingKey.kid`, `signingKey.jwksPath`, `signingKey.jwksUrl`, `entries`
-- JWKS URL for Keycloak inside compose: `http://mcp:8081/auth/keys/acme/jwks.json`
+- JWKS URL for Keycloak inside compose: `http://mcp:8081` + `signingKey.jwksPath` (`/auth/keys/<id>/jwks.json`, the
+  system's id: a later `acme` gets another)
 - `url` must match `KC_MCP_ALLOWED_HOSTS`
 - `GET /admin/systems` lists, `POST /admin/systems/acme/signing-key` rotates, `DELETE /admin/systems/acme` removes
 - `client_secret` systems reference a vault secret (`"clientSecret": "vault:acme/client-secret"`, stored with

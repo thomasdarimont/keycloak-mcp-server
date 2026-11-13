@@ -130,6 +130,12 @@ public class DatabaseKeyVault implements KeyVault {
 
     @Override
     @Transactional
+    public int deleteSigningKeys(String system) {
+        return (int) SigningKeyEntity.delete("system = ?1", system);
+    }
+
+    @Override
+    @Transactional
     public SigningKey createSigningKey(String system) {
         String algorithm = serverConfig.jwt().algorithm();
         SigningKey generated = generator.generate(algorithm);

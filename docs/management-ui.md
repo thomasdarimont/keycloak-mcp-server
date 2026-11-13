@@ -24,6 +24,7 @@ loop.
 | `/ui/systems/{alias}` | system Settings (default tab): connection, allowlist, trusted issuers, delete |
 | `/ui/systems/{alias}/realms` | Realms: allowlist + stored settings, MCP entries, add settings |
 | `/ui/systems/{alias}/realms/{realm}` | realm labels, realm id, preset; delete settings |
+| `/ui/systems/{alias}/adopt` | adopt realms: the Keycloak client (JSON, `kcadm.sh`), the realms its service account sees, adopt a selection or every realm ([Adopting](systems.md#adopting-a-keycloaks-realms)) |
 | `/ui/systems/{alias}/keys` | signing key details; rotate (operator, mutable / writable vault) |
 | `/ui/audit` | the audit trail, newest first: filters for caller, system, realm and tool (completed from the recorded values), level, outcome and time (the last N minutes, hours, days or weeks, or between two moments), and signed-in or anonymous callers, applied as they are chosen and listed as removable chips; When, Caller and Took sort the table; an entry opens to its details (message, subject, client, connection, the OpenTelemetry trace and span, linked through `kc-mcp.ui.trace-url`), and its arguments are fetched only on *Show arguments*; the address bar carries them (`?system=&realm=&tool=&level=&outcome=&anonymous=&last=2w` or `from=&to=`, `sort=&order=`, `size=`), so a view can be bookmarked or shared, without the caller: names stay out of URLs; 25, 50, 100 or 250 per page (25 by default), paged with the total |
 | `/ui/secrets`, `/ui/storage` | stubs |
@@ -140,6 +141,10 @@ set through `auth-params`; startup fails on them.
 | `POST /bff/api/systems/{alias}/signing-key` | rotate the signing key; operator only (+ CSRF) |
 | `GET /bff/api/systems/{alias}/realms[/{realm}]` | realm settings, as the admin API |
 | `PUT` / `DELETE /bff/api/systems/{alias}/realms/{realm}` | add, replace or remove realm settings; operator (+ CSRF) |
+| `GET /bff/api/systems/{alias}/client-setup` | the Keycloak client to create, as the admin API |
+| `GET /bff/api/systems/{alias}/keycloak-realms` | the realms Keycloak lists for the system's service account |
+| `POST /bff/api/systems/{alias}/adoption` | adopt realms; operator only (+ CSRF) |
+| `DELETE /bff/api/systems/{alias}/adoption/{realm}` | give an adopted realm up (`?restrict=true` without an allowlist); operator only (+ CSRF) |
 | `GET /bff/api/audit` | the audit trail, as `GET /admin/audit`; operator or viewer |
 | `GET /bff/api/audit/{id}` | one event with its arguments, as `GET /admin/audit/{id}` |
 | `GET /bff/api/audit/values/{field}` | completions for its filters, as `GET /admin/audit/values/{field}` |

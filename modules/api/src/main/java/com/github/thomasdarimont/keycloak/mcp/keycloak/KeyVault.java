@@ -8,16 +8,16 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 /**
  * Keeps secrets for the server: one signing key pair per Keycloak system for
  * {@code private_key_jwt}, so that a system only has to register this server's public key
- * (served at {@code /auth/keys/<system>/jwks.json}) and no secret is shared or stored
- * anywhere, and raw secrets by name for the places that still need one (a client secret,
- * an API key), so configuration can hold references ({@code vault:<name>}) instead of
- * values. The built-in vault is read-only and serves PEM files under
- * {@code kc-mcp.keys-dir} that operations provisioned; register your own
- * ({@code @AutoService(KeyVault.class)} or a CDI bean) to keep keys and secrets in a
- * database, which is also where keys get created and rotated
- * ({@link #supportsKeyCreation()}, with the {@link SigningKeyGenerator} the server hands
- * over) and secrets stored ({@link #supportsSecretStorage()}, through the admin API), or
- * in a secrets manager such as HashiCorp Vault. The vault with the lowest
+ * (served at {@code /auth/keys/<key set>/jwks.json}, the key set being a stored system's
+ * id or a configured system's name) and no secret is shared or stored anywhere, and raw
+ * secrets by name for the places that still need one (a client secret, an API key), so
+ * configuration can hold references ({@code vault:<name>}) instead of values. The
+ * built-in vault is read-only and serves PEM files under {@code kc-mcp.keys-dir} that
+ * operations provisioned; register your own ({@code @AutoService(KeyVault.class)} or a
+ * CDI bean) to keep keys and secrets in a database, which is also where keys get created
+ * and rotated ({@link #supportsKeyCreation()}, with the {@link SigningKeyGenerator} the
+ * server hands over) and secrets stored ({@link #supportsSecretStorage()}, through the
+ * admin API), or in a secrets manager such as HashiCorp Vault. The vault with the lowest
  * {@link #order()} is used.
  */
 public interface KeyVault extends Extension {
@@ -68,6 +68,17 @@ public interface KeyVault extends Extension {
     default SigningKey createSigningKey(String system) {
         throw new UnsupportedOperationException(
                 "KeyVault '" + id() + "' is read-only: provision a signing key for '" + system + "' in the vault");
+    }
+
+    /**
+     * Removes every key of a system, current and retired, when the system is deleted; the
+     * number removed. Only when {@link #supportsKeyCreation()}.
+     *
+     * @throws UnsupportedOperationException for a read-only vault
+     */
+    default int deleteSigningKeys(String system) {
+        throw new UnsupportedOperationException(
+                "KeyVault '" + id() + "' is read-only: remove the keys of '" + system + "' in the vault");
     }
 
     /**

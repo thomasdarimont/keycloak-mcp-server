@@ -149,7 +149,10 @@ paths:
     delete:
       tags: [systems]
       summary: Remove a registered system
-      description: The system leaves the mutable repository; its keys stay in the vault. Configured systems cannot be removed here.
+      description: |
+        The system leaves the mutable repository and its keys leave the vault: its JWKS answers 404, so Keycloak refuses
+        assertions in its name. The client in Keycloak stays; delete it there. A new system of the same name gets a new
+        id, key and JWKS URL. Configured systems cannot be removed here.
       operationId: deleteSystem
       responses:
         "204":
@@ -285,6 +288,191 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
           description: "`system_configured`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/systems/{alias}/client-setup:
+    parameters:
+      - $ref: "#/components/parameters/alias"
+    get:
+      tags: [systems]
+      summary: The Keycloak client this server needs for the system
+      description: |
+        The client to create in the system's authentication realm (JSON for `POST /admin/realms/<realm>/clients`), the
+        roles its service account needs and a `kcadm.sh` script doing both. The server creates nothing in Keycloak.
+      operationId: clientSetup
+      parameters:
+        - name: roles
+          in: query
+          description: |
+            `admin` (default): the master realm's `admin` role, every realm, later ones too (`realm-admin` in another
+            realm); `read` / `manage`: the view/query (and manage) roles of the `<realm>-realm` clients of `realms`
+          schema: { type: string, enum: [admin, read, manage] }
+        - name: realms
+          in: query
+          description: Comma separated realm names for `read` / `manage` in the master realm
+          schema: { type: string }
+        - name: credential
+          in: query
+          description: |
+            `private_key_jwt` only. `jwks-url` (default): Keycloak fetches the keys from this server; `public-key`: the
+            current key copied into the client, no connection back to this server, a rotation needs a client update
+          schema: { type: string, enum: [jwks-url, public-key] }
+      responses:
+        "200":
+          description: The client, the roles and the script
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientSetup" }
+        "400":
+          description: "`invalid_roles`, `invalid_credential`, `no_realms` (read/manage without realms)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/UnknownSystem" }
+        "409":
+          description: "`not_a_service_client`; `no_signing_key`: no key of its own to copy (credential=public-key)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/systems/{alias}/keycloak-realms:
+    parameters:
+      - $ref: "#/components/parameters/alias"
+    get:
+      tags: [systems]
+      summary: The realms Keycloak lists for the system's service account
+      description: |
+        `GET /admin/realms` at the system's Keycloak with its credentials: what the account may see, each realm marked
+        with whether this server keeps settings for it (`adopted`) and whether calls reach it (`allowed`);
+        `renamedFrom` when settings with its realm id are kept under another name. `notListed`: realms known here that
+        Keycloak does not list (deleted, renamed or out of the account's sight).
+      operationId: keycloakRealms
+      responses:
+        "200":
+          description: Keycloak's realms
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeycloakRealms" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/UnknownSystem" }
+        "409":
+          description: "`system_refused`: the server does not connect to the system's host"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: |
+            Keycloak's answer, never as 401/403 of this API: `token_refused` (the client, its key or secret),
+            `admin_api_unauthorized` (the kc-admin-api scope), `admin_api_forbidden` (roles), `keycloak_unreachable`,
+            `keycloak_error`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/systems/{alias}/adoption:
+    parameters:
+      - $ref: "#/components/parameters/alias"
+    post:
+      tags: [systems]
+      summary: Adopt realms Keycloak lists
+      description: |
+        Keycloak's realm id and display name become realm settings (a new realm also gets `preset`), the realms go on
+        the allowlist. Existing settings keep everything but the realm id and gain a display name they lack.
+        `allRealms: true` adopts every listed realm and clears the allowlist, so later realms are reachable too. A
+        selection on a system without an allowlist would restrict it: `restrict: true` is needed for that.
+      operationId: adoptRealms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                realms: { type: array, items: { type: string } }
+                allRealms: { type: boolean }
+                restrict: { type: boolean }
+                preset: { type: string }
+            example: { realms: [acme, beta], restrict: true, preset: read-only }
+      responses:
+        "200":
+          description: What was adopted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [system, adopted, updated, unchanged, restricted, allowedRealms]
+                properties:
+                  system: { type: string }
+                  adopted: { type: array, items: { type: string } }
+                  updated: { type: array, items: { type: string } }
+                  unchanged: { type: array, items: { type: string } }
+                  restricted: { type: boolean }
+                  allowedRealms: { type: array, items: { type: string } }
+        "400":
+          description: "`invalid_adoption`, `no_realms`, `unknown_keycloak_realm`, `unknown_preset` and the realm settings checks"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/UnknownSystem" }
+        "409":
+          description: "`would_restrict` (see `restrict`), `system_configured` (not a mutable system), `system_refused`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Keycloak's answer to listing the realms, as for keycloak-realms
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/systems/{alias}/adoption/{realm}:
+    parameters:
+      - $ref: "#/components/parameters/alias"
+      - $ref: "#/components/parameters/realm"
+    delete:
+      tags: [systems]
+      summary: Give up an adopted realm
+      description: |
+        The realm leaves the allowlist, which ends the access, and its realm settings are removed. Keycloak is not
+        touched: the client keeps its roles. A system without an allowlist reaches every realm; giving one up makes
+        the allowlist the other realms Keycloak lists, and needs `restrict=true`. The last realm on an allowlist
+        stays (an empty allowlist means every realm), and so does the default realm.
+      operationId: unadoptRealm
+      parameters:
+        - name: restrict
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: The allowlist now
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [system, realm, settingsRemoved, restricted, allowedRealms]
+                properties:
+                  system: { type: string }
+                  realm: { type: string }
+                  settingsRemoved: { type: boolean }
+                  restricted: { type: boolean }
+                  allowedRealms: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: "`unknown_system`, `not_adopted`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "`would_restrict` (see `restrict`), `last_realm`, `default_realm`, `system_configured`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Keycloak's answer to listing the realms (only with `restrict` on a system without an allowlist)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1002,6 +1190,59 @@ components:
           description: The MCP entries of the system, `/mcp/systems/<alias>` and one per realm
           items: { type: string }
           example: ["/mcp/systems/acme", "/mcp/systems/acme/acme"]
+    KeycloakRealms:
+      type: object
+      required: [system, url, authRealm, restricted, count, realms, notListed]
+      properties:
+        system: { type: string }
+        url: { type: string }
+        authRealm: { type: string }
+        clientId: { type: string }
+        restricted: { type: boolean, description: The system has an allowlist }
+        count: { type: integer }
+        realms:
+          type: array
+          items:
+            type: object
+            required: [name, id, adopted, allowed]
+            properties:
+              name: { type: string }
+              id: { type: string }
+              displayName: { type: string }
+              enabled: { type: boolean }
+              adopted: { type: boolean }
+              allowed: { type: boolean }
+              renamedFrom: { type: string }
+        notListed:
+          type: array
+          items:
+            type: object
+            required: [name, settings, allowed]
+            properties:
+              name: { type: string }
+              settings: { type: boolean }
+              allowed: { type: boolean }
+              realmId: { type: string }
+    ClientSetup:
+      type: object
+      required: [system, url, realm, clientId, clientAuth, credential, client, roles, script, notes]
+      properties:
+        system: { type: string }
+        url: { type: string }
+        realm: { type: string, description: Where the client goes (the system's authRealm) }
+        clientId: { type: string }
+        clientAuth: { type: string }
+        credential: { type: string, enum: [jwks-url, public-key, client-secret] }
+        client: { type: object, description: "JSON for POST /admin/realms/<realm>/clients", additionalProperties: true }
+        roles:
+          type: object
+          properties:
+            mode: { type: string }
+            serviceAccount: { type: string }
+            realmRoles: { type: array, items: { type: string } }
+            clientRoles: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        script: { type: string, description: "kcadm.sh script: the client, the roles and the role scope" }
+        notes: { type: array, items: { type: string } }
     SigningKey:
       type: object
       description: The `private_key_jwt` key Keycloak verifies the server's tokens with; the Keycloak client gets `jwksUrl`
@@ -1019,7 +1260,10 @@ components:
           description: Id of the key vault holding a per-system key
         jwksPath:
           type: string
-          example: /auth/keys/acme/jwks.json
+          description: |
+            By the system's id for a stored system (a new system of the same name gets another), by its name for a
+            configured one with a provisioned key
+          example: /auth/keys/3f0c9a52-6d1e-4b8a-9f2e-0c7d5b1a4e93/jwks.json
         jwksUrl:
           type: string
           format: uri
