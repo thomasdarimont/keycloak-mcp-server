@@ -123,16 +123,22 @@ class DatabaseStorageIT {
         assertTrue(row.createdAt > 0 && row.updatedAt >= row.createdAt);
 
         assertTrue(repo.names().contains(alias));
-        assertEquals(tenant.withDisplayName("ACME Corp.").withDescription("ACME's Keycloak"),
-                repo.find(alias).orElseThrow(), "round trip, secret decrypted, label and description attached");
-        assertTrue(repo.all().contains(tenant.withDisplayName("ACME Corp.").withDescription("ACME's Keycloak")));
+        // what is read back carries the row's surrogate id
+        KeycloakSystem stored = tenant.toBuilder()
+            .displayName("ACME Corp.")
+            .description("ACME's Keycloak")
+            .id(row.id)
+            .build();
+        assertEquals(stored, repo.find(alias).orElseThrow(),
+                "round trip, secret decrypted, label, description and id attached");
+        assertTrue(repo.all().contains(stored));
 
         // settings change: same row, label kept
         KeycloakSystem moved = system(alias, "https://sso2.example.com", Optional.empty(), Set.of());
         assertEquals(row.id, repo.saveEntity(moved).id);
         assertEquals("ACME Corp.", repo.entity(alias).orElseThrow().name, "no label in the update keeps the old one");
-        assertEquals(moved.withDisplayName("ACME Corp.").withDescription("ACME's Keycloak"),
-                repo.find(alias).orElseThrow(), "the description is kept as well");
+        assertEquals(moved.toBuilder().displayName("ACME Corp.").description("ACME's Keycloak").id(row.id).build(),
+                repo.find(alias).orElseThrow(), "the description and the id are kept as well");
         assertEquals("ACME Inc.", repo.save(moved.withDisplayName("ACME Inc.")).displayName().orElseThrow());
         assertTrue(repo.timestamps(alias).orElseThrow().updatedAt().toEpochMilli() >= row.updatedAt);
 
