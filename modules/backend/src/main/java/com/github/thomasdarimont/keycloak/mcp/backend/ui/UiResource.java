@@ -31,6 +31,7 @@ import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminAdoption;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminAudit;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminResource;
+import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminSecrets;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminServerInfo;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminSystems;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.SecurityIdentityCallerProvider;
@@ -72,6 +73,7 @@ import io.quarkus.vertx.http.runtime.CurrentVertxRequest;
  * GET /bff/api/audit                      the audit trail, as GET /api/admin/audit (operator or viewer role)
  * GET /bff/api/audit/{id}                 one event with its arguments, as GET /api/admin/audit/{id}
  * GET /bff/api/audit/values/{field}       completions for its filters, as GET /api/admin/audit/values/{field}
+ * GET /bff/api/secrets                    vault names and usedBy, as GET /api/admin/secrets (never values; no writes)
  * POST /bff/backchannel-logout   the provider ends sessions (OIDC back-channel logout, BackChannelLogoutResource)
  * </pre>
  */
@@ -96,6 +98,8 @@ public class UiResource {
     AdminServerInfo serverInfo;
     @Inject
     AdminAdoption adoption;
+    @Inject
+    AdminSecrets secrets;
     @Inject
     UiTenant tenant;
     @Inject
@@ -347,5 +351,12 @@ public class UiResource {
     @Path("api/server-info")
     public Map<String, Object> serverInfo(@Context HttpHeaders headers) {
         return serverInfo.info(AdminResource.locale(headers));
+    }
+
+    /** Names in the vault and which systems use them; values never leave the vault. */
+    @GET
+    @Path("api/secrets")
+    public Map<String, Object> secrets() {
+        return secrets.list();
     }
 }

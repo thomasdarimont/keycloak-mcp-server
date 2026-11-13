@@ -2,7 +2,9 @@ import { consume } from '@lit/context';
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { BffError, listSystems, type System } from '../../bff.js';
-import '../../kc-mcp-help.js';
+import '../../kc-mcp-data-table.js';
+import type { DataTableColumn } from '../../kc-mcp-data-table.js';
+import '../../components/kc-mcp-help.js';
 import { newSystemHref, systemHref } from '../../router.js';
 import { operatorRoleHint, sessionCanWrite, sessionContext, type SessionState } from '../../session-context.js';
 
@@ -65,39 +67,7 @@ export class SystemsPage extends LitElement {
     .error {
       color: var(--error, #c9190b);
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.9rem;
-    }
-    th,
-    td {
-      text-align: left;
-      padding: 0.55rem 0.65rem;
-      border-bottom: 1px solid var(--border, #d2d2d2);
-      vertical-align: top;
-    }
-    th {
-      color: var(--muted, #6a6e73);
-      font-weight: 600;
-    }
-    a:not(.btn) {
-      color: var(--accent, #0066cc);
-      text-decoration: none;
-      font-weight: 600;
-    }
-    a:not(.btn):hover {
-      text-decoration: underline;
-    }
     .muted {
-      color: var(--muted, #6a6e73);
-    }
-    .badge {
-      display: inline-block;
-      font-size: 0.75rem;
-      padding: 0.1rem 0.4rem;
-      border-radius: var(--radius, 6px);
-      border: 1px solid var(--border, #d2d2d2);
       color: var(--muted, #6a6e73);
     }
   `;
@@ -122,6 +92,50 @@ export class SystemsPage extends LitElement {
 
   private get canWrite(): boolean {
     return sessionCanWrite(this.session);
+  }
+
+  private get columns(): DataTableColumn<System>[] {
+    const canWrite = this.canWrite;
+    return [
+      {
+        id: 'alias',
+        label: 'Alias',
+        value: (s) => `${s.displayName || ''} ${s.alias}`,
+        cell: (s) => html`
+          <a href=${systemHref(s.alias)}>${s.displayName || s.alias}</a>
+          ${s.displayName ? html`<div class="muted"><code>${s.alias}</code></div>` : nothing}
+        `,
+      },
+      {
+        id: 'url',
+        label: 'URL',
+        cell: (s) => html`<code>${s.url}</code>`,
+      },
+      {
+        id: 'realms',
+        label: 'Realms',
+        value: (s) => this.realmsSummary(s),
+        cell: (s) => html`<a href=${systemHref(s.alias, 'realms')}>${this.realmsSummary(s)}</a>`,
+      },
+      {
+        id: 'source',
+        label: 'Source',
+        value: (s) => `${s.source ?? ''} ${s.writable === false ? 'read-only' : ''}`,
+        cell: (s) => html`
+          <span class="badge">${s.source ?? '—'}</span>
+          ${s.writable === false ? html` <span class="badge">read-only</span>` : nothing}
+        `,
+      },
+      {
+        id: 'open',
+        label: '',
+        sortable: false,
+        filterable: false,
+        cell: (s) => html`<a href=${systemHref(s.alias)}
+          >${s.writable === false || !canWrite ? 'View' : 'Open'}</a
+        >`,
+      },
+    ];
   }
 
   connectedCallback(): void {
@@ -180,9 +194,7 @@ export class SystemsPage extends LitElement {
         </kc-mcp-help>
       </h2>
       <div class="row">
-        ${this.canCreate
-          ? html`<a class="btn" href=${newSystemHref()}>Add system</a>`
-          : nothing}
+        ${this.canCreate ? html`<a class="btn" href=${newSystemHref()}>Add system</a>` : nothing}
         <button class="secondary" type="button" ?disabled=${this.busy} @click=${() => this.load()}>
           Refresh
         </button>
@@ -191,51 +203,15 @@ export class SystemsPage extends LitElement {
         ? html`<p class="muted">${this.canCreateHint}</p>`
         : nothing}
       ${this.error ? html`<p class="error">${this.error}</p>` : nothing}
-      ${!this.error && !this.busy && this.items.length === 0
-        ? html`<p class="muted">No systems registered.</p>`
+      ${!this.error
+        ? html`<kc-mcp-data-table
+            .columns=${this.columns}
+            .rows=${this.items}
+            .busy=${this.busy}
+            filterPlaceholder="Filter systems…"
+            empty="No systems registered."
+          ></kc-mcp-data-table>`
         : nothing}
-      ${this.items.length
-        ? html`<table>
-            <thead>
-              <tr>
-                <th>Alias</th>
-                <th>URL</th>
-                <th>Realms</th>
-                <th>Source</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${this.items.map((s) => this.renderRow(s))}
-            </tbody>
-          </table>`
-        : nothing}
-    `;
-  }
-
-  private renderRow(s: System) {
-    const href = systemHref(s.alias);
-    const realmsHref = systemHref(s.alias, 'realms');
-    return html`
-      <tr>
-        <td>
-          <a href=${href}>${s.displayName || s.alias}</a>
-          ${s.displayName ? html`<div class="muted"><code>${s.alias}</code></div>` : nothing}
-        </td>
-        <td><code>${s.url}</code></td>
-        <td>
-          <a href=${realmsHref}>${this.realmsSummary(s)}</a>
-        </td>
-        <td>
-          <span class="badge">${s.source ?? '—'}</span>
-          ${s.writable === false ? html` <span class="badge">read-only</span>` : nothing}
-        </td>
-        <td
-          ><a href=${href}
-            >${s.writable === false || !this.canWrite ? 'View' : 'Open'}</a
-          ></td
-        >
-      </tr>
     `;
   }
 }

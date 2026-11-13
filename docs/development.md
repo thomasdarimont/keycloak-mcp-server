@@ -79,8 +79,9 @@ Conventions of the code:
   `role`. It replaces the element's own, and Lit relies on those: a page with an action called `remove()` was never
   taken out of the page on navigation, so the old page stayed above the new one, and leaving the page ran its delete
   action.
-- What a page is for goes into a help icon next to its title (`<kc-mcp-help>` in `kc-mcp-help.ts`, the text as its
-  content), not into a paragraph under it; lines that show data (alias, source, read-only) stay on the page.
+- What a page is for goes into a help icon next to its title (`<kc-mcp-help>` in `components/kc-mcp-help.ts`, the text
+  as its content), not into a paragraph under it; lines that show data (alias, source, read-only) stay on the page.
+  Shared UI pieces live under `frontend/app/components/` (help, `table/`); shell chrome stays at `app/` root.
 - The BFF decides what a user may do; the UI only hides what `/bff/me` does not list in `capabilities`
   (`systems:write`, ...), so a page has to cope with a 403 anyway.
 - Pages read the session (`/bff/me`) from the Lit context `sessionContext` (`session-context.ts`), which
@@ -99,7 +100,7 @@ with spaces (`etc/eclipse-formatter.prefs`; imports `java|javax|jakarta`, `org`,
 
 Status: all reference tools, search, exposure modes, guardrails, extension SPIs, database storage, the distribution
 archive, admin API and the management UI (login, sessions, BFF; pages for systems, their realms and signing keys,
-realm adoption, the audit trail) done. So are delegation by token exchange, the access checks (step-up
+realm adoption, secrets, the audit trail) done. So are delegation by token exchange, the access checks (step-up
 authentication, AuthZEN) and confirmation through CIBA. Open items:
 
 - Model-in-the-loop benchmarks with LM Studio: turns to success, tool-choice errors, tokens per mode
@@ -108,7 +109,7 @@ authentication, AuthZEN) and confirmation through CIBA. Open items:
   (`PasswordGrantSessionsIT` and `AdoptionIT` cover the token manager against client-jwt clients that hold the
   public key itself)
 - Admin API read access to the signing-key history
-- Management UI pages for secrets and storage (today: placeholders)
+- Management UI page for storage (today: placeholder)
 - Effective access preview: which systems, realms and tools a given user or MCP client can reach, and why
 - Client assertions signed on the admin instance, so MCP instances hold no private keys
   ([Threat model](security.md#planned-signing-on-the-admin-instance))

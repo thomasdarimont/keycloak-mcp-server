@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keycloak MCP — management UI mockups</title>
+    <style>
+      :root {
+        --fg: #1f2328;
+        --muted: #656d76;
+        --bg: #f6f8fa;
+        --card: #ffffff;
+        --border: #d0d7de;
+        --error: #cf222e;
+        --accent: #1f6feb;
+        --nav-width: 13.5rem;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        color: var(--fg);
+        background: #eaeef2;
+        padding: 2rem;
+      }
+      .board {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        align-items: flex-start;
+      }
+      .artboard {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .artboard > .label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .screen {
+        width: 1100px;
+        height: 720px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 24px rgb(31 35 40 / 8%);
+      }
+      /* shell */
+      .masthead {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+        min-height: 3.25rem;
+      }
+      .masthead h1 {
+        font-size: 1.1rem;
+        margin: 0;
+        flex: 1;
+      }
+      .masthead .user {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .body {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+      .nav {
+        flex: 0 0 var(--nav-width);
+        background: var(--card);
+        border-right: 1px solid var(--border);
+        padding: 0.75rem 0;
+      }
+      .nav a {
+        display: block;
+        color: var(--fg);
+        text-decoration: none;
+        padding: 0.55rem 1.25rem;
+        border-left: 3px solid transparent;
+      }
+      .nav a.current {
+        font-weight: 600;
+        border-left-color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+      }
+      main {
+        flex: 1;
+        min-width: 0;
+        padding: 1.5rem;
+        overflow: auto;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        max-width: 56rem;
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin: 0 0 0.35rem;
+      }
+      h3 {
+        font-size: 0.95rem;
+        margin: 1.25rem 0 0.35rem;
+      }
+      .lead,
+      .muted-p {
+        margin: 0 0 0.75rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+        max-width: 40rem;
+      }
+      .lead a,
+      a.link {
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.25rem 1rem;
+        margin: 0.5rem 0 0;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      code {
+        font-size: 0.85em;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+      button,
+      .btn {
+        font: inherit;
+        padding: 0.4rem 0.9rem;
+        border-radius: 6px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: #fff;
+        cursor: default;
+        text-decoration: none;
+        font-weight: 500;
+        display: inline-block;
+      }
+      button.secondary,
+      .btn.secondary {
+        background: transparent;
+        color: var(--fg);
+        border-color: var(--border);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.55rem 0.65rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      td a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 0.75rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .back {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 0.9rem;
+      }
+      .tabs {
+        display: flex;
+        gap: 0.25rem;
+        border-bottom: 1px solid var(--border);
+        margin: 0 0 1rem;
+      }
+      .tabs span {
+        padding: 0.5rem 0.85rem;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: var(--fg);
+      }
+      .tabs span.current {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+      fieldset {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin: 0 0 1rem;
+        padding: 0.85rem 1rem 1rem;
+      }
+      legend {
+        padding: 0 0.35rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .grid {
+        display: grid;
+        gap: 0.75rem 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .span-2 {
+        grid-column: 1 / -1;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 0.55rem;
+      }
+      textarea {
+        min-height: 3.5rem;
+        resize: vertical;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.2rem 1rem;
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+      }
+      .meta dt {
+        color: var(--muted);
+      }
+      .meta dd {
+        margin: 0;
+      }
+      .intro {
+        max-width: 40rem;
+        margin: 0 0 1.5rem;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <p class="intro">
+      Keycloak MCP management UI mockups (light theme). Each bordered panel is one screen — open this file in a
+      browser, or import the <code>.screen</code> frames into Figma via html.to.design.
+    </p>
+
+    <div class="board">
+      <!-- Overview -->
+      <div class="artboard">
+        <div class="label">Overview · /ui/overview</div>
+        <div class="screen" data-name="Overview">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Alice Admin</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav" aria-label="Management">
+              <a class="current" href="#">Overview</a>
+              <a href="#">Systems</a>
+              <a href="#">Secrets</a>
+              <a href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <h2>Overview</h2>
+                <p class="lead">
+                  A <strong>system</strong> is one Keycloak cluster or environment (for example qa or prod), reached
+                  through a single front-door URL. Under each system you manage which <strong>realms</strong> the MCP
+                  server may use — all realms, or an explicit allowlist. Open
+                  <a class="link" href="#">Systems</a> to browse them.
+                </p>
+                <h3>You</h3>
+                <dl>
+                  <dt>User</dt>
+                  <dd>alice <span class="muted">(alice@example.com)</span></dd>
+                  <dt>Identity provider</dt>
+                  <dd>demo <span class="muted">http://localhost:8080/realms/demo</span></dd>
+                  <dt>Roles</dt>
+                  <dd>realm-management.realm-admin</dd>
+                  <dt>Operator role</dt>
+                  <dd>realm-management.realm-admin ✓</dd>
+                  <dt>Viewer role</dt>
+                  <dd>realm-management.view-users <span class="muted">no</span></dd>
+                  <dt>Capabilities</dt>
+                  <dd>systems:read, secrets:read, storage:read, systems:write</dd>
+                  <dt>Session expires</dt>
+                  <dd>11/10/2026, 12:30:00 PM</dd>
+                  <dt>Last session check</dt>
+                  <dd>12:04:12 PM ✓ <button class="secondary" type="button">Check now</button></dd>
+                </dl>
+                <h3>Systems</h3>
+                <dl>
+                  <dt>Registered</dt>
+                  <dd>2 <a class="link" href="#">view</a></dd>
+                </dl>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- Systems list -->
+      <div class="artboard">
+        <div class="label">Systems · /ui/systems</div>
+        <div class="screen" data-name="Systems">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Alice Admin</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav">
+              <a href="#">Overview</a>
+              <a class="current" href="#">Systems</a>
+              <a href="#">Secrets</a>
+              <a href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <h2>Systems</h2>
+                <p class="lead">
+                  Keycloak clusters and environments known to this server. Each system has a front-door URL and zero or
+                  more managed realms (all realms, or an explicit allowlist).
+                </p>
+                <div class="row">
+                  <a class="btn" href="#">Add system</a>
+                  <button class="secondary" type="button">Refresh</button>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Alias</th>
+                      <th>URL</th>
+                      <th>Realms</th>
+                      <th>Source</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <a href="#">Demo</a>
+                        <div class="muted"><code>default</code></div>
+                      </td>
+                      <td><code>http://localhost:8080</code></td>
+                      <td><a href="#">demo*</a></td>
+                      <td><span class="badge">config</span> <span class="badge">read-only</span></td>
+                      <td><a href="#">View</a></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <a href="#">ACME Corp.</a>
+                        <div class="muted"><code>acme</code></div>
+                      </td>
+                      <td><code>https://sso.acme.example</code></td>
+                      <td><a href="#">acme-dev*, acme-prod</a></td>
+                      <td><span class="badge">db</span></td>
+                      <td><a href="#">Open</a></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Settings -->
+      <div class="artboard">
+        <div class="label">System · Settings · /ui/systems/acme</div>
+        <div class="screen" data-name="System Settings">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Alice Admin</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav">
+              <a href="#">Overview</a>
+              <a class="current" href="#">Systems</a>
+              <a href="#">Secrets</a>
+              <a href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <a class="back" href="#">← Systems</a>
+                <h2 style="margin-top: 0.35rem">ACME Corp.</h2>
+                <p class="lead">Alias <code>acme</code> · source <code>db</code></p>
+                <div class="tabs">
+                  <span class="current">Settings</span>
+                  <span>Realms</span>
+                </div>
+                <dl class="meta">
+                  <dt>Updated</dt>
+                  <dd>11/10/2026, 11:40:00 AM</dd>
+                  <dt>JWKS</dt>
+                  <dd><code>https://mcp.example.com/auth/keys/acme/jwks.json</code></dd>
+                </dl>
+                <fieldset>
+                  <legend>Identity</legend>
+                  <div class="grid">
+                    <label
+                      >Display name
+                      <input value="ACME Corp." />
+                    </label>
+                    <label class="span-2"
+                      >Description
+                      <textarea>ACME production Keycloak, platform team</textarea>
+                    </label>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Connection</legend>
+                  <div class="grid">
+                    <label class="span-2"
+                      >URL
+                      <input value="https://sso.acme.example" />
+                    </label>
+                    <label
+                      >Issuer
+                      <input placeholder="optional when public URL differs" />
+                    </label>
+                    <label
+                      >Auth realm
+                      <input value="master" />
+                    </label>
+                    <label
+                      >Version
+                      <input value="26.8.2" />
+                    </label>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Authentication</legend>
+                  <div class="grid">
+                    <label
+                      >Client auth
+                      <select>
+                        <option selected>private_key_jwt</option>
+                        <option>client_secret</option>
+                      </select>
+                    </label>
+                    <label
+                      >Client ID
+                      <input value="keycloak-mcp-server" />
+                    </label>
+                    <p class="hint span-2">private_key_jwt uses the system's signing key in the vault (JWKS above).</p>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Realms</legend>
+                  <div class="grid">
+                    <label
+                      >Default realm
+                      <input value="acme-dev" />
+                      <span class="hint">Used when a tool call omits <code>realm</code>.</span>
+                    </label>
+                    <label class="span-2"
+                      >Allowed realms
+                      <input value="acme-dev, acme-prod" />
+                      <span class="hint">Empty means every realm on this cluster is allowed.</span>
+                    </label>
+                    <label class="span-2"
+                      >Trusted issuers
+                      <input placeholder="optional issuer URLs or Keycloak base URLs" />
+                    </label>
+                  </div>
+                </fieldset>
+                <div class="row">
+                  <button type="button">Save</button>
+                  <button class="secondary" type="button">Reset</button>
+                </div>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Realms -->
+      <div class="artboard">
+        <div class="label">System · Realms · /ui/systems/acme/realms</div>
+        <div class="screen" data-name="System Realms">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Alice Admin</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav">
+              <a href="#">Overview</a>
+              <a class="current" href="#">Systems</a>
+              <a href="#">Secrets</a>
+              <a href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <a class="back" href="#">← Systems</a>
+                <h2 style="margin-top: 0.35rem">ACME Corp.</h2>
+                <p class="lead">Alias <code>acme</code> · source <code>db</code></p>
+                <div class="tabs">
+                  <span>Settings</span>
+                  <span class="current">Realms</span>
+                </div>
+                <p class="lead">
+                  Managed realms for this Keycloak cluster. Edit the default realm and allowlist under
+                  <a class="link" href="#">Settings</a>.
+                </p>
+                <p class="lead muted">
+                  System entry (any allowed realm): <code>/mcp/systems/acme</code>
+                </p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Realm</th>
+                      <th>MCP entry</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>acme-dev <span class="badge">default</span></td>
+                      <td><code>/mcp/systems/acme/acme-dev</code></td>
+                    </tr>
+                    <tr>
+                      <td>acme-prod</td>
+                      <td><code>/mcp/systems/acme/acme-prod</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- Secrets -->
+      <div class="artboard">
+        <div class="label">Secrets · /ui/secrets</div>
+        <div class="screen" data-name="Secrets">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Alice Admin</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav">
+              <a href="#">Overview</a>
+              <a href="#">Systems</a>
+              <a class="current" href="#">Secrets</a>
+              <a href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <h2>Secrets</h2>
+                <dl>
+                  <dt>Vault</dt>
+                  <dd><code>db-vault</code></dd>
+                  <dt>Storage</dt>
+                  <dd><span class="badge">writable</span></dd>
+                </dl>
+                <div class="row" style="margin-top: 0.75rem">
+                  <button class="secondary" type="button">Refresh</button>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Reference</th>
+                      <th>Used by</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>acme/client-secret</code></td>
+                      <td><code>vault:acme/client-secret</code></td>
+                      <td><a href="#">acme</a></td>
+                    </tr>
+                    <tr>
+                      <td><code>demo/admin</code></td>
+                      <td><code>vault:demo/admin</code></td>
+                      <td><a href="#">demo</a> <a href="#">sandbox</a></td>
+                    </tr>
+                    <tr>
+                      <td><code>unused/token</code></td>
+                      <td><code>vault:unused/token</code></td>
+                      <td><span class="muted">—</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storage stub -->
+      <div class="artboard">
+        <div class="label">Storage · /ui/storage</div>
+        <div class="screen" data-name="Storage">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Alice Admin</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav">
+              <a href="#">Overview</a>
+              <a href="#">Systems</a>
+              <a href="#">Secrets</a>
+              <a class="current" href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <h2>Storage</h2>
+                <p class="lead">
+                  Encryption status, key ids, and the system-source (repository) chain will appear here. Adding a
+                  repository remains a providers/ + config change, not a UI write.
+                </p>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- Viewer Overview (no write) -->
+      <div class="artboard">
+        <div class="label">Overview · viewer (carol)</div>
+        <div class="screen" data-name="Overview Viewer">
+          <div class="masthead">
+            <h1>Keycloak MCP</h1>
+            <div class="user">
+              <span>Carol Support</span>
+              <button class="secondary" type="button">Sign out</button>
+            </div>
+          </div>
+          <div class="body">
+            <nav class="nav">
+              <a class="current" href="#">Overview</a>
+              <a href="#">Systems</a>
+              <a href="#">Secrets</a>
+              <a href="#">Storage</a>
+            </nav>
+            <main>
+              <section class="card">
+                <h2>Overview</h2>
+                <p class="lead">
+                  A <strong>system</strong> is one Keycloak cluster or environment. Viewers can browse systems and
+                  realms; registering or changing systems needs the operator role.
+                </p>
+                <h3>You</h3>
+                <dl>
+                  <dt>User</dt>
+                  <dd>carol <span class="muted">(carol@example.org)</span></dd>
+                  <dt>Operator role</dt>
+                  <dd>realm-management.realm-admin <span class="muted">no</span></dd>
+                  <dt>Viewer role</dt>
+                  <dd>realm-management.view-users ✓</dd>
+                  <dt>Capabilities</dt>
+                  <dd>systems:read, secrets:read, storage:read</dd>
+                </dl>
+                <h3>Systems</h3>
+                <dl>
+                  <dt>Registered</dt>
+                  <dd>2 <a class="link" href="#">view</a></dd>
+                </dl>
+              </section>
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

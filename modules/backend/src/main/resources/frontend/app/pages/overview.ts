@@ -2,7 +2,7 @@ import { consume } from '@lit/context';
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { BffError, listSystems } from '../bff.js';
-import '../kc-mcp-help.js';
+import '../components/kc-mcp-help.js';
 import { systemsHref } from '../router.js';
 import { sessionContext, type SessionState } from '../session-context.js';
 

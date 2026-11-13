@@ -1,22 +1,37 @@
 import { consume } from '@lit/context';
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { BffError, searchAudit, type AuditEvent, type AuditFilter } from '../../bff.js';
-import '../../kc-mcp-help.js';
+import {
+  BffError,
+  getAuditEvent,
+  searchAudit,
+  type AuditEvent,
+  type AuditFilter,
+  type AuditValueField,
+} from '../../bff.js';
+import '../../kc-mcp-data-table.js';
+import type {
+  DataTableColumn,
+  DataTablePageDetail,
+  DataTablePageSizeDetail,
+  DataTableSortDetail,
+} from '../../kc-mcp-data-table.js';
+import '../../components/kc-mcp-help.js';
+import { systemHref } from '../../router.js';
 import { sessionContext, type SessionState } from '../../session-context.js';
 import './filter.js';
 import type { AuditFilterChangeDetail } from './filter.js';
 import {
   EMPTY,
+  FIRST_ORDER,
   PAGE_SIZES,
   filterOf,
   fromQuery,
+  timeAgo,
   toQuery,
   type FilterForm,
   type SortBy,
 } from './model.js';
-import './table.js';
-import type { AuditNarrowDetail } from './table.js';
 
 /**
  * The audit trail (GET /bff/api/audit): one row per tool call, newest first, filtered and paged on the server. A
@@ -40,71 +55,6 @@ export class AuditPage extends LitElement {
     }
     .error {
       color: var(--error, #c9190b);
-    }
-    .muted {
-      color: var(--muted, #6a6e73);
-    }
-    .pager {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.5rem;
-      margin: 0 0 0.75rem;
-    }
-    .pager.bottom {
-      margin: 0.75rem 0 0;
-    }
-    .pager .buttons {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.4rem;
-    }
-    .pager .per-page {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 0.4rem;
-      margin-right: 0.6rem;
-      font-size: 0.8rem;
-      color: var(--muted, #6a6e73);
-    }
-    select {
-      font: inherit;
-      font-size: 0.9rem;
-      height: 2.1rem;
-      box-sizing: border-box;
-      padding: 0 0.5rem;
-      border: 1px solid var(--border, #d2d2d2);
-      border-radius: var(--radius, 6px);
-      background: var(--card, #fff);
-      color: var(--fg, inherit);
-      min-width: 0;
-    }
-    select:focus-visible,
-    button:focus-visible {
-      outline: 2px solid var(--accent, #0066cc);
-      outline-offset: 1px;
-    }
-    button {
-      font: inherit;
-      padding: 0.4rem 0.9rem;
-      border-radius: var(--kc-mcp-c-button--BorderRadius, var(--button-radius, 999px));
-      border: 1px solid var(--accent, #0066cc);
-      background: var(--accent, #0066cc);
-      color: #fff;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    button.secondary {
-      background: transparent;
-      color: var(--fg, inherit);
-      border-color: var(--border, #6a6e73);
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: default;
     }
   `;
 
@@ -151,6 +101,98 @@ export class AuditPage extends LitElement {
   @state()
   private pageSize: number = PAGE_SIZES[0];
 
+  /** Arguments asked for, by event id: loading, the arguments, or why they could not be read. */
+  @state()
+  private args = new Map<number, 'loading' | { value: unknown } | { error: string }>();
+
+  private get columns(): DataTableColumn<AuditEvent>[] {
+    return [
+      {
+        id: 'when',
+        label: 'When',
+        width: '12.5rem',
+        initialSortDir: FIRST_ORDER.when,
+        cell: (e) => html`<span title=${e.at}>${new Date(e.at).toLocaleString()}</span>`,
+      },
+      {
+        id: 'caller',
+        label: 'Caller',
+        width: '13%',
+        initialSortDir: FIRST_ORDER.caller,
+        cell: (e) => {
+          const caller = e.caller?.name || e.caller?.subject;
+          return html`<div class="line">
+            ${e.caller?.name
+              ? html`<button
+                  class="link"
+                  type="button"
+                  title="only this caller"
+                  @click=${() => this.narrow('caller', e.caller?.name)}
+                >
+                  ${e.caller.name}
+                </button>`
+              : caller
+                ? html`<span title=${caller}>${caller}</span>`
+                : html`<span class="muted">anonymous</span>`}
+            ${e.caller?.delegated
+              ? html` <span class="badge" title="called with the caller's token">delegated</span>`
+              : nothing}
+          </div>`;
+        },
+      },
+      {
+        id: 'tool',
+        label: 'Tool',
+        width: '25%',
+        sortable: false,
+        cell: (e) => html`<div class="line tool">
+          <span class="badge ${e.level.toLowerCase()}">${e.level.toLowerCase()}</span>
+          <button
+            class="link"
+            type="button"
+            title=${`only this tool: ${e.tool}`}
+            @click=${() => this.narrow('tool', e.tool)}
+          >
+            <code>${e.tool}</code>
+          </button>
+        </div>`,
+      },
+      {
+        id: 'target',
+        label: 'System / realm',
+        width: '13%',
+        sortable: false,
+        cell: (e) => html`<div class="line">
+          ${e.system
+            ? html`<a href=${systemHref(e.system)}>${e.system}</a>${e.realm
+                  ? html`<span class="muted"> / ${e.realm}</span>`
+                  : nothing}`
+            : html`<span class="muted">–</span>`}
+        </div>`,
+      },
+      {
+        id: 'outcome',
+        label: 'Outcome',
+        sortable: false,
+        cell: (e) => {
+          const failed = e.outcome !== 'ok';
+          return html`<div class="line" title=${e.message ?? ''}>
+            <span class="badge ${failed ? 'failed' : ''}">${e.outcome}</span>
+            ${e.message ? html`<span class="muted">${e.message}</span>` : nothing}
+          </div>`;
+        },
+      },
+      {
+        id: 'took',
+        label: 'Took',
+        width: '5.5rem',
+        align: 'right',
+        initialSortDir: FIRST_ORDER.took,
+        cell: (e) => html`${e.durationMs} ms`,
+      },
+    ];
+  }
+
   connectedCallback(): void {
     super.connectedCallback();
     // a shared link: the filters of its query string
@@ -190,6 +232,7 @@ export class AuditPage extends LitElement {
     this.appliedForm = { ...this.form };
     this.writeUrl();
     this.cursors = [undefined];
+    this.args = new Map();
     await this.showPage(0);
   }
 
@@ -207,6 +250,7 @@ export class AuditPage extends LitElement {
       this.total = page.total;
       this.pageIndex = index;
       this.cursors = [...this.cursors.slice(0, index + 1), ...(page.next ? [page.next] : [])];
+      this.args = new Map();
     } catch (e) {
       this.events = [];
       this.next = null;
@@ -257,56 +301,105 @@ export class AuditPage extends LitElement {
     this.applyIfChanged();
   }
 
-  private onSort(e: CustomEvent<{ sort: SortBy; order: 'asc' | 'desc' }>): void {
-    this.form = { ...this.form, ...e.detail };
+  private onSort(e: CustomEvent<DataTableSortDetail>): void {
+    const sort = e.detail.id as SortBy;
+    if (sort !== 'when' && sort !== 'took' && sort !== 'caller') {
+      return;
+    }
+    this.form = { ...this.form, sort, order: e.detail.dir };
     this.applyIfChanged();
   }
 
-  private onNarrow(e: CustomEvent<AuditNarrowDetail>): void {
-    this.form = { ...this.form, [e.detail.field]: e.detail.value };
-    this.applyIfChanged();
+  private onPageChange(e: CustomEvent<DataTablePageDetail & { fromBottom: boolean }>): void {
+    void this.turnTo(e.detail.page, e.detail.fromBottom);
   }
 
-  /** A new page size starts over at the newest events, with the same filters. */
-  private setPageSize(e: Event): void {
-    this.pageSize = Number((e.target as HTMLSelectElement).value);
+  private onPageSizeChange(e: CustomEvent<DataTablePageSizeDetail>): void {
+    this.pageSize = e.detail.pageSize;
     void this.search();
   }
 
-  private renderPager(bottom: boolean) {
-    const first = this.pageIndex * this.pageSize + 1;
-    const last = first + this.events.length - 1;
-    const pages = Math.max(1, Math.ceil(this.total / this.pageSize));
-    const newer = this.pageIndex > 0;
+  private narrow(field: AuditValueField, value: string | null | undefined): void {
+    if (value) {
+      this.form = { ...this.form, [field]: value };
+      this.applyIfChanged();
+    }
+  }
+
+  /**
+   * Arguments are fetched for one event, when asked for: they may hold personal data, so they are neither sent with
+   * the list nor shown by opening an entry.
+   */
+  private async showArguments(id: number): Promise<void> {
+    this.args = new Map(this.args).set(id, 'loading');
+    try {
+      const event = await getAuditEvent(id);
+      this.args = new Map(this.args).set(id, { value: event.args ?? {} });
+    } catch (e) {
+      const error = e instanceof BffError ? `${e.status} ${e.code}: ${e.message}` : String(e);
+      this.args = new Map(this.args).set(id, { error });
+      if (e instanceof BffError && e.sessionLost) {
+        this.dispatchEvent(new CustomEvent('session-lost', { bubbles: true, composed: true }));
+      }
+    }
+  }
+
+  private hideArguments(id: number): void {
+    const args = new Map(this.args);
+    args.delete(id);
+    this.args = args;
+  }
+
+  /**
+   * The trace id, linked to the tracing or logging system when the server names one (kc-mcp.ui.trace-url, a
+   * template with {traceId} and {spanId}); only http(s) links are followed.
+   */
+  private traceLink(e: AuditEvent) {
+    if (!e.traceId) {
+      return null;
+    }
+    const url = (this.session?.me?.traceUrl ?? '')
+      .replaceAll('{traceId}', encodeURIComponent(e.traceId))
+      .replaceAll('{spanId}', encodeURIComponent(e.spanId ?? ''));
+    return /^https?:\/\//i.test(url)
+      ? html`<a href=${url} target="_blank" rel="noopener noreferrer" title="Open the trace"
+          ><code>${e.traceId}</code></a
+        >`
+      : html`<code>${e.traceId}</code>`;
+  }
+
+  private renderDetail(e: AuditEvent) {
+    const args = this.args.get(e.id);
+    const row = (label: string, value: unknown) =>
+      value === null || value === undefined || value === '' ? nothing : html`<dt>${label}</dt><dd>${value}</dd>`;
     return html`
-      <nav class="pager ${bottom ? 'bottom' : ''}" aria-label="Audit pages">
-        <span class="muted">${first}–${last} of ${this.total} · page ${this.pageIndex + 1} of ${pages}</span>
-        <span class="buttons">
-          <label class="per-page"
-            >Per page
-            <select @change=${this.setPageSize}>
-              ${PAGE_SIZES.map((n) => html`<option value=${n} ?selected=${n === this.pageSize}>${n}</option>`)}
-            </select></label
-          >
-          <button class="secondary" ?disabled=${this.busy || !newer} @click=${() => this.turnTo(0, bottom)}>
-            « First
-          </button>
-          <button
-            class="secondary"
-            ?disabled=${this.busy || !newer}
-            @click=${() => this.turnTo(this.pageIndex - 1, bottom)}
-          >
-            ‹ Previous
-          </button>
-          <button
-            class="secondary"
-            ?disabled=${this.busy || !this.next}
-            @click=${() => this.turnTo(this.pageIndex + 1, bottom)}
-          >
-            Next ›
-          </button>
-        </span>
-      </nav>
+      <dl>
+        ${row('Message', e.message)}
+        ${row('Time', html`${e.at} <span class="muted">(${timeAgo(e.at)})</span>`)}
+        ${row('Caller', e.caller?.name)}
+        ${row('Subject', e.caller?.subject)} ${row('Caller realm', e.caller?.realm)} ${row('Client', e.client)}
+        ${row('Called', e.via === 'execute_tool' ? 'through execute_tool' : e.via)}
+        ${row('Connection', e.connectionId)} ${row('Event', e.id)} ${row('Trace', this.traceLink(e))}
+        ${row('Span', e.spanId ? html`<code>${e.spanId}</code>` : null)}
+        <dt>Arguments</dt>
+        <dd>
+          ${!e.hasArgs
+            ? html`<span class="muted">none recorded</span>`
+            : args === undefined
+              ? html`<button class="link" type="button" @click=${() => this.showArguments(e.id)}>
+                    Show arguments
+                  </button>
+                  <span class="muted">· may contain personal data</span>`
+              : args === 'loading'
+                ? html`<span class="muted">loading …</span>`
+                : 'error' in args
+                  ? html`<span class="error">${args.error}</span>`
+                  : html`<button class="link" type="button" @click=${() => this.hideArguments(e.id)}>
+                        Hide arguments
+                      </button>
+                      <pre>${typeof args.value === 'string' ? args.value : JSON.stringify(args.value, null, 2)}</pre>`}
+        </dd>
+      </dl>
     `;
   }
 
@@ -330,17 +423,29 @@ export class AuditPage extends LitElement {
         @refresh=${() => this.search()}
       ></kc-mcp-audit-filter>
       ${this.error ? html`<p class="error">${this.error}</p>` : nothing}
-      ${this.events.length > 0 ? this.renderPager(false) : nothing}
-      ${this.events.length === 0 && !this.busy && !this.error
-        ? html`<p>No events match.</p>`
-        : html`<kc-mcp-audit-table
-            .events=${this.events}
-            .appliedForm=${this.appliedForm}
-            .traceUrl=${this.session?.me?.traceUrl ?? ''}
+      ${!this.error
+        ? html`<kc-mcp-data-table
+            remote
+            noFilter
+            pager="both"
+            .columns=${this.columns}
+            .rows=${this.events}
+            .busy=${this.busy}
+            .page=${this.pageIndex}
+            .pageSize=${this.pageSize}
+            .pageSizes=${PAGE_SIZES}
+            .total=${this.total}
+            .hasMore=${!!this.next}
+            .sortId=${this.appliedForm.sort}
+            .sortDir=${this.appliedForm.order}
+            .rowKey=${(row: unknown) => (row as AuditEvent).id}
+            .detail=${(row: unknown) => this.renderDetail(row as AuditEvent)}
+            empty="No events match."
             @sort=${this.onSort}
-            @narrow=${this.onNarrow}
-          ></kc-mcp-audit-table>`}
-      ${this.events.length > 0 ? this.renderPager(true) : nothing}
+            @page-change=${this.onPageChange}
+            @page-size-change=${this.onPageSizeChange}
+          ></kc-mcp-data-table>`
+        : nothing}
     `;
   }
 }
