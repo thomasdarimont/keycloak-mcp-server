@@ -28,6 +28,7 @@ import jakarta.ws.rs.core.UriInfo;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
+import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminAdoption;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminAudit;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminResource;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminSystems;
@@ -63,6 +64,10 @@ import io.quarkus.vertx.http.runtime.CurrentVertxRequest;
  * GET /bff/api/systems/{alias}/realms/{r}  one realm's settings
  * PUT /bff/api/systems/{alias}/realms/{r}  add or replace realm settings (operator + CSRF)
  * DELETE /bff/api/systems/{alias}/realms/{r}  remove realm settings (operator + CSRF)
+ * GET /bff/api/systems/{alias}/client-setup     the Keycloak client to create, as GET /admin/systems/{alias}/client-setup
+ * GET /bff/api/systems/{alias}/keycloak-realms  the realms Keycloak lists for the system's service account
+ * POST /bff/api/systems/{alias}/adoption        register some of them (operator + CSRF)
+ * DELETE /bff/api/systems/{alias}/adoption/{r}  give one up again (operator + CSRF)
  * GET /bff/api/audit                      the audit trail, as GET /admin/audit (operator or viewer role)
  * GET /bff/api/audit/{id}                 one event with its arguments, as GET /admin/audit/{id}
  * GET /bff/api/audit/values/{field}       completions for its filters, as GET /admin/audit/values/{field}
@@ -86,6 +91,8 @@ public class UiResource {
     AdminSystems systems;
     @Inject
     AdminAudit audit;
+    @Inject
+    AdminAdoption adoption;
     @Inject
     UiTenant tenant;
     @Inject
@@ -279,6 +286,35 @@ public class UiResource {
     public Response deleteRealm(@PathParam("alias") String alias, @PathParam("realm") String realm) {
         systems.deleteRealm(alias, realm);
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("api/systems/{alias}/client-setup")
+    public Map<String, Object> clientSetup(@PathParam("alias") String alias, @QueryParam("roles") String roles,
+            @QueryParam("realms") String realms, @QueryParam("credential") String credential, @Context UriInfo uri,
+            @Context HttpHeaders headers) {
+        return adoption.clientSetup(alias, AdminResource.publicBase(config.hostname(), uri, headers), roles,
+                AdminResource.splitList(realms), credential);
+    }
+
+    @GET
+    @Path("api/systems/{alias}/keycloak-realms")
+    public Map<String, Object> keycloakRealms(@PathParam("alias") String alias) {
+        return adoption.keycloakRealms(alias);
+    }
+
+    @POST
+    @Path("api/systems/{alias}/adoption")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Map<String, Object> adopt(@PathParam("alias") String alias, Map<String, Object> body) {
+        return adoption.adopt(alias, body);
+    }
+
+    @DELETE
+    @Path("api/systems/{alias}/adoption/{realm}")
+    public Map<String, Object> unadopt(@PathParam("alias") String alias, @PathParam("realm") String realm,
+            @QueryParam("restrict") boolean restrict) {
+        return adoption.unadopt(alias, realm, restrict);
     }
 
     @GET

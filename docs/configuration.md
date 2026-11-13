@@ -85,7 +85,7 @@ the database connection.
 | `kc-mcp.jwt.algorithm`          | `RS256`                     | RS256/384/512, PS256/384/512, ES256/384/512 |
 | `kc-mcp.jwt.key-id`             | JWK thumbprint              | `kid` in assertion header and JWKS |
 | `kc-mcp.jwt.public-key-file`    | derived                     | public key / certificate PEM to publish |
-| `kc-mcp.jwt.jwks-enabled` / `jwks-path` | `true` / `/.well-known/jwks.json` | configured key (else default system's) at `jwks-path`; every system at `/auth/keys/<system>/jwks.json` |
+| `kc-mcp.jwt.jwks-enabled` / `jwks-path` | `true` / `/.well-known/jwks.json` | configured key (else default system's) at `jwks-path`; every system at `/auth/keys/<key set>/jwks.json` (a stored system's id, a configured system's name) |
 | `kc-mcp.jwt.key-size`           | `2048`                      | RSA modulus bits of generated keys; algorithm decides RSA vs EC curve |
 | `kc-mcp.dynamic-systems`        | `false`                     | let `KeycloakSystemRepository`s add systems |
 | `kc-mcp.systems-file`           |                             | JSON file (`{"systems": [...]}`) of the file repository, re-read on change; needs `dynamic-systems` |

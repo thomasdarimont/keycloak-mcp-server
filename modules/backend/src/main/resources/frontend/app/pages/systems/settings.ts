@@ -547,7 +547,7 @@ export class SystemSettings extends LitElement {
                 .value=${this.form.issuer}
                 ?disabled=${!writable || this.busy}
                 @input=${(e: Event) => this.onInput('issuer', e)}
-                placeholder="optional when public URL differs"
+                placeholder="only when Keycloak's public URL differs: https://sso.example.com/realms/master"
               />
             </label>
             <label

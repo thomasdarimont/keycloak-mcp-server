@@ -65,7 +65,9 @@ class StorageTest {
         KeycloakSystem tenant = new KeycloakSystem("tenant-db", "http://127.0.0.1:1", GrantType.CLIENT_CREDENTIALS,
                 ClientAuth.PRIVATE_KEY_JWT, "master", Optional.of("keycloak-mcp-server"), Optional.empty(),
                 Optional.empty(), Optional.empty(), Optional.of("tenant"), Set.of(), Optional.empty());
-        repo.save(tenant.withDisplayName("Tenant DB"));
+        KeycloakSystem stored = repo.save(tenant.withDisplayName("Tenant DB"));
+        // a stored system's keys go by its id, not its name
+        String jwksPath = "/auth/keys/" + stored.id().orElseThrow() + "/jwks.json";
         assertTrue(systems.names().contains("tenant-db"), systems.names().toString());
 
         McpClient mcp = new McpClient().initialize(false);
@@ -73,26 +75,26 @@ class StorageTest {
         assertEquals("tenant-db", who.getString("system"), who.encode());
 
         // the vault creates the system's key on first use and publishes it
-        String body = given().get("/auth/keys/tenant-db/jwks.json").then().statusCode(200).extract().asString();
+        String body = given().get(jwksPath).then().statusCode(200).extract().asString();
         JsonObject key = new JsonObject(body).getJsonArray("keys").getJsonObject(0);
         assertEquals("RSA", key.getString("kty"));
-        assertEquals(body, given().get("/auth/keys/tenant-db/jwks.json").then().statusCode(200).extract().asString(),
+        assertEquals(body, given().get(jwksPath).then().statusCode(200).extract().asString(),
                 "stored, not regenerated");
+        given().get("/auth/keys/tenant-db/jwks.json").then().statusCode(404);
         given().get("/auth/keys/nope/jwks.json").then().statusCode(404);
 
         // another instance of the server on the same database rotates the key: this one
         // signs with the new key from its next token request and publishes both
-        JwtSigner before = keys.signerFor(tenant);
+        JwtSigner before = keys.signerFor(stored);
         assertEquals(key.getString("kid"), before.jwk().getString("kid"));
         SigningKeys otherInstance = new SigningKeys(config, keys.vault());
-        SigningKey newKey = otherInstance.rotate("tenant-db");
+        SigningKey newKey = otherInstance.rotate(stored);
         String rotated = Jwks.jwk(newKey.publicKey(), newKey.algorithm(), newKey.keyId()).getString("kid");
-        JwtSigner after = keys.signerFor(tenant);
+        JwtSigner after = keys.signerFor(stored);
         assertEquals(rotated, after.jwk().getString("kid"), "the rotation done elsewhere is signed with here");
         assertNotSame(before, after);
-        assertSame(after, keys.signerFor(tenant), "reused while the vault's key is the same");
-        JsonObject jwks = new JsonObject(
-                given().get("/auth/keys/tenant-db/jwks.json").then().statusCode(200).extract().asString());
+        assertSame(after, keys.signerFor(stored), "reused while the vault's key is the same");
+        JsonObject jwks = new JsonObject(given().get(jwksPath).then().statusCode(200).extract().asString());
         assertEquals(2, jwks.getJsonArray("keys").size(), jwks.encode());
         assertEquals(rotated, jwks.getJsonArray("keys").getJsonObject(0).getString("kid"), "new key first");
         assertEquals(key.getString("kid"), jwks.getJsonArray("keys").getJsonObject(1).getString("kid"),

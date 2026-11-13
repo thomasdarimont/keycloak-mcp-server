@@ -21,6 +21,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +36,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestProfile(AdminProfile.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class AdminResourceTest {
+
+    /**
+     * The JWKS path of the first 'acme': by its id, which a later 'acme' does not get.
+     */
+    static String acmeJwks;
 
     static RequestSpecification admin() {
         return given().header("Authorization", "Bearer " + AdminProfile.TOKEN).contentType("application/json");
@@ -77,9 +83,8 @@ class AdminResourceTest {
             .body("source", equalTo("db"))
             .body("signingKey.vault", equalTo("db"))
             .body("signingKey.algorithm", equalTo("RS256"))
-            .body("signingKey.jwksPath", equalTo("/auth/keys/acme/jwks.json"))
+            .body("signingKey.jwksPath", matchesPattern("/auth/keys/[0-9a-f-]{36}/jwks\\.json"))
             .body("signingKey.jwksUrl", startsWith("http://localhost:"))
-            .body("signingKey.jwksUrl", containsString("/auth/keys/acme/jwks.json"))
             .body("entries", hasItem("/mcp/systems/acme"))
             .body("entries", hasItem("/mcp/systems/acme/acme-dev"))
             .body("entries", hasItem("/mcp/systems/acme/acme-prod"))
@@ -88,9 +93,12 @@ class AdminResourceTest {
             .asString();
         String kid = new JsonObject(response).getJsonObject("signingKey").getString("kid");
         assertTrue(kid != null && kid.length() > 10, response);
+        acmeJwks = new JsonObject(response).getJsonObject("signingKey").getString("jwksPath");
+        assertTrue(new JsonObject(response).getJsonObject("signingKey").getString("jwksUrl").endsWith(acmeJwks));
 
-        // the JWKS Keycloak fetches carries that key
-        given().get("/auth/keys/acme/jwks.json")
+        // the JWKS Keycloak fetches carries that key; not under the name
+        given().get("/auth/keys/acme/jwks.json").then().statusCode(404);
+        given().get(acmeJwks)
             .then()
             .statusCode(200)
             .body("keys[0].kid", equalTo(kid))
@@ -119,7 +127,8 @@ class AdminResourceTest {
             .body("displayName", equalTo("ACME Inc."))
             .body("description", equalTo("ACME's production Keycloak, owned by the platform team"))
             .body("createdAt", equalTo(createdAt))
-            .body("signingKey.kid", equalTo(kid));
+            .body("signingKey.kid", equalTo(kid))
+            .body("signingKey.jwksPath", equalTo(acmeJwks));
         // the static system has no record to date
         admin().get("/admin/systems/default").then().statusCode(200).body("$", not(hasKey("createdAt")));
 
@@ -133,7 +142,7 @@ class AdminResourceTest {
         // the new key first; the retired one stays published for the vault's grace
         // period, for
         // other instances that still sign with it
-        given().get("/auth/keys/acme/jwks.json")
+        given().get(acmeJwks)
             .then()
             .statusCode(200)
             .body("keys[0].kid", equalTo(rotated))
@@ -192,11 +201,27 @@ class AdminResourceTest {
 
     @Test
     @Order(4)
-    void deleteRemovesTheSystem() {
+    void deleteRemovesTheSystemAndItsKeys() {
+        String kid = admin().get("/admin/systems/acme").then().extract().path("signingKey.kid");
         admin().delete("/admin/systems/acme").then().statusCode(204);
         admin().get("/admin/systems/acme").then().statusCode(404);
-        given().get("/auth/keys/acme/jwks.json").then().statusCode(404);
+        given().get(acmeJwks).then().statusCode(404);
         admin().get("/admin/systems").then().statusCode(200).body("systems.alias", not(hasItem("acme")));
+
+        // a new 'acme' takes nothing over: neither the key nor the JWKS URL Keycloak
+        // trusts
+        String again = admin().body("{\"url\": \"http://127.0.0.1:1\", \"id\": \"" + acmeJwks.split("/")[3] + "\"}")
+            .put("/admin/systems/acme")
+            .then()
+            .statusCode(201)
+            .extract()
+            .asString();
+        JsonObject key = new JsonObject(again).getJsonObject("signingKey");
+        assertNotEquals(acmeJwks, key.getString("jwksPath"), "an id in the body is ignored");
+        assertNotEquals(kid, key.getString("kid"));
+        given().get(acmeJwks).then().statusCode(404);
+        given().get(key.getString("jwksPath")).then().statusCode(200).body("keys.size()", equalTo(1));
+        admin().delete("/admin/systems/acme").then().statusCode(204);
     }
 
     @Test

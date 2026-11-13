@@ -2,12 +2,13 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { BffError, getSystem, type System } from '../../bff.js';
 import { systemHref, systemsHref, type SystemTab } from '../../router.js';
+import './adopt.js';
 import './keys.js';
 import './realm.js';
 import './realms.js';
 import './settings.js';
 
-/** One system: header, Settings | Realms | Keys tabs, child outlet. */
+/** One system: header, Settings | Realms | Adopt | Keys tabs, child outlet. */
 @customElement('kc-mcp-system-page')
 export class SystemPage extends LitElement {
   static styles = css`
@@ -153,7 +154,11 @@ export class SystemPage extends LitElement {
     const s = this.system;
     const title = s.displayName || s.alias;
     const active: SystemTab =
-      this.tab === 'realms' || this.realm ? 'realms' : this.tab === 'keys' ? 'keys' : 'settings';
+      this.tab === 'realms' || this.realm
+        ? 'realms'
+        : this.tab === 'keys' || this.tab === 'adopt'
+          ? this.tab
+          : 'settings';
     return html`
       <a class="back" href=${systemsHref()}>← Systems</a>
       <h2>${title}</h2>
@@ -174,6 +179,11 @@ export class SystemPage extends LitElement {
           >Realms</a
         >
         <a
+          href=${systemHref(s.alias, 'adopt')}
+          aria-current=${active === 'adopt' ? 'page' : nothing}
+          >Adopt</a
+        >
+        <a
           href=${systemHref(s.alias, 'keys')}
           aria-current=${active === 'keys' ? 'page' : nothing}
           >Keys</a
@@ -187,7 +197,12 @@ export class SystemPage extends LitElement {
               .realm=${this.realm}
             ></kc-mcp-system-realm-page>`
           : html`<kc-mcp-system-realms .system=${s}></kc-mcp-system-realms>`
-        : active === 'keys'
+        : active === 'adopt'
+          ? html`<kc-mcp-system-adopt
+              .system=${s}
+              @system-saved=${(e: Event) => this.onSaved(e)}
+            ></kc-mcp-system-adopt>`
+          : active === 'keys'
           ? html`<kc-mcp-system-keys
               .system=${s}
               @system-saved=${(e: Event) => this.onSaved(e)}

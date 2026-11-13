@@ -228,7 +228,9 @@ public class DatabaseKeycloakSystemRepository implements MutableKeycloakSystemRe
         SystemEntity e = entity(system.name()).orElse(null);
         if (e == null) {
             e = new SystemEntity();
-            e.id = UUID.randomUUID().toString();
+            // an id the caller chose (the admin API names the key set before the row
+            // exists), else a new one
+            e.id = system.id().orElseGet(() -> UUID.randomUUID().toString());
             e.alias = system.name();
             e.createdAt = now;
         }
@@ -308,6 +310,7 @@ public class DatabaseKeycloakSystemRepository implements MutableKeycloakSystemRe
 
     private KeycloakSystem toSystem(SystemEntity e, List<RealmEntity> realms) {
         return KeycloakSystem.builder(e.alias, e.url)
+            .id(e.id)
             .grantType(GrantType.parse(e.grantType))
             .clientAuth(ClientAuth.parse(e.clientAuth))
             .authRealm(e.authRealm)

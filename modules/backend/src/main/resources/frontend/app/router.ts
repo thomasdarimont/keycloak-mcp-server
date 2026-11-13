@@ -7,7 +7,7 @@ export type NavRoute = {
   capability?: string;
 };
 
-export type SystemTab = 'settings' | 'realms' | 'keys';
+export type SystemTab = 'settings' | 'realms' | 'adopt' | 'keys';
 
 /** Quarkus mount point for the SPA (`UiRoutes`). */
 export const UI_BASE = '/ui';

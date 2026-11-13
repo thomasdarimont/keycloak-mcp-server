@@ -33,7 +33,7 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
  * POST   /admin/systems                      same, alias in the body
  * GET    /admin/systems                      every known system with its source repository
  * GET    /admin/systems/{alias}
- * DELETE /admin/systems/{alias}              remove from the mutable repository (keys stay in the vault)
+ * DELETE /admin/systems/{alias}              remove from the mutable repository, its keys from the vault
  * POST   /admin/systems/{alias}/signing-key  rotate the key
  * GET    /admin/secrets                      the names in the vault and the systems using them, never a value
  * GET    /admin/secrets/{name}
@@ -44,6 +44,13 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
  * GET    /admin/systems/{alias}/realms/{r}   one realm's settings
  * PUT    /admin/systems/{alias}/realms/{r}   adds or replaces them (labels, Keycloak's realm id, authorization)
  * DELETE /admin/systems/{alias}/realms/{r}   removes them; the system's settings apply again
+ * GET    /admin/systems/{alias}/client-setup  the client this server needs in Keycloak, its roles, a kcadm.sh
+ *                                            script: ?roles=admin|read|manage realms=a,b credential=jwks-url|public-key
+ * GET    /admin/systems/{alias}/keycloak-realms  the realms the system's service account sees in Keycloak
+ * POST   /admin/systems/{alias}/adoption     registers some of them: {"realms": [...], "restrict", "preset"} or
+ *                                            {"allRealms": true}
+ * DELETE /admin/systems/{alias}/adoption/{r} gives one up: off the allowlist, settings removed; ?restrict=true
+ *                                            when the system has no allowlist yet
  * POST   /admin/storage/rekey                re-encrypt everything under the current kc-mcp.storage.secret-key
  * GET    /admin/audit                        the audit trail, newest first: ?subject= caller= system= realm= tool=
  *                                            level= outcome=ok|error|<code> from= to= (ISO-8601) limit= cursor=
@@ -79,6 +86,9 @@ public class AdminResource {
 
     @Inject
     AdminAudit audit;
+
+    @Inject
+    AdminAdoption adoption;
 
     @GET
     @Path("systems")
@@ -147,6 +157,41 @@ public class AdminResource {
     public Response deleteRealm(@PathParam("alias") String alias, @PathParam("realm") String realm) {
         admin.deleteRealm(alias, realm);
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("systems/{alias}/client-setup")
+    public Map<String, Object> clientSetup(@PathParam("alias") String alias, @QueryParam("roles") String roles,
+            @QueryParam("realms") String realms, @QueryParam("credential") String credential, @Context UriInfo uri,
+            @Context HttpHeaders headers) {
+        return adoption.clientSetup(alias, publicBase(config.hostname(), uri, headers), roles, splitList(realms),
+                credential);
+    }
+
+    @GET
+    @Path("systems/{alias}/keycloak-realms")
+    public Map<String, Object> keycloakRealms(@PathParam("alias") String alias) {
+        return adoption.keycloakRealms(alias);
+    }
+
+    @POST
+    @Path("systems/{alias}/adoption")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Map<String, Object> adopt(@PathParam("alias") String alias, Map<String, Object> body) {
+        return adoption.adopt(alias, body);
+    }
+
+    @DELETE
+    @Path("systems/{alias}/adoption/{realm}")
+    public Map<String, Object> unadopt(@PathParam("alias") String alias, @PathParam("realm") String realm,
+            @QueryParam("restrict") boolean restrict) {
+        return adoption.unadopt(alias, realm, restrict);
+    }
+
+    /** A comma separated query parameter as a list; null: empty. */
+    public static java.util.List<String> splitList(String value) {
+        return value == null ? java.util.List.of()
+                : java.util.Arrays.stream(value.split(",")).map(String::trim).filter(v -> !v.isEmpty()).toList();
     }
 
     @GET

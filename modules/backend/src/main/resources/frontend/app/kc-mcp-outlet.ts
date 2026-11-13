@@ -118,7 +118,7 @@ export class KcMcpOutlet extends LitElement {
         path: `${UI_BASE}/systems/:alias/:tab`,
         enter: async ({ alias, tab }) => {
           notifyNavigate();
-          if (tab !== 'realms' && tab !== 'settings' && tab !== 'keys') {
+          if (tab !== 'realms' && tab !== 'settings' && tab !== 'adopt' && tab !== 'keys') {
             const path = `${UI_BASE}/systems/${alias ?? ''}`;
             history.replaceState({}, '', path);
             await this.router.goto(path);
@@ -222,7 +222,7 @@ export class KcMcpOutlet extends LitElement {
   };
 
   private systemTab(tab: string | undefined): SystemTab {
-    if (tab === 'realms' || tab === 'keys') {
+    if (tab === 'realms' || tab === 'adopt' || tab === 'keys') {
       return tab;
     }
     return 'settings';

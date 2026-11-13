@@ -317,9 +317,10 @@ public class DefaultKeycloakSystems implements KeycloakSystems {
         KeycloakAdmin gone = admins.remove(name);
         if (gone != null) {
             gone.close();
-        }
-        if (keys != null) {
-            keys.forget(name);
+            // signers are cached per key set; one never connected has none
+            if (keys != null) {
+                keys.forget(gone.system());
+            }
         }
     }
 

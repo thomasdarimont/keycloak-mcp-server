@@ -286,6 +286,125 @@ export const deleteSystemRealm = (alias: string, realm: string): Promise<void> =
     method: 'DELETE',
   });
 
+/** Options of GET /bff/api/systems/{alias}/client-setup. */
+export interface ClientSetupOptions {
+  /** `admin`: master's admin role; `read` / `manage`: realm-management roles of `realms` only. */
+  roles?: 'admin' | 'read' | 'manage';
+  realms?: string[];
+  /** `jwks-url`: Keycloak fetches the keys from this server; `public-key`: the key copied into the client. */
+  credential?: 'jwks-url' | 'public-key';
+}
+
+/** The Keycloak client this server needs, its roles and a kcadm.sh script doing both. */
+export interface ClientSetup {
+  system: string;
+  url: string;
+  realm: string;
+  clientId: string;
+  clientAuth: string;
+  credential: string;
+  /** JSON for POST /admin/realms/{realm}/clients. */
+  client: Record<string, unknown>;
+  roles: {
+    mode: string;
+    serviceAccount: string;
+    realmRoles?: string[];
+    clientRoles?: Record<string, string[]>;
+  };
+  script: string;
+  notes: string[];
+}
+
+export const getClientSetup = (alias: string, options: ClientSetupOptions = {}): Promise<ClientSetup> => {
+  const params = new URLSearchParams();
+  if (options.roles) {
+    params.set('roles', options.roles);
+  }
+  if (options.realms?.length) {
+    params.set('realms', options.realms.join(','));
+  }
+  if (options.credential) {
+    params.set('credential', options.credential);
+  }
+  const query = params.toString();
+  return call<ClientSetup>(
+    `/api/systems/${encodeURIComponent(alias)}/client-setup${query ? `?${query}` : ''}`,
+  );
+};
+
+/** A realm as Keycloak lists it for the system's service account. */
+export interface KeycloakRealm {
+  name: string;
+  id: string;
+  displayName?: string;
+  enabled?: boolean;
+  /** This server keeps settings for it. */
+  adopted: boolean;
+  /** Calls may reach it (allowlist). */
+  allowed: boolean;
+  /** Settings with this realm's id are kept under that older name. */
+  renamedFrom?: string;
+}
+
+export interface KeycloakRealms {
+  system: string;
+  url: string;
+  authRealm: string;
+  clientId?: string;
+  /** The system has an allowlist. */
+  restricted: boolean;
+  count: number;
+  realms: KeycloakRealm[];
+  /** Known here but not listed by Keycloak: deleted, renamed or out of the account's sight. */
+  notListed: { name: string; settings: boolean; allowed: boolean; realmId?: string }[];
+}
+
+/** Keycloak's realms for the system's service account (GET /bff/api/systems/{alias}/keycloak-realms). */
+export const getKeycloakRealms = (alias: string): Promise<KeycloakRealms> =>
+  call<KeycloakRealms>(`/api/systems/${encodeURIComponent(alias)}/keycloak-realms`);
+
+export interface AdoptionRequest {
+  realms?: string[];
+  /** Every listed realm, and the allowlist cleared so later realms are reachable too. */
+  allRealms?: boolean;
+  /** Needed to adopt a selection on a system without an allowlist. */
+  restrict?: boolean;
+  /** Preset of newly adopted realms. */
+  preset?: string;
+}
+
+export interface AdoptionResult {
+  system: string;
+  adopted: string[];
+  updated: string[];
+  unchanged: string[];
+  restricted: boolean;
+  allowedRealms: string[];
+}
+
+/** Register realms Keycloak lists (POST /bff/api/systems/{alias}/adoption). */
+export const adoptRealms = (alias: string, body: AdoptionRequest): Promise<AdoptionResult> =>
+  call<AdoptionResult>(`/api/systems/${encodeURIComponent(alias)}/adoption`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+export interface UnadoptionResult {
+  system: string;
+  realm: string;
+  settingsRemoved: boolean;
+  restricted: boolean;
+  allowedRealms: string[];
+}
+
+/** Give up an adopted realm (DELETE /bff/api/systems/{alias}/adoption/{realm}). */
+export const unadoptRealm = (alias: string, realm: string, restrict: boolean): Promise<UnadoptionResult> =>
+  call<UnadoptionResult>(
+    `/api/systems/${encodeURIComponent(alias)}/adoption/${encodeURIComponent(realm)}${restrict ? '?restrict=true' : ''}`,
+    { method: 'DELETE' },
+  );
+
 /** One tool call of the audit trail (GET /bff/api/audit). */
 export interface AuditEvent {
   id: number;

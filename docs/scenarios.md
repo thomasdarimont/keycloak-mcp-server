@@ -251,13 +251,13 @@ sequenceDiagram
     rect rgba(127,127,127,0.10)
     O->>S: PUT /admin/systems/acme {url, authRealm, clientAuth: private_key_jwt, signingKey: generate}
     S->>DB: store system, create key pair (encrypted)
-    S-->>O: 201 {signingKey.kid, jwksUrl: .../auth/keys/acme/jwks.json, entries}
+    S-->>O: 201 {signingKey.kid, jwksUrl: .../auth/keys/<id>/jwks.json, entries}
     O->>K: client keycloak-mcp-server: Signed JWT, JWKS URL from the answer, service account roles
     end
     Note over S,K: first call for system acme
     rect rgba(127,127,127,0.10)
     S->>K: token request signed with acme's key
-    K->>S: GET /auth/keys/acme/jwks.json
+    K->>S: GET /auth/keys/<id>/jwks.json
     K-->>S: service account token
     end
     Note over O,S: POST /admin/systems/acme/signing-key rotates the key, the JWKS keeps the retired one for a grace period

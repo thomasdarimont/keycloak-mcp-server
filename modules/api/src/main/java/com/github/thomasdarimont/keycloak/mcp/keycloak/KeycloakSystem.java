@@ -20,16 +20,19 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 /**
  * Resolved connection settings of one Keycloak system (per-system values with top-level
  * fallbacks). The {@link #name()} is the technical key: the {@code system} argument, the
- * entry path {@code /mcp/systems/<name>}, the key in the vault; {@link #displayName()} is
- * a label for people. A {@link #clientSecret()} or {@link #password()} of the form
- * {@code vault:<secret name>} is a reference the server resolves against the
- * {@link KeyVault} before connecting.
+ * entry path {@code /mcp/systems/<name>}; {@link #displayName()} is a label for people. A
+ * system the server stored has an {@link #id()} that a new system of the same name never
+ * gets: its keys go by it ({@code SigningKeys.keySet}), so trust Keycloak placed in a
+ * deleted system's JWKS does not pass to a successor. A {@link #clientSecret()} or
+ * {@link #password()} of the form {@code vault:<secret name>} is a reference the server
+ * resolves against the {@link KeyVault} before connecting.
  */
 public record KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
         Optional<String> clientId, Optional<String> clientSecret, Optional<String> username, Optional<String> password,
         Optional<String> defaultRealm, Set<String> allowedRealms, Optional<String> version, Optional<String> issuer,
         Optional<String> displayName, Optional<String> description, Set<String> trustedIssuers, AccessSettings access,
-        Map<String, RealmSettings> realms, Optional<String> preset, Map<String, Preset> presets, ToolSettings tools) {
+        Map<String, RealmSettings> realms, Optional<String> preset, Map<String, Preset> presets, ToolSettings tools,
+        Optional<String> id) {
 
     /**
      * Prefix of a secret value that names a {@link KeyVault} secret instead of holding
@@ -46,6 +49,20 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
         preset = preset == null ? Optional.empty() : preset.map(String::trim).filter(v -> !v.isEmpty());
         presets = presets == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(presets));
         tools = tools == null ? ToolSettings.NONE : tools;
+        id = id == null ? Optional.empty() : id.map(String::trim).filter(v -> !v.isEmpty());
+    }
+
+    /** Without an id: a system from configuration or a file. */
+    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
+            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
+            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
+            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
+            Optional<String> description, Set<String> trustedIssuers, AccessSettings access,
+            Map<String, RealmSettings> realms, Optional<String> preset, Map<String, Preset> presets,
+            ToolSettings tools) {
+        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
+                allowedRealms, version, issuer, displayName, description, trustedIssuers, access, realms, preset,
+                presets, tools, Optional.empty());
     }
 
     /** Without a tools section. */
@@ -342,7 +359,8 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
             .tools(tools)
             .realms(realms.values())
             .preset(preset.orElse(null))
-            .presets(presets.values());
+            .presets(presets.values())
+            .id(id.orElse(null));
     }
 
     /**
@@ -382,6 +400,7 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
         private final Map<String, RealmSettings> realms = new LinkedHashMap<>();
         private String preset;
         private final Map<String, Preset> presets = new LinkedHashMap<>();
+        private String id;
 
         private Builder() {
         }
@@ -516,6 +535,14 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
             return this;
         }
 
+        /**
+         * The repository's surrogate id; {@code null} for a system from configuration.
+         */
+        public Builder id(String id) {
+            this.id = id;
+            return this;
+        }
+
         /** The preset the system's block starts from; {@code null} for none. */
         public Builder preset(String preset) {
             this.preset = preset;
@@ -574,7 +601,7 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
             return new KeycloakSystem(name.trim(), url.trim(), grantType, clientAuth, authRealm, text(clientId),
                     text(clientSecret), text(username), text(password), text(defaultRealm), Set.copyOf(allowedRealms),
                     text(version), text(issuer), text(displayName), text(description), Set.copyOf(trustedIssuers),
-                    access, Map.copyOf(realms), text(preset), Map.copyOf(presets), tools);
+                    access, Map.copyOf(realms), text(preset), Map.copyOf(presets), tools, text(id));
         }
 
         private static boolean isHttpUrl(String value) {

@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -187,6 +188,14 @@ public class AdminSystems {
             // stored value.
             system = keepSecrets(system, known(system.name()), body);
         }
+        // the id is the server's, never the body's: a stored system keeps its own, a new
+        // one
+        // gets a new one, so it never takes over the keys (and Keycloak's trust) of a
+        // deleted system of the same name
+        system = system.toBuilder()
+            .id(owner.isPresent() ? known(system.name()).id().orElse(null) : UUID.randomUUID().toString())
+            .build();
+        checkIssuer(system);
         checkSecrets(system);
         checkTools(system, catalog);
         // the stored realms stay, and overlay the new block: checked together
@@ -195,20 +204,26 @@ public class AdminSystems {
                 ? systems.repository().find(toSave.name()).map(old -> toSave.withRealms(old.realms())).orElse(toSave)
                 : toSave;
         checkAccess(withRealms);
+        boolean generate = false;
         if (system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT && !keys.configuredKey()) {
             Object mode = body.get("signingKey");
-            provideKey(system.name(), mode == null ? null : String.valueOf(mode));
+            generate = keyToGenerate(system, mode == null ? null : String.valueOf(mode));
         }
         KeycloakSystem stored = target.save(system);
+        if (generate) {
+            keys.vault().createSigningKey(keys.keySet(stored));
+        }
         systems.forget(system.name());
         LOG.infof("Admin API: system '%s' at %s %s in '%s'", system.name(), system.url(),
                 owner.isPresent() ? "replaced" : "registered", target.id());
         return new Saved(represent(stored, publicBase), owner.isPresent());
     }
 
-    private void provideKey(String alias, String signingKey) {
+    /** Whether the system needs a new key; refuses what the vault cannot do. */
+    private boolean keyToGenerate(KeycloakSystem system, String signingKey) {
+        String alias = system.name();
         KeyVault vault = keys.vault();
-        Optional<SigningKey> existing = vault.findSigningKey(alias);
+        Optional<SigningKey> existing = vault.findSigningKey(keys.keySet(system));
         String mode = signingKey == null ? (existing.isPresent() ? "existing" : "generate")
                 : signingKey.trim().toLowerCase(Locale.ROOT);
         switch (mode) {
@@ -218,6 +233,7 @@ public class AdminSystems {
                             "KeyVault '" + vault.id() + "' has no private_key_jwt key for '" + alias
                                     + "'; provision one there or ask for \"signingKey\": \"generate\".");
                 }
+                return false;
             }
             case "generate" -> {
                 if (existing.isPresent()) {
@@ -230,7 +246,7 @@ public class AdminSystems {
                     throw new AdminException(400, "vault_read_only", "KeyVault '" + vault.id()
                             + "' cannot create keys; provision one for '" + alias + "' there.");
                 }
-                vault.createSigningKey(alias);
+                return true;
             }
             default -> throw new AdminException(400, "invalid_signing_key",
                     "signingKey must be \"existing\" or \"generate\".");
@@ -302,6 +318,29 @@ public class AdminSystems {
         return parsed;
     }
 
+    /**
+     * An {@code issuer} is the auth realm's issuer as Keycloak states it, the {@code aud}
+     * of client assertions: {@code <public URL>/realms/<auth realm>}. Keycloak's base URL
+     * alone is the common slip, and Keycloak answers it only with "Invalid token
+     * audience".
+     */
+    static void checkIssuer(KeycloakSystem system) {
+        Optional<String> issuer = system.issuer().map(String::trim).filter(v -> !v.isEmpty());
+        if (issuer.isEmpty()) {
+            return;
+        }
+        String value = issuer.get();
+        String suffix = "/realms/" + system.authRealm();
+        String trimmed = value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+        if (!(trimmed.startsWith("https://") || trimmed.startsWith("http://")) || !trimmed.endsWith(suffix)) {
+            throw new AdminException(400, "invalid_issuer",
+                    "The issuer '" + value + "' is not an issuer of the realm '" + system.authRealm()
+                            + "': it is Keycloak's public URL followed by " + suffix + " (e.g. " + trimmed
+                            + (trimmed.contains("/realms/") ? "" : suffix)
+                            + "), and only needed when that URL differs from the system's URL.");
+        }
+    }
+
     /** A {@code vault:} reference the vault does not resolve is refused. */
     private void checkSecrets(KeycloakSystem system) {
         List<Optional<String>> values = new ArrayList<>(List.of(system.clientSecret(), system.password()));
@@ -332,7 +371,7 @@ public class AdminSystems {
             return;
         }
         KeyVault vault = keys.vault();
-        boolean systemKey = keys.configuredKey() || vault.findSigningKey(system.name()).isPresent()
+        boolean systemKey = keys.configuredKey() || vault.findSigningKey(keys.keySet(system)).isPresent()
                 || vault.supportsKeyCreation();
         checkAccess(system, systems, policy.accessCheckChain(), engines, systemKey);
     }
@@ -498,7 +537,17 @@ public class AdminSystems {
         LOG.infof("Admin API: realm '%s' of system '%s' removed", realm, alias);
     }
 
-    private MutableKeycloakSystemRepository mutableOwner(String alias) {
+    /**
+     * What every change of a system is held to before it is stored: {@code vault:}
+     * references resolve, tools sections name real tools, the access blocks pass.
+     */
+    void validate(KeycloakSystem candidate) {
+        checkSecrets(candidate);
+        checkTools(candidate, catalog);
+        checkAccess(candidate);
+    }
+
+    MutableKeycloakSystemRepository mutableOwner(String alias) {
         KeycloakSystemRepository owner = systems.repositoryOf(alias)
             .orElseThrow(() -> new AdminException(404, "unknown_system", "No Keycloak system named '" + alias + "'."));
         if (!(owner instanceof MutableKeycloakSystemRepository mutable)) {
@@ -526,8 +575,11 @@ public class AdminSystems {
             throw new AdminException(409, "system_configured", "'" + alias + "' is defined by the repository '"
                     + owner.id() + "', which the admin API cannot change.");
         }
+        KeycloakSystem gone = known(alias);
         mutable.delete(alias);
         systems.forget(alias);
+        // its JWKS ends with it: Keycloak refuses assertions in its name from now on
+        keys.removeKeys(gone);
         LOG.infof("Admin API: system '%s' removed from '%s'", alias, mutable.id());
     }
 
@@ -539,7 +591,7 @@ public class AdminSystems {
                     "'" + alias + "' does not authenticate with private_key_jwt.");
         }
         try {
-            keys.rotate(alias);
+            keys.rotate(system);
         }
         catch (UnsupportedOperationException e) {
             throw new AdminException(409, "vault_read_only", e.getMessage());
@@ -547,7 +599,7 @@ public class AdminSystems {
         return represent(system, publicBase);
     }
 
-    private KeycloakSystem known(String alias) {
+    KeycloakSystem known(String alias) {
         return systems.repository()
             .find(alias)
             .orElseThrow(() -> new AdminException(404, "unknown_system", "No Keycloak system named '" + alias + "'."));
@@ -604,13 +656,13 @@ public class AdminSystems {
         });
         if (s.clientAuth() == ClientAuth.PRIVATE_KEY_JWT) {
             Map<String, Object> key = new LinkedHashMap<>();
-            String path = JwksEndpoint.SYSTEM_PATH.replace(":system", s.name());
+            String path = JwksEndpoint.path(keys.keySet(s));
             if (keys.configuredKey()) {
                 key.put("configured", true);
                 key.put("kid", keys.configuredJwks().map(AdminSystems::kid).orElse(null));
             }
             else {
-                keys.currentKey(s.name()).ifPresent(k -> {
+                keys.currentKey(s).ifPresent(k -> {
                     key.put("algorithm", k.algorithm());
                     key.put("kid", Jwks.jwk(k.publicKey(), k.algorithm(), k.keyId()).getString("kid"));
                 });
