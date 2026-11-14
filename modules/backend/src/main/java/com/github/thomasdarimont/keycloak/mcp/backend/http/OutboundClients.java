@@ -24,7 +24,7 @@ import io.quarkus.tls.TlsConfigurationRegistry;
  * client. A named {@code quarkus.tls.<name>.*} configuration supplies the trust store for
  * a provider behind a private CA (its trust store; client certificates are not supported
  * here); without one the JVM's default trust applies. Redirects are not followed (the
- * implementation's default).
+ * implementation's default). Requests carry the server's {@link UserAgent}.
  */
 public final class OutboundClients {
 
@@ -192,6 +192,7 @@ public final class OutboundClients {
     private static ClientBuilder builder(Timeouts t) {
         return ClientBuilder.newBuilder()
             .connectTimeout(t.connect().toMillis(), TimeUnit.MILLISECONDS)
-            .readTimeout(t.read().toMillis(), TimeUnit.MILLISECONDS);
+            .readTimeout(t.read().toMillis(), TimeUnit.MILLISECONDS)
+            .register(UserAgent.filter(UserAgent::global));
     }
 }

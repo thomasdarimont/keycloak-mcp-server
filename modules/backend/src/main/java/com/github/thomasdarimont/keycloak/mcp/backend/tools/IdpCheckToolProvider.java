@@ -4,9 +4,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -21,12 +18,17 @@ import java.util.Optional;
 import java.util.Set;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import com.github.thomasdarimont.keycloak.mcp.backend.http.OutboundClients;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -52,7 +54,9 @@ import io.vertx.core.json.JsonObject;
  * ({@code kc-mcp.dynamic-private-hosts}, {@code listed} in the shared profile, where only
  * a host {@code kc-mcp.allowed-hosts} names literally may be private); only http(s), no
  * redirects, short timeouts, at most {@value #MAX_BYTES} bytes, and XML without DTDs or
- * external entities. The result is the comparison, never the fetched document.
+ * external entities. The request goes through {@link OutboundClients}, with the server's
+ * user agent, as every outgoing request other than Keycloak's. The result is the
+ * comparison, never the fetched document.
  */
 @AutoService(ToolProvider.class)
 public class IdpCheckToolProvider extends AbstractToolProvider {
@@ -432,43 +436,35 @@ public class IdpCheckToolProvider extends AbstractToolProvider {
             return new Fetch(null, "Not fetched: " + refused.get()
                 .replace("a system registered at runtime", "a URL from an identity provider's settings"));
         }
-        try (HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build()) {
-            HttpRequest request = HttpRequest.newBuilder(uri)
-                .timeout(TIMEOUT)
-                .header("Accept", "application/json, application/samlmetadata+xml, application/xml")
-                .GET()
-                .build();
-            try {
-                HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
-                try (InputStream in = response.body()) {
-                    int status = response.statusCode();
-                    if (status >= 300 && status < 400) {
-                        return new Fetch(null,
-                                "HTTP " + status + " redirect to "
-                                        + response.headers().firstValue("Location").orElse("?")
-                                        + "; redirects are not followed," + " configure the final URL");
-                    }
-                    if (status != 200) {
-                        return new Fetch(null, "HTTP " + status + " from " + url);
-                    }
-                    byte[] body = in.readNBytes(MAX_BYTES + 1);
-                    if (body.length > MAX_BYTES) {
-                        return new Fetch(null, "The document is larger than " + MAX_BYTES + " bytes.");
-                    }
-                    return new Fetch(body, null);
+        Client client = OutboundClients.create(new OutboundClients.Timeouts(TIMEOUT, TIMEOUT));
+        try (Response response = client.target(uri)
+            .request()
+            .header(HttpHeaders.ACCEPT, "application/json, application/samlmetadata+xml, application/xml")
+            .get()) {
+            int status = response.getStatus();
+            if (status >= 300 && status < 400) {
+                String location = response.getHeaderString(HttpHeaders.LOCATION);
+                return new Fetch(null, "HTTP " + status + " redirect to " + (location == null ? "?" : location)
+                        + "; redirects are not followed, configure the final URL");
+            }
+            if (status != 200) {
+                return new Fetch(null, "HTTP " + status + " from " + url);
+            }
+            try (InputStream in = response.readEntity(InputStream.class)) {
+                byte[] body = in.readNBytes(MAX_BYTES + 1);
+                if (body.length > MAX_BYTES) {
+                    return new Fetch(null, "The document is larger than " + MAX_BYTES + " bytes.");
                 }
+                return new Fetch(body, null);
             }
-            catch (IOException e) {
-                return new Fetch(null, "Cannot reach " + uri.getHost() + ": " + e.getClass().getSimpleName()
-                        + (e.getMessage() == null ? "" : " (" + e.getMessage() + ")"));
-            }
-            catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return new Fetch(null, "Interrupted while fetching " + url);
-            }
+        }
+        catch (IOException | ProcessingException e) {
+            Throwable cause = e instanceof ProcessingException && e.getCause() != null ? e.getCause() : e;
+            return new Fetch(null, "Cannot reach " + uri.getHost() + ": " + cause.getClass().getSimpleName()
+                    + (cause.getMessage() == null ? "" : " (" + cause.getMessage() + ")"));
+        }
+        finally {
+            client.close();
         }
     }
 

@@ -54,6 +54,7 @@ public final class KeycloakSystem {
     private final Set<String> allowedRealms;
     private final String version;
     private final String issuer;
+    private final String userAgent;
     private final String displayName;
     private final String description;
     private final Set<String> trustedIssuers;
@@ -76,9 +77,9 @@ public final class KeycloakSystem {
      */
     private KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
             String clientId, String clientSecret, String username, String password, String defaultRealm,
-            Set<String> allowedRealms, String version, String issuer, String displayName, String description,
-            Set<String> trustedIssuers, AccessSettings access, Map<String, RealmSettings> realms, String preset,
-            Map<String, Preset> presets, ToolSettings tools, String id) {
+            Set<String> allowedRealms, String version, String issuer, String userAgent, String displayName,
+            String description, Set<String> trustedIssuers, AccessSettings access, Map<String, RealmSettings> realms,
+            String preset, Map<String, Preset> presets, ToolSettings tools, String id) {
         this.name = name;
         this.url = url;
         this.grantType = grantType;
@@ -92,6 +93,7 @@ public final class KeycloakSystem {
         this.allowedRealms = allowedRealms == null ? Set.of() : Set.copyOf(allowedRealms);
         this.version = version;
         this.issuer = issuer;
+        this.userAgent = trimmed(userAgent);
         this.displayName = trimmed(displayName);
         this.description = trimmed(description);
         this.trustedIssuers = trustedIssuers == null ? Set.of() : Set.copyOf(trustedIssuers);
@@ -168,6 +170,15 @@ public final class KeycloakSystem {
      */
     public Optional<String> issuer() {
         return Optional.ofNullable(issuer);
+    }
+
+    /**
+     * The {@code User-Agent} of the requests to this system, over the server's
+     * {@code kc-mcp.http.user-agent}: {@code {version}} stands for the server's version,
+     * {@code none} sends none of the server's own. Empty: the global one applies.
+     */
+    public Optional<String> userAgent() {
+        return Optional.ofNullable(userAgent);
     }
 
     /** A label for people. */
@@ -314,7 +325,8 @@ public final class KeycloakSystem {
                 pick(s.defaultRealm(), d.defaultRealm()).orElse(null),
                 Set.copyOf(realms.stream().map(String::trim).filter(v -> !v.isEmpty()).toList()),
                 pick(s.version(), d.version()).map(String::trim).filter(v -> !v.isEmpty()).orElse(null),
-                pick(s.issuer(), d.issuer()).map(String::trim).filter(v -> !v.isEmpty()).orElse(null), null, null,
+                pick(s.issuer(), d.issuer()).map(String::trim).filter(v -> !v.isEmpty()).orElse(null),
+                pick(s.userAgent(), d.userAgent()).orElse(null), null, null,
                 Set.copyOf(pick(s.trustedIssuers(), d.trustedIssuers()).orElse(List.of())
                     .stream()
                     .map(String::trim)
@@ -420,6 +432,7 @@ public final class KeycloakSystem {
             .allowedRealms(allowedRealms)
             .version(version)
             .issuer(issuer)
+            .userAgent(userAgent)
             .displayName(displayName)
             .description(description)
             .trustedIssuers(trustedIssuers)
@@ -461,6 +474,7 @@ public final class KeycloakSystem {
         private final Set<String> trustedIssuers = new LinkedHashSet<>();
         private String version;
         private String issuer;
+        private String userAgent;
         private String displayName;
         private String description;
         private AccessSettings access = AccessSettings.NONE;
@@ -576,6 +590,14 @@ public final class KeycloakSystem {
             return this;
         }
 
+        /**
+         * {@code none}: none of the server's own; {@code null} or blank: the global one.
+         */
+        public Builder userAgent(String userAgent) {
+            this.userAgent = userAgent;
+            return this;
+        }
+
         public Builder displayName(String displayName) {
             this.displayName = displayName;
             return this;
@@ -668,8 +690,9 @@ public final class KeycloakSystem {
             }
             return new KeycloakSystem(name.trim(), url.trim(), grantType, clientAuth, authRealm, text(clientId),
                     text(clientSecret), text(username), text(password), text(defaultRealm), Set.copyOf(allowedRealms),
-                    text(version), text(issuer), text(displayName), text(description), Set.copyOf(trustedIssuers),
-                    access, Map.copyOf(realms), text(preset), Map.copyOf(presets), tools, text(id));
+                    text(version), text(issuer), text(userAgent), text(displayName), text(description),
+                    Set.copyOf(trustedIssuers), access, Map.copyOf(realms), text(preset), Map.copyOf(presets), tools,
+                    text(id));
         }
 
         private static boolean isHttpUrl(String value) {
@@ -726,8 +749,8 @@ public final class KeycloakSystem {
      */
     private List<Object> values() {
         return Arrays.asList(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password,
-                defaultRealm, allowedRealms, version, issuer, displayName, description, trustedIssuers, access, realms,
-                preset, presets, tools, id);
+                defaultRealm, allowedRealms, version, issuer, userAgent, displayName, description, trustedIssuers,
+                access, realms, preset, presets, tools, id);
     }
 
     /**
@@ -771,6 +794,7 @@ public final class KeycloakSystem {
         }
         version().ifPresent(v -> b.append(", version=").append(v));
         issuer().ifPresent(v -> b.append(", issuer=").append(v));
+        userAgent().ifPresent(v -> b.append(", userAgent=").append(v));
         displayName().ifPresent(v -> b.append(", displayName=").append(v));
         if (!trustedIssuers.isEmpty()) {
             b.append(", trustedIssuers=").append(new TreeSet<>(trustedIssuers));

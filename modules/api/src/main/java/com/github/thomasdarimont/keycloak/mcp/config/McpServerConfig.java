@@ -527,6 +527,16 @@ public interface McpServerConfig {
         @WithDefault("60s")
         @WithConverter(Durations.DurationConverter.class)
         Duration readTimeout();
+
+        /**
+         * The {@code User-Agent} of the server's outgoing requests: Keycloak, CIBA,
+         * AuthZEN, the UI's identity providers, fetched IdP metadata. {@code {version}}
+         * stands for the server's version; {@code none} sends none of the server's own,
+         * so the HTTP library's default applies. A system can set its own
+         * ({@code kc-mcp.systems.<name>.user-agent}).
+         */
+        @WithDefault("keycloak-mcp-server/{version}")
+        String userAgent();
     }
 
     interface Metrics {
@@ -787,6 +797,14 @@ public interface McpServerConfig {
          * Keycloak is derived from it. Unset, {@code <url>/realms/<auth-realm>} applies.
          */
         Optional<String> issuer();
+
+        /**
+         * The {@code User-Agent} of the requests to this system, over
+         * {@code kc-mcp.http.user-agent}: {@code {version}} stands for the server's
+         * version, {@code none} sends none of the server's own (the HTTP library's
+         * default applies). Unset, the global one applies.
+         */
+        Optional<String> userAgent();
 
         /**
          * The access checks that govern this system's tool calls, per check id

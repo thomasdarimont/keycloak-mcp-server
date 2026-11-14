@@ -122,7 +122,7 @@ class KeycloakSystemBuilderTest {
         List<Field> fields = Arrays.stream(KeycloakSystem.class.getDeclaredFields())
             .filter(f -> !Modifier.isStatic(f.getModifiers()))
             .toList();
-        assertEquals(22, fields.size(), "a new field: give it a value in fullySet() and changed()");
+        assertEquals(23, fields.size(), "a new field: give it a value in fullySet() and changed()");
         for (Field f : fields) {
             KeycloakSystem copy = full.toBuilder().build();
             assertEquals(full, copy);
@@ -162,6 +162,7 @@ class KeycloakSystemBuilderTest {
             .allowedRealms(List.of("acme-dev", "acme-prod"))
             .version("26.8.2")
             .issuer("https://login.acme.example/realms/acme")
+            .userAgent("acme-ops/{version}")
             .displayName("ACME Corp.")
             .description("ACME's Keycloak")
             .trustedIssuer("https://idp.acme.example/realms/staff")

@@ -21,6 +21,7 @@ import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.admin.client.resource.RealmResource;
 
 import com.github.thomasdarimont.keycloak.mcp.backend.http.OutboundClients;
+import com.github.thomasdarimont.keycloak.mcp.backend.http.UserAgent;
 import com.github.thomasdarimont.keycloak.mcp.backend.metrics.KcMcpMetrics;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
@@ -312,6 +313,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
     private Client newClient() {
         Client c = Keycloak.getClientProvider().newRestEasyClient(null, null, false);
         c.register(new KeycloakClientMetricsFilter(system.name(), metrics));
+        c.register(UserAgent.filter(() -> UserAgent.forSystem(system)));
         // a tool that declares it only reads cannot write through this client
         c.register(new ReadOnlyGuard());
         return OutboundClients.readTimeout(c, readTimeout);

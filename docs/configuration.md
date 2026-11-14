@@ -77,6 +77,7 @@ the database connection.
 | `kc-mcp.presets.<preset>.*` |  | presets every system can reference: `extends`, `access.<check>.<key>`, `tools.<key>` ([Presets](access-checks.md#presets)) |
 | `kc-mcp.systems.<name>.tools.*`, `...realms.<realm>.tools.*` |  | tool restrictions over the server's, which they can only narrow: `read-only`, `allowed`, `denied`, `categories`, `unlisted`, `confirm`, `confirm-writes` ([Security](security.md#tool-restrictions-per-system-and-realm)) |
 | `kc-mcp.systems.<name>.issuer`  | `<url>/realms/<auth-realm>` | realm issuer as Keycloak states it, audience of `private_key_jwt` assertions; set when the url is internal |
+| `kc-mcp.systems.<name>.user-agent` | `kc-mcp.http.user-agent` | `User-Agent` of the requests to this system (Admin API, tokens, token exchange): `{version}` is the server's version, `none` leaves the HTTP library's (`Quarkus REST Client`); configuration only, also in `system-defaults` |
 | `kc-mcp.systems.<name>.version` | read from server            | Keycloak version override / fallback ([Supported Keycloak versions](keycloak-versions.md)) |
 | `kc-mcp.system-defaults.*`      |                             | the same keys except `url`, shared by every system that does not set its own |
 | `kc-mcp.default-system`         | the only system | system when `system` is omitted; the OIDC default tenant verifies callers against its auth realm. Several systems have no default without it (a system called `default` is not picked by its name); with caller login they need it or `quarkus.oidc.auth-server-url` |
@@ -155,6 +156,7 @@ the database connection.
 | `kc-mcp.hostname`               | from each request           | the address clients use, `scheme://host[:port]`: links in the login metadata and the 401 challenge, JWKS URLs ([The public address](tls.md#the-public-address)) |
 | `kc-mcp.https-*`, `kc-mcp.http-enabled` |                     | HTTPS for the server, Keycloak's option names ([HTTPS and trusted certificates](tls.md)) |
 | `kc-mcp.http.connect-timeout` / `read-timeout` | `10s` / `60s` | outbound HTTP of the server's own clients (`10s`, `500ms`, `2m`, `PT1M`): CIBA, the UI's provider calls, and the read timeout of the Keycloak admin client (its connect timeout is the client's built-in 15 s); the read default leaves room for long admin calls such as a directory sync |
+| `kc-mcp.http.user-agent`        | `keycloak-mcp-server/{version}` | `User-Agent` of every outgoing request: Keycloak, CIBA, AuthZEN, the UI's identity providers, IdP metadata the IdP check fetches. `{version}` is the server's version; `none` leaves the HTTP library's (`Quarkus REST Client`). A system can set its own (`kc-mcp.systems.<name>.user-agent`) |
 | `kc-mcp.ui.connect-timeout` / `read-timeout` | `kc-mcp.http.*` | the same for the UI's calls to its identity providers |
 
 ```properties
