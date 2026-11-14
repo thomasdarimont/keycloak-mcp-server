@@ -11,6 +11,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.exposure.ProgressiveState;
 import com.github.thomasdarimont.keycloak.mcp.backend.meta.MetaTools;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
+import com.github.thomasdarimont.keycloak.mcp.config.AuditOnFailure;
 import com.github.thomasdarimont.keycloak.mcp.config.ConfirmFallback;
 import com.github.thomasdarimont.keycloak.mcp.config.DelegationMode;
 import com.github.thomasdarimont.keycloak.mcp.config.ExplicitTarget;
@@ -66,6 +67,7 @@ class SecurityMatrixTest {
         assertEquals(ConfirmFallback.FLAG, c.effectiveConfirmFallback());
         assertEquals(ExplicitTarget.OFF, c.effectiveExplicitTarget());
         assertEquals(PrivateHosts.ALLOW, c.effectiveDynamicPrivateHosts());
+        assertEquals(AuditOnFailure.ALLOW, c.effectiveAuditOnFailure());
     }
 
     @Test
@@ -76,22 +78,27 @@ class SecurityMatrixTest {
         assertEquals(ConfirmFallback.DENY, c.effectiveConfirmFallback());
         assertEquals(ExplicitTarget.DESTRUCTIVE, c.effectiveExplicitTarget());
         assertEquals(PrivateHosts.LISTED, c.effectiveDynamicPrivateHosts());
+        assertEquals(AuditOnFailure.REFUSE_CHANGES, c.effectiveAuditOnFailure());
     }
 
     @Test
     void explicitSettingsWinOverTheProfile() {
-        McpServerConfig loosened = config(Map.of("kc-mcp.security-profile", "shared", "kc-mcp.confirm-fallback", "flag",
-                "kc-mcp.explicit-target", "off", "kc-mcp.dynamic-private-hosts", "allow"));
+        McpServerConfig loosened = config(
+                Map.of("kc-mcp.security-profile", "shared", "kc-mcp.confirm-fallback", "flag", "kc-mcp.explicit-target",
+                        "off", "kc-mcp.dynamic-private-hosts", "allow", "kc-mcp.audit-on-failure", "allow"));
         assertEquals(ConfirmFallback.FLAG, loosened.effectiveConfirmFallback());
         assertEquals(ExplicitTarget.OFF, loosened.effectiveExplicitTarget());
         assertEquals(PrivateHosts.ALLOW, loosened.effectiveDynamicPrivateHosts());
+        assertEquals(AuditOnFailure.ALLOW, loosened.effectiveAuditOnFailure());
         assertTrue(loosened.callerRequired(), "shared always requires callers");
 
         McpServerConfig tightened = config(Map.of("kc-mcp.confirm-fallback", "deny", "kc-mcp.explicit-target", "write",
-                "kc-mcp.dynamic-private-hosts", "listed", "kc-mcp.require-caller", "true"));
+                "kc-mcp.dynamic-private-hosts", "listed", "kc-mcp.require-caller", "true", "kc-mcp.audit-on-failure",
+                "refuse-changes"));
         assertEquals(ConfirmFallback.DENY, tightened.effectiveConfirmFallback());
         assertEquals(ExplicitTarget.WRITE, tightened.effectiveExplicitTarget());
         assertEquals(PrivateHosts.LISTED, tightened.effectiveDynamicPrivateHosts());
+        assertEquals(AuditOnFailure.REFUSE_CHANGES, tightened.effectiveAuditOnFailure());
         assertTrue(tightened.callerRequired());
     }
 

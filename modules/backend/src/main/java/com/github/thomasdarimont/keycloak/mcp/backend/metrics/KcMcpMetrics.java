@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -58,6 +59,10 @@ import io.opentelemetry.api.metrics.Meter;
  * name from {@code initialize}, at most 20 distinct values, then {@code other});
  * {@code kc_mcp.ui.sessions} (gauge): management UI browser sessions;
  * {@code kc_mcp.ui.backchannel_logouts} (counter) by {@code result} (ended, invalid)</li>
+ * <li>{@code kc_mcp.audit.trail.degraded} (gauge, 0 or 1): a listener that keeps the
+ * audit trail is failing; {@code kc_mcp.audit.trail.failures} (counter): events that did
+ * not reach such a listener, by {@code result} (failed: the delivery threw, skipped: left
+ * out while it was failing) and {@code listener} (its id)</li>
  * </ul>
  * No user, subject, argument or client-supplied value becomes an attribute: the values
  * are bounded by the catalog, the configuration and the server's own codes, and anything
@@ -86,6 +91,7 @@ public class KcMcpMetrics {
     static final AttributeKey<String> STATUS_CLASS = AttributeKey.stringKey("status_class");
     static final AttributeKey<String> GRANT = AttributeKey.stringKey("grant");
     static final AttributeKey<String> CLIENT = AttributeKey.stringKey("client");
+    static final AttributeKey<String> LISTENER = AttributeKey.stringKey("listener");
 
     /** Distinct MCP client names reported before the rest become {@code other}. */
     static final int MAX_CLIENT_NAMES = 20;
@@ -120,6 +126,8 @@ public class KcMcpMetrics {
     private final AtomicBoolean pendingGauge = new AtomicBoolean();
     private final AtomicBoolean connectionsGauge = new AtomicBoolean();
     private final AtomicBoolean uiSessionsGauge = new AtomicBoolean();
+    private final AtomicBoolean auditTrailGauge = new AtomicBoolean();
+    private final LongCounter auditTrailFailures;
     private final LongCounter searches;
     private final DoubleHistogram searchHits;
     private final LongCounter marked;
@@ -142,6 +150,9 @@ public class KcMcpMetrics {
             .setDescription("Duration of tool calls; the count is the number of calls")
             .setUnit("s")
             .setExplicitBucketBoundariesAdvice(CALL_BUCKETS)
+            .build();
+        this.auditTrailFailures = meter.counterBuilder("kc_mcp.audit.trail.failures")
+            .setDescription("Audit events that did not reach a listener keeping the audit trail")
             .build();
         this.refusals = meter.counterBuilder("kc_mcp.policy.refusals")
             .setDescription("Tool calls the server refused on purpose: roles, policies, realm limits, read-only mode")
@@ -311,6 +322,22 @@ public class KcMcpMetrics {
                 }
                 byClient.forEach((c, n) -> m.record(n, Attributes.of(CLIENT, c)));
             });
+    }
+
+    /** Counts an event that did not reach a listener keeping the audit trail. */
+    public void auditTrailEvent(String result, String listener) {
+        auditTrailFailures.add(1, Attributes.of(RESULT, token(result), LISTENER, token(listener)));
+    }
+
+    /** Registers the gauge of the audit trail's state once: 1 while it is degraded. */
+    public void auditTrailDegraded(BooleanSupplier degraded) {
+        if (!auditTrailGauge.compareAndSet(false, true)) {
+            return;
+        }
+        meter.gaugeBuilder("kc_mcp.audit.trail.degraded")
+            .ofLongs()
+            .setDescription("1 while a listener keeping the audit trail is failing")
+            .buildWithCallback(m -> m.record(degraded.getAsBoolean() ? 1 : 0));
     }
 
     /** Registers the gauge of UI sessions once; a negative reading is skipped. */

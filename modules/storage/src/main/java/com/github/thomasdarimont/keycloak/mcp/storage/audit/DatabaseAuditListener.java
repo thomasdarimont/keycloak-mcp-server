@@ -1,10 +1,15 @@
 package com.github.thomasdarimont.keycloak.mcp.storage.audit;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import javax.sql.DataSource;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import org.hibernate.Session;
@@ -38,6 +43,12 @@ public class DatabaseAuditListener implements AuditListener {
     public static final ConfigProperty RETENTION_DAYS = ConfigProperty.integer("retention-days").withDefault("0");
 
     public static final ConfigSpec CONFIG_SPEC = ConfigSpec.of(RETENTION_DAYS);
+
+    /** Seconds the probe waits for the database to answer. */
+    static final int PROBE_TIMEOUT_SECONDS = 2;
+
+    @Inject
+    Instance<DataSource> dataSource;
 
     @Override
     public String id() {
@@ -108,6 +119,29 @@ public class DatabaseAuditListener implements AuditListener {
             .setParameter("trace_id", event.traceId(), String.class)
             .setParameter("span_id", event.spanId(), String.class)
             .executeUpdate();
+    }
+
+    /** The rows are the audit trail the admin API and the management UI show. */
+    @Override
+    public boolean keepsAuditTrail() {
+        return true;
+    }
+
+    /**
+     * Whether a connection to the database can be had and answers: JDBC's own validity
+     * check, so it needs no grant and runs on every database.
+     */
+    @Override
+    public boolean reachable() {
+        if (dataSource == null || !dataSource.isResolvable()) {
+            return true;
+        }
+        try (Connection c = dataSource.get().getConnection()) {
+            return c.isValid(PROBE_TIMEOUT_SECONDS);
+        }
+        catch (SQLException | RuntimeException e) {
+            return false;
+        }
     }
 
     /** The newest events, newest first. */

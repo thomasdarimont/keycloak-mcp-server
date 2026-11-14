@@ -31,6 +31,8 @@ The server adds its own:
 | `kc_mcp.keycloak.token.duration` | histogram, s | `system`, `grant` (`client_credentials`, `password`, `token-exchange`, `ciba`), `status_class` | token acquisition and delegation exchanges |
 | `kc_mcp.keycloak.token.scope_fallbacks` | counter | `system` | servers that refused `kc-admin-api` |
 | `kc_mcp.mcp.connections` | gauge | `client` (name from `initialize`, 20 distinct values, then `other`) | open MCP sessions |
+| `kc_mcp.audit.trail.degraded` | gauge (0/1) | | the audit trail cannot be written: alert on it |
+| `kc_mcp.audit.trail.failures` | counter | `result` (`failed`: the delivery threw, `skipped`: left out while failing), `listener` (`db`, an extension's id) | how many events the trail misses |
 | `kc_mcp.ui.sessions`, `kc_mcp.ui.backchannel_logouts` | gauge, counter (`result`: `ended`, `invalid`) | | management UI |
 
 The Keycloak metrics come from a JAX-RS client filter on every RESTEasy client the server builds for a system (admin

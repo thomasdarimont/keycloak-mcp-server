@@ -234,6 +234,22 @@ public interface McpServerConfig {
     }
 
     /**
+     * What happens to tools that change Keycloak while the audit trail cannot be written:
+     * {@code allow} (they run, the log line is their only record) or
+     * {@code refuse-changes} ({@code audit_unavailable} until the trail recovers; reading
+     * tools keep running). Default: {@code allow} in profile {@code local},
+     * {@code refuse-changes} in {@code shared}.
+     */
+    @WithConverter(AuditOnFailure.Converter.class)
+    Optional<AuditOnFailure> auditOnFailure();
+
+    /** Effective value of {@link #auditOnFailure()}, by profile when unset. */
+    default AuditOnFailure effectiveAuditOnFailure() {
+        return auditOnFailure()
+            .orElse(securityProfile().shared() ? AuditOnFailure.REFUSE_CHANGES : AuditOnFailure.ALLOW);
+    }
+
+    /**
      * Whether systems registered at runtime (admin API, repositories) may point at
      * private, loopback or link-local addresses: {@code allow}, or {@code listed} (only
      * hosts that {@link #allowedHosts()} names literally, without a wildcard). Static

@@ -94,12 +94,13 @@ public class ProfileChecks {
         }
         LOG.infof(
                 "Profile %s: callers %s, confirm-fallback %s, explicit-target %s, outbound hosts %s,"
-                        + " dynamic-private-hosts %s",
+                        + " dynamic-private-hosts %s, audit-on-failure %s",
                 config.securityProfile().name().toLowerCase(), callers.required() ? "required" : "optional",
                 config.effectiveConfirmFallback().name().toLowerCase(),
                 config.effectiveExplicitTarget().name().toLowerCase(),
                 s.hostsRestricted() ? systems.allowedHosts().patterns() : "unrestricted",
-                config.effectiveDynamicPrivateHosts().name().toLowerCase());
+                config.effectiveDynamicPrivateHosts().name().toLowerCase(),
+                config.effectiveAuditOnFailure().name().toLowerCase().replace('_', '-'));
     }
 
     private static String onOff(boolean on) {

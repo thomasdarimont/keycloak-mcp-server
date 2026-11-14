@@ -26,7 +26,8 @@ public enum SecurityProfile {
      * confirmed through elicitation only ({@code confirm-fallback=deny}), destructive
      * tools name their system and realm ({@code explicit-target=destructive}),
      * {@code kc-mcp.allowed-hosts} is required, the admin API's issuer needs an audience,
-     * and the database storage needs a {@code secret-key}.
+     * the database storage needs a {@code secret-key}, and changes are refused while the
+     * audit trail cannot be written ({@code audit-on-failure=refuse-changes}).
      */
     SHARED;
 

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -14,6 +15,7 @@ import com.github.thomasdarimont.keycloak.mcp.audit.AuditEvent;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
 import com.github.thomasdarimont.keycloak.mcp.audit.NoOpAuditScrubber;
+import com.github.thomasdarimont.keycloak.mcp.backend.metrics.KcMcpMetrics;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Sensitive;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -24,7 +26,9 @@ import io.opentelemetry.api.trace.SpanContext;
 
 /**
  * Builds the {@link AuditEvent} of a finished call and hands it to every listener: the
- * built-in log line first, then listeners found through the ServiceLoader and CDI.
+ * built-in log line first, then listeners found through the ServiceLoader and CDI. A
+ * listener that keeps the audit trail and fails is skipped until it recovers
+ * ({@link AuditTrailHealth}).
  */
 @ApplicationScoped
 public class AuditLog {
@@ -39,8 +43,17 @@ public class AuditLog {
 
     private final List<AuditListener> listeners;
     private final List<AuditScrubber> scrubbers;
+    private AuditTrailHealth health = new AuditTrailHealth();
+    /** {@code null} outside the server (tests, embedding). */
+    private KcMcpMetrics metrics;
 
     @Inject
+    public AuditLog(ExtensionRegistry registry, KcMcpMetrics metrics) {
+        this(registry);
+        this.metrics = metrics;
+        metrics.auditTrailDegraded(health::degraded);
+    }
+
     public AuditLog(ExtensionRegistry registry) {
         List<AuditListener> all = new ArrayList<>();
         all.add(LOG_LINE);
@@ -71,6 +84,29 @@ public class AuditLog {
 
     public List<AuditListener> listeners() {
         return listeners;
+    }
+
+    /** Replaces the health tracking (tests: a probe interval of their own). */
+    public AuditLog health(AuditTrailHealth health) {
+        this.health = health;
+        return this;
+    }
+
+    public AuditTrailHealth health() {
+        return health;
+    }
+
+    /**
+     * Whether a listener that keeps the audit trail is failing, so the trail misses what
+     * happens now.
+     */
+    public boolean trailDegraded() {
+        return health.degraded();
+    }
+
+    @PreDestroy
+    void close() {
+        health.close();
     }
 
     public List<AuditScrubber> scrubbers() {
@@ -125,6 +161,11 @@ public class AuditLog {
             .build()
             .withTrace(traceId(Span.current()), spanId(Span.current()));
         for (AuditListener l : listeners) {
+            boolean trail = l.keepsAuditTrail();
+            if (trail && health.skips(l)) {
+                count("skipped", l);
+                continue;
+            }
             try {
                 AuditEvent scrubbed = event;
                 for (AuditScrubber s : scrubbers) {
@@ -138,8 +179,20 @@ public class AuditLog {
                 }
             }
             catch (RuntimeException e) {
-                LOG.warnf(e, "Audit listener %s failed for %s", l.getClass().getName(), spec.name());
+                if (trail) {
+                    health.failed(l, spec.name(), e);
+                    count("failed", l);
+                }
+                else {
+                    LOG.warnf(e, "Audit listener %s failed for %s", l.getClass().getName(), spec.name());
+                }
             }
+        }
+    }
+
+    private void count(String result, AuditListener listener) {
+        if (metrics != null) {
+            metrics.auditTrailEvent(result, listener.id());
         }
     }
 

@@ -22,6 +22,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
+import com.github.thomasdarimont.keycloak.mcp.config.AuditOnFailure;
 import com.github.thomasdarimont.keycloak.mcp.config.ConfirmFallback;
 import com.github.thomasdarimont.keycloak.mcp.config.DelegationMode;
 import com.github.thomasdarimont.keycloak.mcp.config.ExplicitTarget;
@@ -62,6 +63,7 @@ public class ToolInvoker {
     private Duration confirmTimeout = Duration.ofSeconds(120);
     private ExplicitTarget explicitTarget = ExplicitTarget.OFF;
     private ConfirmFallback confirmFallback = ConfirmFallback.FLAG;
+    private AuditOnFailure auditOnFailure = AuditOnFailure.ALLOW;
     private ConfirmationGuidance guidance = ConfirmationGuidance.standalone();
 
     /** Records nothing unless the server hands in the tracer of its OpenTelemetry SDK. */
@@ -77,6 +79,7 @@ public class ToolInvoker {
         this.confirmTimeout = Duration.ofSeconds(config.confirmTimeoutSeconds());
         this.explicitTarget = config.effectiveExplicitTarget();
         this.confirmFallback = config.effectiveConfirmFallback();
+        this.auditOnFailure = config.effectiveAuditOnFailure();
         this.guidance = new ConfirmationGuidance(config, confirmer);
     }
 
@@ -109,6 +112,15 @@ public class ToolInvoker {
      */
     public ToolInvoker confirmFallback(ConfirmFallback confirmFallback) {
         this.confirmFallback = confirmFallback == null ? ConfirmFallback.FLAG : confirmFallback;
+        return this;
+    }
+
+    /**
+     * Whether tools that change Keycloak are refused while the audit trail is degraded
+     * ({@code kc-mcp.audit-on-failure}).
+     */
+    public ToolInvoker auditOnFailure(AuditOnFailure auditOnFailure) {
+        this.auditOnFailure = auditOnFailure == null ? AuditOnFailure.ALLOW : auditOnFailure;
         return this;
     }
 
@@ -177,6 +189,14 @@ public class ToolInvoker {
             }
             else if (delegation.delegating() && !ctx.caller().delegated()) {
                 return invokeInSpan(spec, rawArgs, confirmFlag, ctx.withCaller(ctx.caller().asDelegated()));
+            }
+            else if (spec.level().isWrite() && auditOnFailure.refusesChanges() && audit.trailDegraded()) {
+                // decided before the handler: the row of a change is written after it,
+                // too late to stop it
+                result = ToolResult.error("audit_unavailable",
+                        "The audit trail cannot be written right now, so this server refuses changes to Keycloak until"
+                                + " it can (kc-mcp.audit-on-failure=refuse-changes). Reading tools still work. Tell the"
+                                + " user and try the change again later; do not retry right away.");
             }
             else if (!policy.permits(spec)) {
                 result = policy.forbids(spec, null).orElseThrow();

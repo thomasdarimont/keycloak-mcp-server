@@ -26,6 +26,7 @@ setting, `kc-mcp.instance-role`: an `admin` instance has no MCP endpoint, so the
 | `grant-type=password` (a person's account signs in) | allowed | refused: every system needs a service client |
 | database storage | encryption warned about | needs `kc-mcp.storage.secret-key` |
 | MCP traffic log | allowed | refuses to start with it on |
+| changes while the audit trail cannot be written | run (`audit-on-failure=allow`) | refused (`refuse-changes`) |
 
 A `shared` server with a missing setting does not start and lists everything that is missing. Each default can still
 be set on its own in either profile.
@@ -194,6 +195,11 @@ duration.
   the caller gets it, the audit line says `result=sensitive`.
 - The MCP traffic log (`quarkus.mcp.server.traffic-logging.enabled`) writes everything verbatim. The `shared` profile
   does not start with it on.
+- **When the trail cannot be written.** A listener that keeps the audit trail (the database listener) and fails is
+  left out until a probe every 2 seconds finds it reachable again; the log line is still written. With
+  `kc-mcp.audit-on-failure=refuse-changes` (default in `shared`) write and destructive tools answer
+  `audit_unavailable` meanwhile, reads keep running. The first change after the database goes away still runs, as
+  nothing has failed before it: its row is the one that fails ([When the database is away](storage.md#when-the-database-is-away)).
 
 ## Access levels
 

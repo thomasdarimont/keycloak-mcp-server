@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # What the MCP instance does while its database is away: latency and outcome of every tool call before, during and
-# after the outage, how long it takes to recover, and how many calls left no audit row. Run ./demo.sh first.
+# after the outage, how long it takes to recover, how many calls left no audit row and how many changes were refused
+# (audit_unavailable, profile shared: kc-mcp.audit-on-failure=refuse-changes). Each round is a read (sam searches
+# bob) and a change (alice sets the disabled bob to disabled). Run ./demo.sh first.
 #
 #   ./db-outage.sh            cut off only the MCP instance's database user: its pooled connections are terminated and
 #                             new ones refused, as in a restart, while Keycloak keeps its database (the default)
@@ -29,21 +31,34 @@ audit_rows() { docker compose exec -T postgres psql -U kcmcp_admin -d kcmcp -tAc
 START=$(millis)
 CALLS=0
 OK=0
-# one tool call as sam (support): prints the time since the start, its duration and the outcome; 0 when it worked
+REFUSED=0
+# one tool call, read or change: prints the time since the start, its duration and the outcome; 0 when it worked
 call() {
-  local t0 t1 out outcome rc=1
+  local kind=$1 t0 t1 out outcome rc=1
   t0=$(millis)
-  out=$("$CALL" --login sam:sam-demo "$U" keycloak_user_search '{"search": "bob"}' 2>&1) || true
+  if [ "$kind" = read ]; then
+    out=$("$CALL" --login sam:sam-demo "$U" keycloak_user_search '{"search": "bob"}' 2>&1) || true
+  else
+    out=$("$CALL" --login alice:alice-demo "$U" keycloak_user_set_enabled '{"id": "bob", "enabled": false}' 2>&1) || true
+  fi
   t1=$(millis)
   CALLS=$((CALLS + 1))
-  if echo "$out" | jq -e '.items' >/dev/null 2>&1; then
+  if echo "$out" | jq -e 'type == "object" and (has("error") | not)' >/dev/null 2>&1; then
     outcome=ok; OK=$((OK + 1)); rc=0
   else
     outcome=$(echo "$out" | jq -r '.error // empty' 2>/dev/null || true)
     # the last line: an HTTP status from the MCP instance, or the exception of a failed login at Keycloak
     [ -n "$outcome" ] || outcome=$(echo "$out" | tail -1 | cut -c1-110)
   fi
-  printf '  +%5.1fs  %6d ms  %s\n' "$(echo "($t0 - $START) / 1000" | bc -l)" $((t1 - t0)) "$outcome"
+  [ "$outcome" != audit_unavailable ] || REFUSED=$((REFUSED + 1))
+  printf '  +%5.1fs  %-6s %6d ms  %s\n' "$(echo "($t0 - $START) / 1000" | bc -l)" "$kind" $((t1 - t0)) "$outcome"
+  return $rc
+}
+# a read and a change; 0 when both worked
+round() {
+  local rc=0
+  call read || rc=1
+  call change || rc=1
   return $rc
 }
 
@@ -57,7 +72,7 @@ restore() {
 trap restore EXIT
 
 step "before: the MCP instance reads systems and appends audit rows as usual"
-for _ in 1 2 3; do call || true; done
+for _ in 1 2; do round || true; done
 ROWS_BEFORE=$(audit_rows)
 CALLS_BEFORE=$CALLS
 
@@ -72,7 +87,7 @@ else
 fi
 OUTAGE_START=$(millis)
 while [ $(( $(millis) - OUTAGE_START )) -lt $((OUTAGE_SECONDS * 1000)) ]; do
-  call || true
+  round || true
   sleep 1
 done
 CALLS_DURING=$((CALLS - CALLS_BEFORE))
@@ -86,7 +101,7 @@ BACK=$(millis)
 streak=0
 RECOVERED=""
 while [ $(( $(millis) - BACK )) -lt 120000 ]; do
-  if call; then
+  if round; then
     streak=$((streak + 1))
     [ -n "$RECOVERED" ] || RECOVERED=$(( $(millis) - BACK ))
     [ $streak -lt 3 ] || break
@@ -99,7 +114,7 @@ done
 step "summary"
 ROWS_AFTER=$(audit_rows)
 CALLS_AFTER_OUTAGE=$((CALLS - CALLS_BEFORE))
-echo "  calls during the outage:   $CALLS_DURING"
+echo "  calls during the outage:   $CALLS_DURING (half of them changes), changes refused: $REFUSED"
 echo "  recovered after:           ${RECOVERED:-not within 120 s} ms after the database came back"
 echo "  calls since it began:      $CALLS_AFTER_OUTAGE, audit rows they left: $((ROWS_AFTER - ROWS_BEFORE))"
 echo "  calls without an audit row: $((CALLS_AFTER_OUTAGE - (ROWS_AFTER - ROWS_BEFORE)))"

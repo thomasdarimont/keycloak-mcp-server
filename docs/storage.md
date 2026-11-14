@@ -155,12 +155,13 @@ measured with [`examples/split-deployment/db-outage.sh`](../examples/split-deplo
 | systems | the last snapshot is served. Callers do not wait: one background reload retries after 1 s, doubling up to `cache-seconds`, and the first that succeeds ends it. One WARN when it starts, one INFO when it recovers. Before the first load ever succeeded, the instance knows no systems |
 | tool calls with `forward` | keep working: the caller brings the token, the instance needs no credentials of its own |
 | service account and `exchange` calls | keep working with the tokens the instance holds; a new token request fails once they expire, as the signing key and stored secrets are read from the database on each request |
-| audit | the console line is written, the row is not: the call itself runs and its result is unchanged ([the audit gap](#the-audit-gap)) |
+| audit | the console line is written, the row is not; the listener is left out until a probe every 2 s reaches the database, so calls do not wait for it. Changes are refused with `kc-mcp.audit-on-failure=refuse-changes` (default in `shared`) ([the audit gap](#the-audit-gap)) |
 | admin API, management UI, UI logins, CIBA approvals, JWKS | fail; Keycloak keeps the JWKS it fetched until its keys cache expires |
 
 **Latency.** Every database access on a caller's thread costs about a second while the connection cannot be made
-(the pool tries to create a connection and fails), and the attempts of concurrent threads queue up. The audit insert
-is such an access on every tool call, so calls take a second or two longer during the outage, not a timeout.
+(the pool tries to create a connection and fails), and the attempts of concurrent threads queue up. The systems
+reload and the audit insert stay off the callers' threads while failing, so only the first call after the database
+goes away pays it.
 
 **After the restart.** Connections in the pool are dead. Each fails exactly one operation (`terminating connection due
 to administrator command`) and is discarded, so the first few database accesses after the restart may fail once.
@@ -168,8 +169,12 @@ to administrator command`) and is discarded, so the first few database accesses 
 ### The audit gap
 
 The row is written after the tool has run, so a failing insert cannot stop the call it records: the change is made in
-Keycloak by then. With the logs shipped to a central system, the console line is the record; without, calls during the
-outage leave none. Refusing changes while the audit trail cannot be written is under consideration.
+Keycloak by then. What the server can do is refuse the next ones: with `kc-mcp.audit-on-failure=refuse-changes`
+(default in profile `shared`) write and destructive tools answer `audit_unavailable` from the first failed insert
+until the probe reaches the database again, and reads keep running. So on each instance only the changes already running when
+the first insert fails go without a row; their log lines, like that of every call during the outage, is still written. Ship the logs to
+keep that record. `kc_mcp.audit.trail.degraded` and `kc_mcp.audit.trail.failures` show the outage
+([Metrics](metrics.md)).
 
 ## From code
 

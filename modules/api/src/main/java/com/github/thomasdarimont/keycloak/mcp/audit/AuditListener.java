@@ -37,4 +37,25 @@ public interface AuditListener extends Extension {
 
     void onToolCall(AuditEvent event);
 
+    /**
+     * Whether this listener keeps the audit trail operators rely on, as the database
+     * listener does. When its delivery fails, the server stops handing it events (the log
+     * line is still written), asks {@link #reachable()} in the background until it
+     * answers, and with {@code kc-mcp.audit-on-failure=refuse-changes} refuses tools that
+     * change Keycloak meanwhile. Default {@code false}: a failure is logged, nothing
+     * else.
+     */
+    default boolean keepsAuditTrail() {
+        return false;
+    }
+
+    /**
+     * For a listener that {@linkplain #keepsAuditTrail() keeps the audit trail}: whether
+     * it can deliver again, asked every few seconds while it is failing, never on a tool
+     * call's thread. Default {@code true}: the next event is tried.
+     */
+    default boolean reachable() {
+        return true;
+    }
+
 }
