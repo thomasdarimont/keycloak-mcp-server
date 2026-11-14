@@ -18,7 +18,7 @@ import org.keycloak.admin.client.Keycloak;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessPolicy;
-import com.github.thomasdarimont.keycloak.mcp.backend.guard.InvocationContext;
+import com.github.thomasdarimont.keycloak.mcp.backend.guard.TransportContext;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
 import com.github.thomasdarimont.keycloak.mcp.config.DelegationMode;
@@ -296,7 +296,7 @@ class TokenExchangeTest {
             // actor
             // client's scope lets through
             String subject = userJwt("realm-admin");
-            InvocationContext ctx = InvocationContext.none()
+            TransportContext ctx = TransportContext.none()
                 .withCaller(Caller.delegated("alice-id", "alice", "demo", Set.of()), subject);
             GrantedRoles granted = policy.granted(null, ctx);
             assertTrue(granted.known());
@@ -309,7 +309,7 @@ class TokenExchangeTest {
             assertTrue(forward.granted(null, ctx).byRealm().get("demo").contains("realm-admin"));
             assertEquals(1, kc.exchanges.size(), "no exchange in forward mode");
             // a refused exchange surfaces as the delegation error
-            InvocationContext noConsent = InvocationContext.none()
+            TransportContext noConsent = TransportContext.none()
                 .withCaller(Caller.delegated("alice-id", "alice", "demo", Set.of()), NO_CONSENT);
             assertEquals(TokenExchange.ERROR,
                     assertThrows(ToolException.class, () -> policy.granted(null, noConsent)).code());

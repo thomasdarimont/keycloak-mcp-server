@@ -13,8 +13,8 @@ import com.github.thomasdarimont.keycloak.mcp.backend.catalog.ToolCatalog;
 import com.github.thomasdarimont.keycloak.mcp.backend.exposure.ExposurePolicy;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessPolicy;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.CallerAuth;
-import com.github.thomasdarimont.keycloak.mcp.backend.guard.InvocationContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.ToolInvoker;
+import com.github.thomasdarimont.keycloak.mcp.backend.guard.TransportContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.http.EntryRoutes;
 import com.github.thomasdarimont.keycloak.mcp.backend.spi.CallerProvider;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
@@ -104,7 +104,7 @@ public class McpToolRegistrar {
             .setHandler(args -> toResponse(metaTools.search(str(args.args(), "query"), str(args.args(), "category"),
                     intOf(args.args(), "limit"), args.connection() == null ? null : args.connection().id(),
                     exposure.mode(),
-                    InvocationContext.of(args, MetaTools.SEARCH_TOOLS)
+                    TransportContext.of(args, MetaTools.SEARCH_TOOLS)
                         .withCaller(callers.current(args), callers.accessToken(args))
                         .withBinding(EntryRoutes.current().orElse(null)))),
                     VIRTUAL_THREADS)
@@ -119,7 +119,7 @@ public class McpToolRegistrar {
             .setInputSchema(metaTools.whoamiSchema())
             .setHandler(args -> toResponse(
                     metaTools.whoami(str(args.args(), "language"), str(args.args(), InputSchema.SYSTEM),
-                            InvocationContext.of(args, MetaTools.WHOAMI)
+                            TransportContext.of(args, MetaTools.WHOAMI)
                                 .withCaller(callers.current(args), callers.accessToken(args))
                                 .withBinding(EntryRoutes.current().orElse(null)))),
                     VIRTUAL_THREADS)
@@ -134,7 +134,7 @@ public class McpToolRegistrar {
                 Map<String, Object> a = args.args();
                 return toResponse(
                         metaTools.execute(str(a, "name"), mapOf(a.get("arguments")), boolOf(a.get(InputSchema.CONFIRM)),
-                                InvocationContext.of(args, MetaTools.EXECUTE_TOOL)
+                                TransportContext.of(args, MetaTools.EXECUTE_TOOL)
                                     .withCaller(callers.current(args), callers.accessToken(args))
                                     .withBinding(EntryRoutes.current().orElse(null))));
             }, VIRTUAL_THREADS)
@@ -152,7 +152,7 @@ public class McpToolRegistrar {
                 Map<String, Object> a = args.args();
                 boolean confirm = Boolean.TRUE.equals(boolOf(a.get(InputSchema.CONFIRM)));
                 return toResponse(invoker.invoke(spec, a, confirm,
-                        InvocationContext.of(args, "direct")
+                        TransportContext.of(args, "direct")
                             .withCaller(callers.current(args), callers.accessToken(args))
                             .withBinding(EntryRoutes.current().orElse(null))));
             }, VIRTUAL_THREADS)

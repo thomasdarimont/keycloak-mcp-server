@@ -21,8 +21,8 @@ import com.github.thomasdarimont.keycloak.mcp.backend.Fixtures;
 import com.github.thomasdarimont.keycloak.mcp.backend.catalog.ToolCatalog;
 import com.github.thomasdarimont.keycloak.mcp.backend.exposure.ProgressiveState;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessPolicy;
-import com.github.thomasdarimont.keycloak.mcp.backend.guard.InvocationContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.ToolInvoker;
+import com.github.thomasdarimont.keycloak.mcp.backend.guard.TransportContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.KeycloakClientMetricsFilter;
 import com.github.thomasdarimont.keycloak.mcp.backend.meta.MetaTools;
 import com.github.thomasdarimont.keycloak.mcp.config.ExposureMode;
@@ -139,8 +139,8 @@ class ObservabilityMetricsTest {
         meta.search("delete user", null, 5, "c1", ExposureMode.HYBRID);
         meta.search("weather in paris tomorrow", null, 5, "c1", ExposureMode.HYBRID);
         meta.search("weather in rome tomorrow", null, 5, "c1", ExposureMode.HYBRID);
-        meta.execute("keycloak_user_delte", Map.of(), null, InvocationContext.none());
-        meta.execute("totally_unrelated", Map.of(), null, InvocationContext.none());
+        meta.execute("keycloak_user_delte", Map.of(), null, TransportContext.none());
+        meta.execute("totally_unrelated", Map.of(), null, TransportContext.none());
 
         Collection<MetricData> all = reader.collectAllMetrics();
         var searches = metric(all, "kc_mcp.discovery.searches").getLongSumData().getPoints();

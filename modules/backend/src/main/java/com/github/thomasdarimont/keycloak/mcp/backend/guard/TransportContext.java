@@ -18,51 +18,51 @@ import io.quarkiverse.mcp.server.ToolManager.ToolArguments;
  * Keycloak in delegation mode {@code forward}. Deliberately not part of {@link Caller},
  * which is shown to policies and logs.
  */
-public record InvocationContext(McpConnection connection, Elicitation elicitation, McpLog log, String via,
-        Caller caller, String callerToken, EntryBinding binding) {
+public record TransportContext(McpConnection connection, Elicitation elicitation, McpLog log, String via, Caller caller,
+        String callerToken, EntryBinding binding) {
 
-    public InvocationContext {
+    public TransportContext {
         caller = caller == null ? Caller.NONE : caller;
         callerToken = callerToken != null ? callerToken : caller.rawToken();
     }
 
-    public InvocationContext(McpConnection connection, Elicitation elicitation, McpLog log, String via, Caller caller) {
+    public TransportContext(McpConnection connection, Elicitation elicitation, McpLog log, String via, Caller caller) {
         this(connection, elicitation, log, via, caller, null, null);
     }
 
-    public InvocationContext(McpConnection connection, Elicitation elicitation, McpLog log, String via, Caller caller,
+    public TransportContext(McpConnection connection, Elicitation elicitation, McpLog log, String via, Caller caller,
             String callerToken) {
         this(connection, elicitation, log, via, caller, callerToken, null);
     }
 
-    public static InvocationContext of(ToolArguments args, String via) {
-        return new InvocationContext(args.connection(), args.elicitation(), args.log(), via, Caller.NONE, null, null);
+    public static TransportContext of(ToolArguments args, String via) {
+        return new TransportContext(args.connection(), args.elicitation(), args.log(), via, Caller.NONE, null, null);
     }
 
-    public static InvocationContext none() {
-        return new InvocationContext(null, null, null, "test", Caller.NONE, null, null);
+    public static TransportContext none() {
+        return new TransportContext(null, null, null, "test", Caller.NONE, null, null);
     }
 
-    public InvocationContext withCaller(Caller c) {
-        return new InvocationContext(connection, elicitation, log, via, c, callerToken, binding);
+    public TransportContext withCaller(Caller c) {
+        return new TransportContext(connection, elicitation, log, via, c, callerToken, binding);
     }
 
-    public InvocationContext withCaller(Caller c, String token) {
-        return new InvocationContext(connection, elicitation, log, via, c, token, binding);
+    public TransportContext withCaller(Caller c, String token) {
+        return new TransportContext(connection, elicitation, log, via, c, token, binding);
     }
 
     /**
      * The entry's binding ({@code /mcp/systems/<system>[/<realm>]}), {@code null} on the
      * plain root.
      */
-    public InvocationContext withBinding(EntryBinding s) {
-        return new InvocationContext(connection, elicitation, log, via, caller, callerToken, s);
+    public TransportContext withBinding(EntryBinding s) {
+        return new TransportContext(connection, elicitation, log, via, caller, callerToken, s);
     }
 
     /** Never prints the token. */
     @Override
     public String toString() {
-        return "InvocationContext[via=" + via + ", caller=" + caller + ", token="
+        return "TransportContext[via=" + via + ", caller=" + caller + ", token="
                 + (callerToken == null ? "none" : "present") + "]";
     }
 

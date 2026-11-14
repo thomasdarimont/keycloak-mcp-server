@@ -127,8 +127,16 @@ public class AuditLog {
         return c.isValid() ? c.getSpanId() : null;
     }
 
+    /**
+     * Records a call of the invoker with the target resolved by its end and the arguments
+     * as the client sent them.
+     */
+    public void record(ToolInvocationContext inv, ToolResult result, long nanos) {
+        record(inv.spec(), inv.system(), inv.realm(), inv.rawArgs(), result, inv.transport(), nanos);
+    }
+
     public void record(ToolSpec spec, String system, String realm, Map<String, Object> args, ToolResult result,
-            InvocationContext ctx, long nanos) {
+            TransportContext ctx, long nanos) {
         String outcome = "ok";
         String message = null;
         if (result.isError() && result.payload() instanceof Map<?, ?> m && m.get("error") != null) {

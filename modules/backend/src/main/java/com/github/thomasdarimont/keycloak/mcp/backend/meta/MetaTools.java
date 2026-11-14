@@ -21,8 +21,8 @@ import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessPolicy;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.CapabilityDiscovery;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.ConfirmationGuidance;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.EntryBinding;
-import com.github.thomasdarimont.keycloak.mcp.backend.guard.InvocationContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.ToolInvoker;
+import com.github.thomasdarimont.keycloak.mcp.backend.guard.TransportContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.metrics.KcMcpMetrics;
 import com.github.thomasdarimont.keycloak.mcp.backend.search.SearchHit;
 import com.github.thomasdarimont.keycloak.mcp.backend.search.ToolIndex;
@@ -133,7 +133,7 @@ public class MetaTools {
      * In the delegation modes an authenticated caller acts on their own behalf (as in the
      * invoker).
      */
-    private InvocationContext effective(InvocationContext ctx) {
+    private TransportContext effective(TransportContext ctx) {
         if (delegation.delegating() && ctx.callerToken() != null && !ctx.caller().delegated()) {
             return ctx.withCaller(ctx.caller().asDelegated());
         }
@@ -187,7 +187,7 @@ public class MetaTools {
 
     public ToolResult search(String query, String categoryArg, Integer limitArg, String connectionId,
             ExposureMode mode) {
-        return search(query, categoryArg, limitArg, connectionId, mode, InvocationContext.none());
+        return search(query, categoryArg, limitArg, connectionId, mode, TransportContext.none());
     }
 
     /**
@@ -196,8 +196,8 @@ public class MetaTools {
      * {@code missingRoles}, so the model can explain instead of trying
      */
     public ToolResult search(String query, String categoryArg, Integer limitArg, String connectionId, ExposureMode mode,
-            InvocationContext rawCtx) {
-        InvocationContext ctx = effective(rawCtx);
+            TransportContext rawCtx) {
+        TransportContext ctx = effective(rawCtx);
         Category category = Category.parse(categoryArg);
         if (categoryArg != null && !categoryArg.isBlank() && category == null) {
             return ToolResult.error("invalid_arguments", "Unknown category '" + categoryArg + "'.", "categories",
@@ -367,8 +367,8 @@ public class MetaTools {
      * the server's service account), the realm-management roles per realm with readable
      * labels, a per-area summary and how many tools that unlocks.
      */
-    public ToolResult whoami(String languageArg, String systemArg, InvocationContext rawCtx) {
-        InvocationContext ctx = effective(rawCtx);
+    public ToolResult whoami(String languageArg, String systemArg, TransportContext rawCtx) {
+        TransportContext ctx = effective(rawCtx);
         String language = RoleLabels.language(languageArg);
         EntryBinding binding = ctx.binding();
         String system = systemArg != null && !systemArg.isBlank() ? systemArg.trim()
@@ -551,7 +551,7 @@ public class MetaTools {
             .build();
     }
 
-    public ToolResult execute(String name, Map<String, Object> arguments, Boolean confirm, InvocationContext ctx) {
+    public ToolResult execute(String name, Map<String, Object> arguments, Boolean confirm, TransportContext ctx) {
         Optional<ToolSpec> resolved = catalog.resolve(name);
         if (resolved.isEmpty()) {
             if (isMetaTool(name == null ? "" : ToolCatalog.normalize(name))) {

@@ -112,11 +112,11 @@ class SecurityMatrixTest {
 
         Map<String, Object> args = Map.of("realm", "demo", "id", "1", "enabled", false);
         Map<String, Object> viaExecute = payload(
-                meta.execute("keycloak_user_set_enabled", args, null, InvocationContext.none()));
+                meta.execute("keycloak_user_set_enabled", args, null, TransportContext.none()));
         assertEquals("read_only_mode", viaExecute.get("error"), viaExecute.toString());
         ToolSpec spec = catalog.get("keycloak_user_set_enabled").orElseThrow();
         Map<String, Object> direct = payload(new ToolInvoker(catalog, policy, req -> Decision.CONFIRMED, 50)
-            .invoke(spec, args, false, InvocationContext.none()));
+            .invoke(spec, args, false, TransportContext.none()));
         assertEquals("read_only_mode", direct.get("error"), direct.toString());
     }
 
@@ -130,14 +130,14 @@ class SecurityMatrixTest {
 
         Map<String, Object> args = Map.of("realm", "demo", "id", "1", "username", "bob");
         Map<String, Object> viaExecute = payload(
-                meta.execute("keycloak_user_delete", args, true, InvocationContext.none()));
+                meta.execute("keycloak_user_delete", args, true, TransportContext.none()));
         assertTrue(Boolean.TRUE.equals(viaExecute.get("isError")) || viaExecute.containsKey("error"),
                 viaExecute.toString());
         assertTrue(List.of("tool_not_allowed", "unknown_tool").contains(String.valueOf(viaExecute.get("error"))),
                 viaExecute.toString());
         ToolSpec spec = catalog.get("keycloak_user_delete").orElseThrow();
         Map<String, Object> direct = payload(new ToolInvoker(catalog, policy, req -> Decision.CONFIRMED, 50)
-            .invoke(spec, args, true, InvocationContext.none()));
+            .invoke(spec, args, true, TransportContext.none()));
         assertEquals("tool_not_allowed", direct.get("error"), direct.toString());
     }
 
@@ -147,11 +147,11 @@ class SecurityMatrixTest {
         ToolInvoker forward = new ToolInvoker(catalog, policy, req -> Decision.CONFIRMED, 50, null,
                 DelegationMode.FORWARD);
         ToolSpec spec = catalog.get("keycloak_user_search").orElseThrow();
-        Map<String, Object> r = payload(forward.invoke(spec, Map.of("realm", "demo"), false, InvocationContext.none()));
+        Map<String, Object> r = payload(forward.invoke(spec, Map.of("realm", "demo"), false, TransportContext.none()));
         assertEquals("caller_required", r.get("error"), r.toString());
         ToolInvoker exchange = new ToolInvoker(catalog, policy, req -> Decision.CONFIRMED, 50, null,
                 DelegationMode.EXCHANGE);
         assertEquals("caller_required",
-                payload(exchange.invoke(spec, Map.of("realm", "demo"), false, InvocationContext.none())).get("error"));
+                payload(exchange.invoke(spec, Map.of("realm", "demo"), false, TransportContext.none())).get("error"));
     }
 }

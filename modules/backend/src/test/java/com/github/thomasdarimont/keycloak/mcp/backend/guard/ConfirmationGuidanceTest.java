@@ -15,10 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfirmationGuidanceTest {
 
     private static final Set<String> ADMINS = Set.of("realm:admin", "realm-management.realm-admin");
-    private static final InvocationContext ANON = InvocationContext.none();
-    private static final InvocationContext ALICE = InvocationContext.none()
+    private static final TransportContext ANON = TransportContext.none();
+    private static final TransportContext ALICE = TransportContext.none()
         .withCaller(Caller.of("1", "alice", "demo", Set.of("realm-management.realm-admin")));
-    private static final InvocationContext CAROL = InvocationContext.none()
+    private static final TransportContext CAROL = TransportContext.none()
         .withCaller(Caller.of("2", "carol", "demo", Set.of("realm-management.view-users")));
 
     @Test

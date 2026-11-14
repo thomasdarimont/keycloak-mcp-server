@@ -16,8 +16,8 @@ import com.github.thomasdarimont.keycloak.mcp.backend.exposure.ProgressiveState;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessPolicy;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.CapabilityDiscovery;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.ConfirmationGuidance;
-import com.github.thomasdarimont.keycloak.mcp.backend.guard.InvocationContext;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.ToolInvoker;
+import com.github.thomasdarimont.keycloak.mcp.backend.guard.TransportContext;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -138,7 +138,7 @@ class MetaToolsTest {
     @Test
     void executeHappyPath() {
         ToolResult r = meta(false).execute("user_search", Map.of("realm", "demo", "search", "bob"), null,
-                InvocationContext.none());
+                TransportContext.none());
         assertFalse(r.isError(), r.toJson());
         assertTrue(r.toJson().contains("\"search\":\"bob\""));
     }
@@ -146,7 +146,7 @@ class MetaToolsTest {
     @Test
     void executeUnknownToolSuggests() {
         Map<String, Object> p = payload(
-                meta(false).execute("keycloak_user_serach", Map.of(), null, InvocationContext.none()));
+                meta(false).execute("keycloak_user_serach", Map.of(), null, TransportContext.none()));
         assertEquals("unknown_tool", p.get("error"));
         List<?> dym = (List<?>) p.get("didYouMean");
         assertEquals("keycloak_user_search", ((Map<?, ?>) dym.getFirst()).get("name"));
@@ -157,13 +157,12 @@ class MetaToolsTest {
     void executeThreadsConfirmFlag() {
         Map<String, Object> args = Map.of("realm", "demo", "id", "1");
         assertEquals("confirmation_required",
-                payload(meta(false).execute("keycloak_user_delete", args, null, InvocationContext.none()))
-                    .get("error"));
-        assertFalse(meta(false).execute("keycloak_user_delete", args, true, InvocationContext.none()).isError());
+                payload(meta(false).execute("keycloak_user_delete", args, null, TransportContext.none())).get("error"));
+        assertFalse(meta(false).execute("keycloak_user_delete", args, true, TransportContext.none()).isError());
         // confirm inside the arguments object works too
         assertFalse(meta(false)
             .execute("keycloak_user_delete", Map.of("realm", "demo", "id", "1", "confirm", true), null,
-                    InvocationContext.none())
+                    TransportContext.none())
             .isError());
     }
 
@@ -230,8 +229,8 @@ class MetaToolsTest {
     }
 
     /** As the registrar hands it over: authenticated but not yet marked delegated. */
-    private static InvocationContext caller(String token) {
-        return InvocationContext.none().withCaller(Caller.of("u1", "demoreadonly", "demo", Set.of()), token);
+    private static TransportContext caller(String token) {
+        return TransportContext.none().withCaller(Caller.of("u1", "demoreadonly", "demo", Set.of()), token);
     }
 
     @Test
@@ -260,7 +259,7 @@ class MetaToolsTest {
         assertTrue(((List<?>) admin.get("tools")).stream().noneMatch(t -> ((Map<?, ?>) t).containsKey("allowed")));
         assertEquals(MetaTools.HINT, admin.get("hint"));
         Map<String, Object> anon = payload(forward(roleCatalog()).search("disable user", null, 5, "c1",
-                ExposureMode.HYBRID, InvocationContext.none()));
+                ExposureMode.HYBRID, TransportContext.none()));
         assertTrue(((List<?>) anon.get("tools")).stream().noneMatch(t -> ((Map<?, ?>) t).containsKey("allowed")));
     }
 
@@ -309,16 +308,16 @@ class MetaToolsTest {
         assertTrue(String.valueOf(none.get("hint")).contains("no realm-management roles"));
         assertEquals(3, ((Map<?, ?>) none.get("tools")).get("allowed"));
 
-        Map<String, Object> anon = payload(forward(roleCatalog()).whoami(null, null, InvocationContext.none()));
+        Map<String, Object> anon = payload(forward(roleCatalog()).whoami(null, null, TransportContext.none()));
         assertEquals("anonymous", anon.get("caller"));
         assertTrue(String.valueOf(anon.get("keycloakCallsRunAs")).contains("service account"));
 
         // the service account path (delegation off) reports no roles when discovery is
         // not configured
-        Map<String, Object> off = payload(meta(false).whoami(null, null, InvocationContext.none()));
+        Map<String, Object> off = payload(meta(false).whoami(null, null, TransportContext.none()));
         assertEquals("unknown", off.get("roles"));
         assertEquals(5, ((Map<?, ?>) off.get("tools")).get("allowed"));
-        Map<String, Object> ro = payload(meta(true).whoami("en", null, InvocationContext.none()));
+        Map<String, Object> ro = payload(meta(true).whoami("en", null, TransportContext.none()));
         assertEquals(true, ro.get("readOnly"));
     }
 
@@ -331,7 +330,7 @@ class MetaToolsTest {
     @Test
     void executeRefusesMetaToolRecursion() {
         assertEquals("invalid_arguments",
-                payload(meta(false).execute("search_tools", Map.of(), null, InvocationContext.none())).get("error"));
+                payload(meta(false).execute("search_tools", Map.of(), null, TransportContext.none())).get("error"));
     }
 
     /** A catalog with one tool that needs the organization feature. */
@@ -367,7 +366,7 @@ class MetaToolsTest {
     void searchMarksToolsTheServerCannotServe() {
         ServerCapabilities noOrgs = new ServerCapabilities("26.8.2", Set.of("passkeys"), true);
         Map<String, Object> p = payload(withCapabilities(featureCatalog(), noOrgs).search("organizations", null, 5,
-                "c1", ExposureMode.HYBRID, InvocationContext.none()));
+                "c1", ExposureMode.HYBRID, TransportContext.none()));
         Map<?, ?> orgs = ((List<?>) p.get("tools")).stream()
             .map(t -> (Map<?, ?>) t)
             .filter(t -> t.get("name").equals("keycloak_org_list"))
@@ -379,12 +378,12 @@ class MetaToolsTest {
         assertTrue(String.valueOf(p.get("hint")).contains("unsupported"), String.valueOf(p.get("hint")));
 
         Map<String, Object> exec = payload(withCapabilities(featureCatalog(), noOrgs).execute("keycloak_org_list",
-                Map.of("realm", "demo"), null, InvocationContext.none()));
+                Map.of("realm", "demo"), null, TransportContext.none()));
         assertEquals("unsupported", exec.get("error"));
 
         ServerCapabilities withOrgs = new ServerCapabilities("26.8.2", Set.of("organization"), true);
         Map<String, Object> ok = payload(withCapabilities(featureCatalog(), withOrgs).search("organizations", null, 5,
-                "c1", ExposureMode.HYBRID, InvocationContext.none()));
+                "c1", ExposureMode.HYBRID, TransportContext.none()));
         assertTrue(((List<?>) ok.get("tools")).stream().noneMatch(t -> ((Map<?, ?>) t).containsKey("allowed")));
     }
 
@@ -392,7 +391,7 @@ class MetaToolsTest {
     void whoamiReportsTheServerVersionAndUnavailableTools() {
         ServerCapabilities noOrgs = new ServerCapabilities("26.7.0", Set.of("passkeys"), true);
         Map<String, Object> p = payload(
-                withCapabilities(featureCatalog(), noOrgs).whoami(null, null, InvocationContext.none()));
+                withCapabilities(featureCatalog(), noOrgs).whoami(null, null, TransportContext.none()));
         Map<?, ?> server = (Map<?, ?>) p.get("server");
         assertEquals("26.7.0", server.get("version"));
         assertEquals(CapabilityDiscovery.BASELINE_VERSION, server.get("baseline"));
@@ -406,7 +405,7 @@ class MetaToolsTest {
         assertEquals(1, tools.get("unsupported"));
         assertEquals(1, tools.get("allowed"));
 
-        Map<String, Object> unknown = payload(meta(false).whoami(null, null, InvocationContext.none()));
+        Map<String, Object> unknown = payload(meta(false).whoami(null, null, TransportContext.none()));
         Map<?, ?> s = (Map<?, ?>) unknown.get("server");
         assertEquals("unknown", s.get("version"));
         assertFalse(s.containsKey("unavailableTools"));

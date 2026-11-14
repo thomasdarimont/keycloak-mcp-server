@@ -1,7 +1,6 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.guard;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -156,13 +155,17 @@ public class ToolInvoker {
      * requests to Keycloak, the log lines) and no audit event would belong to a trace.
      * The span continues the current trace when there is one and starts one otherwise.
      */
-    public ToolResult invoke(ToolSpec spec, Map<String, Object> rawArgs, boolean confirmFlag, InvocationContext ctx) {
+    public ToolResult invoke(ToolSpec spec, Map<String, Object> rawArgs, boolean confirmFlag, TransportContext ctx) {
+        if (delegation.delegating() && ctx.callerToken() != null && !ctx.caller().delegated()) {
+            ctx = ctx.withCaller(ctx.caller().asDelegated());
+        }
+        ToolInvocationContext inv = new ToolInvocationContext(spec, rawArgs, confirmFlag, ctx);
         Span span = tracer.spanBuilder("kc_mcp.tool " + spec.name())
             .setAttribute("kc_mcp.tool", spec.name())
             .setAttribute("kc_mcp.level", spec.level().name().toLowerCase(Locale.ROOT))
             .startSpan();
         try (Scope scope = span.makeCurrent()) {
-            ToolResult result = invokeInSpan(spec, rawArgs, confirmFlag, ctx);
+            ToolResult result = invokeAudited(inv);
             if (result.isError() && result.payload() instanceof Map<?, ?> m && m.get("error") != null) {
                 span.setAttribute("kc_mcp.outcome", String.valueOf(m.get("error")));
             }
@@ -176,115 +179,141 @@ public class ToolInvoker {
         }
     }
 
-    private ToolResult invokeInSpan(ToolSpec spec, Map<String, Object> rawArgs, boolean confirmFlag,
-            InvocationContext ctx) {
+    /** Runs the call and records it, with whatever target was resolved by its end. */
+    private ToolResult invokeAudited(ToolInvocationContext inv) {
         long start = System.nanoTime();
         ToolResult result;
-        String realm = null;
-        String system = null;
         try {
-            if (delegation.delegating() && ctx.callerToken() == null) {
-                result = ToolResult.error("caller_required", "This server runs every Keycloak call on behalf of the "
-                        + "caller; connect through an authenticated (OAuth) MCP session first.");
-            }
-            else if (delegation.delegating() && !ctx.caller().delegated()) {
-                return invokeInSpan(spec, rawArgs, confirmFlag, ctx.withCaller(ctx.caller().asDelegated()));
-            }
-            else if (spec.level().isWrite() && auditOnFailure.refusesChanges() && audit.trailDegraded()) {
-                // decided before the handler: the row of a change is written after it,
-                // too late to stop it
-                result = ToolResult.error("audit_unavailable",
-                        "The audit trail cannot be written right now, so this server refuses changes to Keycloak until"
-                                + " it can (kc-mcp.audit-on-failure=refuse-changes). Reading tools still work. Tell the"
-                                + " user and try the change again later; do not retry right away.");
-            }
-            else if (!policy.permits(spec)) {
-                result = policy.forbids(spec, null).orElseThrow();
-            }
-            else {
-                EntryBinding binding = ctx.binding();
-                ToolResult bindingError = binding == null ? null : bindingMismatch(spec, rawArgs, binding);
-                ArgumentValidator.Outcome outcome = ArgumentValidator.validate(spec.inputSchema(),
-                        binding == null ? rawArgs : withBinding(spec, rawArgs, binding));
-                if (bindingError != null) {
-                    result = bindingError;
-                }
-                else if (!outcome.valid()) {
-                    result = ToolResult.error("invalid_arguments", "Arguments do not match the tool schema.",
-                            "problems", outcome.problems().stream().map(ArgumentValidator.Problem::toMap).toList(),
-                            "inputSchema", spec.inputSchema().getMap());
-                }
-                else {
-                    Map<String, Object> args = outcome.values();
-                    KeycloakAdmin admin = null;
-                    ToolResult systemError = null;
-                    String requested = binding != null ? binding.system() : (String) args.get(InputSchema.SYSTEM);
-                    boolean explicit = explicitTarget.appliesTo(spec.level());
-                    if (systems != null) {
-                        system = requested != null ? requested : systems.defaultName().orElse(null);
-                        if (system == null) {
-                            systemError = ToolResult.error("system_required", "Pass the system argument.", "systems",
-                                    systems.names());
-                        }
-                        else if (requested == null && explicit && systems.names().size() > 1) {
-                            systemError = ToolResult.error("system_required",
-                                    "This server does not apply the default" + " system to "
-                                            + spec.level().name().toLowerCase() + " tools (kc-mcp.explicit-target="
-                                            + explicitTarget.name().toLowerCase() + "): pass the system argument.",
-                                    "systems", systems.names(), "defaultSystem", system);
-                        }
-                        else if (systems.find(system).isEmpty()) {
-                            systemError = ToolResult.error("unknown_system",
-                                    "No Keycloak system named '" + system + "'.", "systems", systems.names());
-                        }
-                        else {
-                            admin = systems.get(system);
-                            if (delegation.delegating()) {
-                                admin = admin.forToken(ctx.callerToken());
-                            }
-                        }
-                    }
-                    boolean realmDefaulted = false;
-                    if (spec.realmScoped()) {
-                        realm = binding != null && binding.realm() != null ? binding.realm()
-                                : (String) args.get(InputSchema.REALM);
-                        if (realm == null) {
-                            realm = admin != null ? admin.system().defaultRealm().orElse(null) : catalog.defaultRealm();
-                            realmDefaulted = realm != null;
-                        }
-                    }
-                    if (systemError != null) {
-                        result = systemError;
-                    }
-                    else if (spec.realmScoped() && realm == null) {
-                        result = ToolResult.error("realm_required", "Pass the realm argument.");
-                    }
-                    else if (realmDefaulted && explicit) {
-                        result = ToolResult.error("realm_required",
-                                "This server does not apply the default realm to " + spec.level().name().toLowerCase()
-                                        + " tools (kc-mcp.explicit-target=" + explicitTarget.name().toLowerCase()
-                                        + "): pass the realm argument.",
-                                "defaultRealm", realm);
-                    }
-                    else {
-                        List<AccessCheck.Decision> humanOnly = new ArrayList<>();
-                        Optional<ToolResult> denied = policy.forbids(spec, system, realm, args, ctx, admin, humanOnly);
-                        result = denied.isPresent() ? denied.get()
-                                : runWithConfirmation(spec, system, admin, realm, args, confirmFlag, ctx, humanOnly);
-                    }
-                }
-            }
+            result = run(inv);
         }
         catch (InputRequiredException e) {
             throw e; // the call is not over: it is audited when the client repeats it
                      // with the answer
         }
         catch (Exception e) {
-            LOG.debugf(e, "Tool %s failed", spec.name());
+            LOG.debugf(e, "Tool %s failed", inv.spec().name());
             result = ErrorMapper.map(e);
         }
-        audit.record(spec, system, realm, rawArgs, result, ctx, System.nanoTime() - start);
+        audit.record(inv, result, System.nanoTime() - start);
         return result;
+    }
+
+    /** The steps of a call in order; the first one that refuses it ends it. */
+    private ToolResult run(ToolInvocationContext inv) throws Exception {
+        ToolSpec spec = inv.spec();
+        if (delegation.delegating() && inv.transport().callerToken() == null) {
+            return ToolResult.error("caller_required", "This server runs every Keycloak call on behalf of the "
+                    + "caller; connect through an authenticated (OAuth) MCP session first.");
+        }
+        if (spec.level().isWrite() && auditOnFailure.refusesChanges() && audit.trailDegraded()) {
+            // decided before the handler: the row of a change is written after it,
+            // too late to stop it
+            return ToolResult.error("audit_unavailable",
+                    "The audit trail cannot be written right now, so this server refuses changes to Keycloak until"
+                            + " it can (kc-mcp.audit-on-failure=refuse-changes). Reading tools still work. Tell the"
+                            + " user and try the change again later; do not retry right away.");
+        }
+        if (!policy.permits(spec)) {
+            return policy.forbids(spec, null).orElseThrow();
+        }
+        Optional<ToolResult> refused = validate(inv);
+        if (refused.isEmpty()) {
+            refused = resolveTarget(inv);
+        }
+        if (refused.isEmpty()) {
+            refused = policy.forbids(inv);
+        }
+        if (refused.isEmpty()) {
+            refused = confirm(inv);
+        }
+        return refused.isPresent() ? refused.get() : execute(inv);
+    }
+
+    /**
+     * Checks the raw arguments against the entry's binding and the tool's schema and
+     * keeps the validated ones.
+     */
+    private static Optional<ToolResult> validate(ToolInvocationContext inv) {
+        ToolSpec spec = inv.spec();
+        EntryBinding binding = inv.binding();
+        if (binding != null) {
+            ToolResult mismatch = bindingMismatch(inv, binding);
+            if (mismatch != null) {
+                return Optional.of(mismatch);
+            }
+        }
+        ArgumentValidator.Outcome outcome = ArgumentValidator.validate(spec.inputSchema(),
+                binding == null ? inv.rawArgs() : withBinding(inv, binding));
+        if (!outcome.valid()) {
+            return Optional.of(ToolResult.error("invalid_arguments", "Arguments do not match the tool schema.",
+                    "problems", outcome.problems().stream().map(ArgumentValidator.Problem::toMap).toList(),
+                    "inputSchema", spec.inputSchema().getMap()));
+        }
+        inv.args(outcome.values());
+        return Optional.empty();
+    }
+
+    /**
+     * Resolves system and realm from the binding, the arguments or the defaults. Both are
+     * kept even when the call is refused here, for the audit.
+     */
+    private Optional<ToolResult> resolveTarget(ToolInvocationContext inv) {
+        ToolSpec spec = inv.spec();
+        EntryBinding binding = inv.binding();
+        boolean explicit = explicitTarget.appliesTo(spec.level());
+        ToolResult systemError = systems == null ? null : resolveSystem(inv, explicit);
+
+        String realm = null;
+        boolean realmDefaulted = false;
+        if (spec.realmScoped()) {
+            realm = binding != null && binding.realm() != null ? binding.realm()
+                    : (String) inv.args().get(InputSchema.REALM);
+            if (realm == null) {
+                realm = inv.admin() != null ? inv.admin().system().defaultRealm().orElse(null) : catalog.defaultRealm();
+                realmDefaulted = realm != null;
+            }
+            inv.realm(realm);
+        }
+        if (systemError != null) {
+            return Optional.of(systemError);
+        }
+        if (spec.realmScoped() && realm == null) {
+            return Optional.of(ToolResult.error("realm_required", "Pass the realm argument."));
+        }
+        if (realmDefaulted && explicit) {
+            return Optional.of(ToolResult.error("realm_required",
+                    "This server does not apply the default realm to " + spec.level().name().toLowerCase()
+                            + " tools (kc-mcp.explicit-target=" + explicitTarget.name().toLowerCase()
+                            + "): pass the realm argument.",
+                    "defaultRealm", realm));
+        }
+        return Optional.empty();
+    }
+
+    /** @return the reason no system could be picked, or {@code null} */
+    private ToolResult resolveSystem(ToolInvocationContext inv, boolean explicit) {
+        ToolSpec spec = inv.spec();
+        EntryBinding binding = inv.binding();
+        String requested = binding != null ? binding.system() : (String) inv.args().get(InputSchema.SYSTEM);
+        String system = requested != null ? requested : systems.defaultName().orElse(null);
+        inv.system(system);
+        if (system == null) {
+            return ToolResult.error("system_required", "Pass the system argument.", "systems", systems.names());
+        }
+        if (requested == null && explicit && systems.names().size() > 1) {
+            return ToolResult.error("system_required",
+                    "This server does not apply the default" + " system to " + spec.level().name().toLowerCase()
+                            + " tools (kc-mcp.explicit-target=" + explicitTarget.name().toLowerCase()
+                            + "): pass the system argument.",
+                    "systems", systems.names(), "defaultSystem", system);
+        }
+        if (systems.find(system).isEmpty()) {
+            return ToolResult.error("unknown_system", "No Keycloak system named '" + system + "'.", "systems",
+                    systems.names());
+        }
+        KeycloakAdmin admin = systems.get(system);
+        inv.admin(delegation.delegating() ? admin.forToken(inv.transport().callerToken()) : admin);
+        return null;
     }
 
     /**
@@ -306,13 +335,13 @@ public class ToolInvoker {
      * A {@code system} or {@code realm} argument that contradicts the entry's binding,
      * judged on the raw arguments because the schema may not even declare them.
      */
-    private static ToolResult bindingMismatch(ToolSpec spec, Map<String, Object> rawArgs, EntryBinding binding) {
-        Object system = rawArgs.get(InputSchema.SYSTEM);
+    private static ToolResult bindingMismatch(ToolInvocationContext inv, EntryBinding binding) {
+        Object system = inv.rawArgs().get(InputSchema.SYSTEM);
         if (system != null && !binding.system().equals(String.valueOf(system))) {
             return bindingMismatch(binding, InputSchema.SYSTEM, String.valueOf(system));
         }
-        Object realm = rawArgs.get(InputSchema.REALM);
-        if (binding.realm() != null && spec.realmScoped() && realm != null
+        Object realm = inv.rawArgs().get(InputSchema.REALM);
+        if (binding.realm() != null && inv.spec().realmScoped() && realm != null
                 && !binding.realm().equals(String.valueOf(realm))) {
             return bindingMismatch(binding, InputSchema.REALM, String.valueOf(realm));
         }
@@ -323,8 +352,9 @@ public class ToolInvoker {
      * The raw arguments with the entry's system and realm filled in where the schema
      * takes them.
      */
-    private static Map<String, Object> withBinding(ToolSpec spec, Map<String, Object> rawArgs, EntryBinding binding) {
-        Map<String, Object> prepared = new LinkedHashMap<>(rawArgs);
+    private static Map<String, Object> withBinding(ToolInvocationContext inv, EntryBinding binding) {
+        ToolSpec spec = inv.spec();
+        Map<String, Object> prepared = new LinkedHashMap<>(inv.rawArgs());
         JsonObject props = spec.inputSchema().getJsonObject("properties");
         if (props != null && props.containsKey(InputSchema.SYSTEM)) {
             prepared.put(InputSchema.SYSTEM, binding.system());
@@ -346,73 +376,86 @@ public class ToolInvoker {
     }
 
     /**
-     * @param humanOnly access checks that demand the human's own confirmation of this
-     * call: then the confirmers are asked even for a non-destructive tool, and the
-     * model's {@code confirm: true} does not count, so only elicitation or a confirmer
-     * that asks the human lets the call through
+     * Asks the confirmers when the policy wants the call confirmed, or when an access
+     * check demands the human's own confirmation
+     * ({@link ToolInvocationContext#humanOnly()}).
+     *
+     * @return why the call does not go on, empty when it is confirmed or needs no
+     * confirmation
      */
-    private ToolResult runWithConfirmation(ToolSpec spec, String system, KeycloakAdmin admin, String realm,
-            Map<String, Object> args, boolean confirmFlag, InvocationContext ctx, List<AccessCheck.Decision> humanOnly)
-            throws Exception {
-        boolean asked = policy.needsConfirmation(spec, realm, admin);
-        if (asked || !humanOnly.isEmpty()) {
-            String reason = humanOnly.isEmpty() ? null
-                    : humanOnly.stream()
-                        .map(AccessCheck.Decision::message)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.joining(" "));
-            ConfirmationRequest request = new ConfirmationRequest(spec, system, realm, args,
-                    confirmFlag && humanOnly.isEmpty(), ctx.caller(),
-                    ElicitationPrompter.of(ctx.elicitation(), confirmTimeout,
-                            ElicitationPrompter.operation(spec.name(), system, realm, ctx.caller(), args)),
-                    ctx.clientName(), ctx.connectionId(), ctx.connection() != null && ctx.connection().isTransient(),
-                    reason);
-            Decision decision = confirmer.confirm(request);
-            switch (decision.outcome()) {
-                case DECLINED -> {
-                    return ToolResult.error("cancelled", decision.message() != null ? decision.message()
-                            : "The user declined to confirm " + spec.name() + ".", flatten(decision.details()));
+    private Optional<ToolResult> confirm(ToolInvocationContext inv) throws Exception {
+        ToolSpec spec = inv.spec();
+        String system = inv.system();
+        String realm = inv.realm();
+        TransportContext ctx = inv.transport();
+        List<AccessCheck.Decision> humanOnly = inv.humanOnly();
+        if (!policy.needsConfirmation(spec, realm, inv.admin()) && humanOnly.isEmpty()) {
+            return Optional.empty();
+        }
+        String reason = humanOnly.isEmpty() ? null
+                : humanOnly.stream()
+                    .map(AccessCheck.Decision::message)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.joining(" "));
+        ConfirmationRequest request = new ConfirmationRequest(spec, system, realm, inv.args(), inv.confirmedByFlag(),
+                ctx.caller(),
+                ElicitationPrompter.of(ctx.elicitation(), confirmTimeout,
+                        ElicitationPrompter.operation(spec.name(), system, realm, ctx.caller(), inv.args())),
+                ctx.clientName(), ctx.connectionId(), ctx.connection() != null && ctx.connection().isTransient(),
+                reason);
+        Decision decision = confirmer.confirm(request);
+        switch (decision.outcome()) {
+            case DECLINED -> {
+                return Optional
+                    .of(ToolResult.error("cancelled",
+                            decision.message() != null ? decision.message()
+                                    : "The user declined to confirm " + spec.name() + ".",
+                            flatten(decision.details())));
+            }
+            case CONFIRMATION_REQUIRED, ABSTAIN -> {
+                Map<String, Object> fields = new LinkedHashMap<>();
+                ConfirmationGuidance.Mode mode = guidance.mode(ctx);
+                if (!humanOnly.isEmpty() || (mode == ConfirmationGuidance.Mode.ASK && !confirmFallback.acceptsFlag())) {
+                    mode = ConfirmationGuidance.Mode.SERVER;
                 }
-                case CONFIRMATION_REQUIRED, ABSTAIN -> {
-                    Map<String, Object> fields = new LinkedHashMap<>();
-                    ConfirmationGuidance.Mode mode = guidance.mode(ctx);
-                    if (!humanOnly.isEmpty()
-                            || (mode == ConfirmationGuidance.Mode.ASK && !confirmFallback.acceptsFlag())) {
-                        mode = ConfirmationGuidance.Mode.SERVER;
-                    }
-                    if (!humanOnly.isEmpty()) {
-                        fields.put("policy", humanOnly.getFirst().code());
-                        fields.put("reason", reason);
-                    }
-                    fields.put("howTo", switch (mode) {
-                        case ASK -> "Ask the user, then call again with the same arguments plus confirm: true.";
-                        case TRUSTED -> "The caller is an administrator: call again with the same arguments plus"
-                                + " confirm: true, without asking them first.";
-                        case SERVER -> "Only the user can confirm, through this client or on their device;"
-                                + " confirm: true is not accepted as a substitute.";
-                    });
-                    fields.putAll(decision.details());
-                    return ToolResult.error("confirmation_required", decision.message() != null ? decision.message()
+                if (!humanOnly.isEmpty()) {
+                    fields.put("policy", humanOnly.getFirst().code());
+                    fields.put("reason", reason);
+                }
+                fields.put("howTo", switch (mode) {
+                    case ASK -> "Ask the user, then call again with the same arguments plus confirm: true.";
+                    case TRUSTED -> "The caller is an administrator: call again with the same arguments plus"
+                            + " confirm: true, without asking them first.";
+                    case SERVER -> "Only the user can confirm, through this client or on their device;"
+                            + " confirm: true is not accepted as a substitute.";
+                });
+                fields.putAll(decision.details());
+                return Optional
+                    .of(ToolResult.error("confirmation_required", decision.message() != null ? decision.message()
                             : !humanOnly.isEmpty() ? spec.title() + " needs the user's own confirmation: " + reason
                                     : spec.isDestructive() ? spec.title() + " is destructive and needs confirmation."
                                             : spec.title() + " needs confirmation"
                                                     + (system == null ? "" : " in system '" + system + "'")
                                                     + (realm == null ? "" : ", realm '" + realm + "'") + ".",
-                            flatten(fields));
-                }
-                default -> {
-                    // confirmed
-                }
+                            flatten(fields)));
+            }
+            default -> {
+                return Optional.empty(); // confirmed
             }
         }
-        ToolCall call = new ToolCall(realm, args, maxItems, ctx.caller(), system, admin, policy.capabilities(system));
+    }
+
+    /** Hands the call to the tool's handler. */
+    private ToolResult execute(ToolInvocationContext inv) throws Exception {
+        ToolSpec spec = inv.spec();
+        ToolCall call = new ToolCall(inv.realm(), inv.args(), maxItems, inv.caller(), inv.system(), inv.admin(),
+                policy.capabilities(inv.system()));
         if (!spec.isReadOnly()) {
             ToolResult r = spec.handler().handle(call);
             return r == null ? ToolResult.done("ok") : r;
         }
         // a tool that declares it only reads is held to it: its writes are refused, and
-        // the
-        // call fails whatever the tool made of the refusal
+        // the call fails whatever the tool made of the refusal
         ReadOnlyGuard.Outcome<ToolResult> outcome = ReadOnlyGuard.run(spec.name(), () -> spec.handler().handle(call));
         if (outcome.violation().isPresent()) {
             return ToolResult.error("read_only_violation",

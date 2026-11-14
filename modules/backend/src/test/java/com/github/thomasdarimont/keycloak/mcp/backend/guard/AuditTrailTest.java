@@ -34,7 +34,7 @@ class AuditTrailTest {
     private final ToolSpec search = catalog.get("keycloak_user_search").orElseThrow();
     private final ToolSpec setEnabled = catalog.get("keycloak_user_set_enabled").orElseThrow();
     private final ToolSpec delete = catalog.get("keycloak_user_delete").orElseThrow();
-    private final InvocationContext ctx = InvocationContext.none();
+    private final TransportContext ctx = TransportContext.none();
 
     /** Stands in for the database listener: fails while {@code down}. */
     static class Trail implements AuditListener {

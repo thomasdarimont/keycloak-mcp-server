@@ -146,20 +146,20 @@ class AccessPolicyTest {
                     : AccessCheck.Decision.deny("only realm demo"))
             .build();
         AccessPolicy policy = new AccessPolicy(false, List.of());
-        assertTrue(policy.forbids(guarded, "demo", Map.of("id", "bob"), InvocationContext.none()).isEmpty());
+        assertTrue(policy.forbids(guarded, "demo", Map.of("id", "bob"), TransportContext.none()).isEmpty());
         Map<String, Object> denied = payload(
-                policy.forbids(guarded, "demo", Map.of("id", "root"), InvocationContext.none()).orElseThrow());
+                policy.forbids(guarded, "demo", Map.of("id", "root"), TransportContext.none()).orElseThrow());
         assertEquals("protected_user", denied.get("error"));
         assertEquals("root cannot be touched", denied.get("message"));
         assertEquals("access_denied",
-                payload(policy.forbids(guarded, "other", Map.of("id", "bob"), InvocationContext.none()).orElseThrow())
+                payload(policy.forbids(guarded, "other", Map.of("id", "bob"), TransportContext.none()).orElseThrow())
                     .get("error"));
         // a throwing check denies instead of allowing
         ToolSpec broken = spec("keycloak_x_broken").access(ctx -> {
             throw new IllegalStateException("boom");
         }).build();
         assertEquals("access_check_failed",
-                payload(policy.forbids(broken, "demo", Map.of(), InvocationContext.none()).orElseThrow()).get("error"));
+                payload(policy.forbids(broken, "demo", Map.of(), TransportContext.none()).orElseThrow()).get("error"));
     }
 
     @Test
@@ -171,8 +171,8 @@ class AccessPolicyTest {
                 List.of(businessHours));
         ToolSpec write = spec("keycloak_x_write").build();
         assertEquals("needs_identity",
-                payload(policy.forbids(write, "demo", Map.of(), InvocationContext.none()).orElseThrow()).get("error"));
-        InvocationContext asAlice = InvocationContext.none().withCaller(Caller.of("sub-1", "alice", "demo", Set.of()));
+                payload(policy.forbids(write, "demo", Map.of(), TransportContext.none()).orElseThrow()).get("error"));
+        TransportContext asAlice = TransportContext.none().withCaller(Caller.of("sub-1", "alice", "demo", Set.of()));
         assertTrue(policy.forbids(write, "demo", Map.of(), asAlice).isEmpty());
     }
 
@@ -182,8 +182,8 @@ class AccessPolicyTest {
         ToolSpec forbidden = spec("keycloak_x_secret").delegation(Delegation.FORBIDDEN).build();
         ToolSpec required = spec("keycloak_x_support").delegation(Delegation.REQUIRED).build();
         ToolSpec allowed = spec("keycloak_x_any").build();
-        InvocationContext serviceAccount = InvocationContext.none();
-        InvocationContext delegated = InvocationContext.none()
+        TransportContext serviceAccount = TransportContext.none();
+        TransportContext delegated = TransportContext.none()
             .withCaller(Caller.delegated("sub-1", "alice", "demo", Set.of()));
 
         assertTrue(policy.forbids(forbidden, "demo", Map.of(), serviceAccount).isEmpty());
@@ -285,9 +285,9 @@ class AccessPolicyTest {
             .put("realm-management", new JsonObject().put("roles", new JsonArray(List.of("view-users"))))));
         String realmAdmin = GrantedRolesTest.jwt(new JsonObject().put("resource_access", new JsonObject()
             .put("realm-management", new JsonObject().put("roles", new JsonArray(List.of("realm-admin"))))));
-        InvocationContext asSupport = InvocationContext.none()
+        TransportContext asSupport = TransportContext.none()
             .withCaller(Caller.delegated("u1", "support", "demo", Set.of()), support);
-        InvocationContext asAdmin = InvocationContext.none()
+        TransportContext asAdmin = TransportContext.none()
             .withCaller(Caller.delegated("u2", "ops", "demo", Set.of()), realmAdmin);
         assertEquals(Explanations.USERS, auto.explanationsFor(auto.granted(null, asSupport), true));
         assertEquals(Explanations.ADMINS, auto.explanationsFor(auto.granted(null, asAdmin), true));

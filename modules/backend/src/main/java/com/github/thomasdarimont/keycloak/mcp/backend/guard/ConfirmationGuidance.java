@@ -70,7 +70,7 @@ public class ConfirmationGuidance {
         return new ConfirmationGuidance(ModelConfirmation.ASK, ConfirmFallback.FLAG, false, Set.of());
     }
 
-    public Mode mode(InvocationContext ctx) {
+    public Mode mode(TransportContext ctx) {
         boolean trusted = ctx != null && !ctx.caller().isAnonymous()
                 && trustedRoles.stream().anyMatch(ctx.caller()::hasRole);
         boolean clientAsks = ctx != null && ElicitationPrompter.of(ctx.elicitation(), Duration.ZERO).available();
@@ -90,12 +90,12 @@ public class ConfirmationGuidance {
         };
     }
 
-    public String howTo(InvocationContext ctx) {
+    public String howTo(TransportContext ctx) {
         return howTo(mode(ctx));
     }
 
     /** For {@code whoami}. */
-    public Map<String, Object> json(InvocationContext ctx) {
+    public Map<String, Object> json(TransportContext ctx) {
         Mode mode = mode(ctx);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("mode", mode.name().toLowerCase());

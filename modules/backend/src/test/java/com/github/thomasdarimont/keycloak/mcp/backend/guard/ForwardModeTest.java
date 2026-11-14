@@ -81,8 +81,8 @@ class ForwardModeTest {
             .put("iss", "http://kc/realms/demo"));
     }
 
-    private static InvocationContext caller(String token) {
-        return InvocationContext.none().withCaller(Caller.of("u1", "carol", "demo", Set.of()), token);
+    private static TransportContext caller(String token) {
+        return TransportContext.none().withCaller(Caller.of("u1", "carol", "demo", Set.of()), token);
     }
 
     private ToolInvoker invoker() {
@@ -93,7 +93,7 @@ class ForwardModeTest {
     @Test
     void anonymousCallerIsRefused() {
         ToolSpec spec = catalog.get("keycloak_user_search").orElseThrow();
-        ToolResult r = invoker().invoke(spec, Map.of(), false, InvocationContext.none());
+        ToolResult r = invoker().invoke(spec, Map.of(), false, TransportContext.none());
         assertTrue(r.isError());
         assertEquals("caller_required", payload(r).get("error"));
     }

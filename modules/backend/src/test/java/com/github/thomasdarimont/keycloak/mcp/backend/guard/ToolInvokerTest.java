@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ToolInvokerTest {
 
     private final ToolCatalog catalog = Fixtures.catalog(null);
-    private final InvocationContext ctx = InvocationContext.none();
+    private final TransportContext ctx = TransportContext.none();
 
     private ToolInvoker invoker(boolean readOnly, List<String> realms, Confirmer confirmer) {
         return new ToolInvoker(catalog, new AccessPolicy(readOnly, realms), confirmer, 50);
@@ -230,13 +230,13 @@ class ToolInvokerTest {
         ToolInvoker inv = new ToolInvoker(c, new AccessPolicy(false, List.of()), fixed(Decision.CONFIRMED), 10,
                 systems);
 
-        InvocationContext onB = InvocationContext.none().withBinding(new EntryBinding("b", null));
+        TransportContext onB = TransportContext.none().withBinding(new EntryBinding("b", null));
         Map<String, Object> r = payload(inv.invoke(echo, Map.of("realm", "only-b"), false, onB));
         assertEquals("b", r.get("system"), "the entry decides, not the default system");
         Map<String, Object> mismatch = payload(inv.invoke(echo, Map.of("system", "a", "realm", "only-b"), false, onB));
         assertEquals("entry_mismatch", mismatch.get("error"), mismatch.toString());
 
-        InvocationContext onBRealm = InvocationContext.none().withBinding(new EntryBinding("b", "only-b"));
+        TransportContext onBRealm = TransportContext.none().withBinding(new EntryBinding("b", "only-b"));
         Map<String, Object> pinned = payload(inv.invoke(echo, Map.of(), false, onBRealm));
         assertEquals("only-b", pinned.get("realm"), pinned.toString());
         Map<String, Object> realmMismatch = payload(inv.invoke(echo, Map.of("realm", "b-default"), false, onBRealm));
@@ -288,7 +288,7 @@ class ToolInvokerTest {
         assertEquals("demo", ok.get("realm"));
 
         // a system-specific endpoint is an explicit choice
-        InvocationContext onA = InvocationContext.none().withBinding(new EntryBinding("a", "demo"));
+        TransportContext onA = TransportContext.none().withBinding(new EntryBinding("a", "demo"));
         Map<String, Object> bound = payload(inv.invoke(destroySpec, Map.of(), false, onA));
         assertEquals("a", bound.get("system"), bound.toString());
 

@@ -60,7 +60,7 @@ class AuditLogTest {
         };
         AuditLog log = new AuditLog(List.of(plain, stored), List.of(forStored, everywhere));
         Caller alice = Caller.of("sub", "alice", "demo", Set.of()).withToken("raw", Map.of("email", "a@x"));
-        InvocationContext ctx = InvocationContext.none().withCaller(alice);
+        TransportContext ctx = TransportContext.none().withCaller(alice);
         Map<String, Object> args = Map.of("username", "bob", "password", "pw", "max", 5);
 
         log.record(SEARCH, "main", "demo", args, ToolResult.ok(List.of()), ctx, 1_000_000);

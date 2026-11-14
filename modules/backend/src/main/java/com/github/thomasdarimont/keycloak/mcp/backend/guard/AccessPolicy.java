@@ -467,10 +467,10 @@ public class AccessPolicy {
      * Per-call check without arguments or caller (static policy, realm and roles only).
      */
     public Optional<ToolResult> forbids(ToolSpec spec, String realm) {
-        return forbids(spec, null, realm, Map.of(), InvocationContext.none());
+        return forbids(spec, null, realm, Map.of(), TransportContext.none());
     }
 
-    public Optional<ToolResult> forbids(ToolSpec spec, String realm, Map<String, Object> args, InvocationContext ctx) {
+    public Optional<ToolResult> forbids(ToolSpec spec, String realm, Map<String, Object> args, TransportContext ctx) {
         return forbids(spec, null, realm, args, ctx);
     }
 
@@ -481,7 +481,7 @@ public class AccessPolicy {
      * @param system Keycloak system name, or {@code null} for the single/default system
      */
     public Optional<ToolResult> forbids(ToolSpec spec, String system, String realm, Map<String, Object> args,
-            InvocationContext ctx) {
+            TransportContext ctx) {
         return forbids(spec, system, realm, args, ctx, null);
     }
 
@@ -490,7 +490,7 @@ public class AccessPolicy {
      * delegation), handed to the access checks; {@code null} when unknown
      */
     public Optional<ToolResult> forbids(ToolSpec spec, String system, String realm, Map<String, Object> args,
-            InvocationContext ctx, KeycloakAdmin admin) {
+            TransportContext ctx, KeycloakAdmin admin) {
         return forbids(spec, system, realm, args, ctx, admin, null);
     }
 
@@ -500,7 +500,7 @@ public class AccessPolicy {
      * ignore them
      */
     public Optional<ToolResult> forbids(ToolSpec spec, String system, String realm, Map<String, Object> args,
-            InvocationContext ctx, KeycloakAdmin admin, List<AccessCheck.Decision> confirmations) {
+            TransportContext ctx, KeycloakAdmin admin, List<AccessCheck.Decision> confirmations) {
         if (!permits(spec)) {
             if (readOnly && !spec.isReadOnly()) {
                 return Optional.of(ToolResult.error("read_only_mode", "This server runs in read-only mode; "
@@ -609,6 +609,16 @@ public class AccessPolicy {
     }
 
     /**
+     * Per-call check of a call whose target the invoker has resolved; the access checks'
+     * demands that the human confirm it end up in
+     * {@link ToolInvocationContext#humanOnly()}.
+     */
+    public Optional<ToolResult> forbids(ToolInvocationContext inv) {
+        return forbids(inv.spec(), inv.system(), inv.realm(), inv.args(), inv.transport(), inv.admin(),
+                inv.humanOnly());
+    }
+
+    /**
      * Version and features of a system as currently cached or read;
      * {@link ServerCapabilities#UNKNOWN} when checks are off.
      *
@@ -667,7 +677,7 @@ public class AccessPolicy {
      * @throws com.github.thomasdarimont.keycloak.mcp.catalog.ToolException
      * {@code delegation_failed} when Keycloak refuses the exchange
      */
-    public GrantedRoles granted(String system, InvocationContext ctx) {
+    public GrantedRoles granted(String system, TransportContext ctx) {
         if (ctx.caller().delegated() && ctx.callerToken() != null) {
             return GrantedRoles.fromToken(decidingToken(system, ctx.callerToken()), ctx.caller().realm());
         }

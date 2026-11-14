@@ -14,11 +14,11 @@ public final class AuditLogAccess {
     }
 
     public static void record(List<AuditListener> listeners, ToolSpec spec, Map<String, Object> args) {
-        new AuditLog(listeners).record(spec, null, "demo", args, ToolResult.ok(Map.of()), InvocationContext.none(), 0);
+        new AuditLog(listeners).record(spec, null, "demo", args, ToolResult.ok(Map.of()), TransportContext.none(), 0);
     }
 
     public static void recordResult(List<AuditListener> listeners, ToolSpec spec, Map<String, Object> args,
             ToolResult result) {
-        new AuditLog(listeners).record(spec, null, "demo", args, result, InvocationContext.none(), 0);
+        new AuditLog(listeners).record(spec, null, "demo", args, result, TransportContext.none(), 0);
     }
 }
