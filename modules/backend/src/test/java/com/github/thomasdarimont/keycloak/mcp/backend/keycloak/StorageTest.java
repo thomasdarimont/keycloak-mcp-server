@@ -1,7 +1,5 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.keycloak;
 
-import java.util.Optional;
-import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -62,9 +60,12 @@ class StorageTest {
             .repository(DatabaseKeycloakSystemRepository.class)
             .orElseThrow();
 
-        KeycloakSystem tenant = new KeycloakSystem("tenant-db", "http://127.0.0.1:1", GrantType.CLIENT_CREDENTIALS,
-                ClientAuth.PRIVATE_KEY_JWT, "master", Optional.of("keycloak-mcp-server"), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.of("tenant"), Set.of(), Optional.empty());
+        KeycloakSystem tenant = KeycloakSystem.builder("tenant-db", "http://127.0.0.1:1")
+            .grantType(GrantType.CLIENT_CREDENTIALS)
+            .clientAuth(ClientAuth.PRIVATE_KEY_JWT)
+            .clientId("keycloak-mcp-server")
+            .defaultRealm("tenant")
+            .build();
         KeycloakSystem stored = repo.save(tenant.withDisplayName("Tenant DB"));
         // a stored system's keys go by its id, not its name
         String jwksPath = "/auth/keys/" + stored.id().orElseThrow() + "/jwks.json";

@@ -96,10 +96,16 @@ class DatabaseStorageIT {
     StorageCrypto crypto;
 
     static KeycloakSystem system(String alias, String url, Optional<String> secret, Set<String> realms) {
-        return new KeycloakSystem(alias, url, GrantType.CLIENT_CREDENTIALS,
-                secret.isPresent() ? ClientAuth.CLIENT_SECRET : ClientAuth.PRIVATE_KEY_JWT, "master",
-                Optional.of("keycloak-mcp-server"), secret, Optional.empty(), Optional.empty(), Optional.of("tenant"),
-                realms, Optional.of("26.8.2"), Optional.of("https://sso.example.com/realms/master"));
+        return KeycloakSystem.builder(alias, url)
+            .grantType(GrantType.CLIENT_CREDENTIALS)
+            .clientAuth(secret.isPresent() ? ClientAuth.CLIENT_SECRET : ClientAuth.PRIVATE_KEY_JWT)
+            .clientId("keycloak-mcp-server")
+            .clientSecret(secret.orElse(null))
+            .defaultRealm("tenant")
+            .allowedRealms(realms)
+            .version("26.8.2")
+            .issuer("https://sso.example.com/realms/master")
+            .build();
     }
 
     @Test

@@ -1,7 +1,6 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.guard;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -14,7 +13,6 @@ import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.DefaultKeycloakAd
 import com.github.thomasdarimont.keycloak.mcp.catalog.Requirement;
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
 import com.github.thomasdarimont.keycloak.mcp.config.Explanations;
-import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystem;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.ServerCapabilities;
 
@@ -142,9 +140,10 @@ class CapabilityTest {
 
     @Test
     void configuredVersionStandsInWhenTheServerInfoIsNotReadable() {
-        KeycloakSystem unreachable = new KeycloakSystem("default", "http://127.0.0.1:1", GrantType.CLIENT_CREDENTIALS,
-                ClientAuth.NONE, "master", Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                Optional.empty(), Set.of(), Optional.of("26.8.2"));
+        KeycloakSystem unreachable = KeycloakSystem.builder("default", "http://127.0.0.1:1")
+            .clientAuth(ClientAuth.NONE)
+            .version("26.8.2")
+            .build();
         DefaultKeycloakAdmin admin = new DefaultKeycloakAdmin(unreachable, null);
         try {
             ServerCapabilities c = CapabilityDiscovery.load(admin);

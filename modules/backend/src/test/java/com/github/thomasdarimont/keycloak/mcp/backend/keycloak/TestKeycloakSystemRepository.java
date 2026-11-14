@@ -2,7 +2,6 @@ package com.github.thomasdarimont.keycloak.mcp.backend.keycloak;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
 import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
@@ -18,9 +17,12 @@ import com.google.auto.service.AutoService;
 @AutoService(KeycloakSystemRepository.class)
 public class TestKeycloakSystemRepository implements KeycloakSystemRepository {
 
-    public static final KeycloakSystem LAB = new KeycloakSystem("lab", "http://127.0.0.1:1",
-            GrantType.CLIENT_CREDENTIALS, ClientAuth.PRIVATE_KEY_JWT, "master", Optional.of("keycloak-mcp-server"),
-            Optional.empty(), Optional.empty(), Optional.empty(), Optional.of("tenant"), Set.of(), Optional.empty());
+    public static final KeycloakSystem LAB = KeycloakSystem.builder("lab", "http://127.0.0.1:1")
+        .grantType(GrantType.CLIENT_CREDENTIALS)
+        .clientAuth(ClientAuth.PRIVATE_KEY_JWT)
+        .clientId("keycloak-mcp-server")
+        .defaultRealm("tenant")
+        .build();
 
     @Override
     public String id() {
