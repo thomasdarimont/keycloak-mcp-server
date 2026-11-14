@@ -1,13 +1,10 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.keycloak;
 
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
-import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.HostAllowList;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystem;
 
@@ -68,7 +65,6 @@ class HostAllowListTest {
     }
 
     private static KeycloakSystem system(String name, String url) {
-        return new KeycloakSystem(name, url, GrantType.CLIENT_CREDENTIALS, ClientAuth.NONE, "master", Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Set.of(), Optional.empty());
+        return KeycloakSystem.builder(name, url).clientAuth(ClientAuth.NONE).build();
     }
 }

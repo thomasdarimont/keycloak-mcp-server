@@ -128,9 +128,15 @@ class TokenExchangeTest {
     }
 
     static KeycloakSystem system(String url, ClientAuth auth, GrantType grant) {
-        return new KeycloakSystem("default", url, grant, auth, "demo", Optional.of("keycloak-mcp"),
-                auth == ClientAuth.CLIENT_SECRET ? Optional.of("s3cret") : Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.of("demo"), Set.of("demo"), Optional.empty());
+        return KeycloakSystem.builder("default", url)
+            .grantType(grant)
+            .clientAuth(auth)
+            .authRealm("demo")
+            .clientId("keycloak-mcp")
+            .clientSecret(auth == ClientAuth.CLIENT_SECRET ? "s3cret" : null)
+            .defaultRealm("demo")
+            .allowedRealm("demo")
+            .build();
     }
 
     static TokenExchange exchange(KeycloakSystem system) {

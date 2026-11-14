@@ -3,6 +3,7 @@ package com.github.thomasdarimont.keycloak.mcp.keycloak;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
 import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
@@ -27,12 +29,7 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
  * {@link #password()} of the form {@code vault:<secret name>} is a reference the server
  * resolves against the {@link KeyVault} before connecting.
  */
-public record KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-        Optional<String> clientId, Optional<String> clientSecret, Optional<String> username, Optional<String> password,
-        Optional<String> defaultRealm, Set<String> allowedRealms, Optional<String> version, Optional<String> issuer,
-        Optional<String> displayName, Optional<String> description, Set<String> trustedIssuers, AccessSettings access,
-        Map<String, RealmSettings> realms, Optional<String> preset, Map<String, Preset> presets, ToolSettings tools,
-        Optional<String> id) {
+public final class KeycloakSystem {
 
     /**
      * Prefix of a secret value that names a {@link KeyVault} secret instead of holding
@@ -40,41 +37,184 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
      */
     public static final String VAULT_REF = "vault:";
 
-    public KeycloakSystem {
-        displayName = displayName == null ? Optional.empty() : displayName.map(String::trim).filter(v -> !v.isEmpty());
-        description = description == null ? Optional.empty() : description.map(String::trim).filter(v -> !v.isEmpty());
-        trustedIssuers = trustedIssuers == null ? Set.of() : Set.copyOf(trustedIssuers);
-        access = access == null ? AccessSettings.NONE : access;
-        realms = realms == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(realms));
-        preset = preset == null ? Optional.empty() : preset.map(String::trim).filter(v -> !v.isEmpty());
-        presets = presets == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(presets));
-        tools = tools == null ? ToolSettings.NONE : tools;
-        id = id == null ? Optional.empty() : id.map(String::trim).filter(v -> !v.isEmpty());
+    /** What {@link #toString()} shows instead of a secret. */
+    private static final String MASKED = "***";
+
+    // unset optional values are null; the accessors wrap them in an Optional
+    private final String name;
+    private final String url;
+    private final GrantType grantType;
+    private final ClientAuth clientAuth;
+    private final String authRealm;
+    private final String clientId;
+    private final String clientSecret;
+    private final String username;
+    private final String password;
+    private final String defaultRealm;
+    private final Set<String> allowedRealms;
+    private final String version;
+    private final String issuer;
+    private final String displayName;
+    private final String description;
+    private final Set<String> trustedIssuers;
+    private final AccessSettings access;
+    private final Map<String, RealmSettings> realms;
+    private final String preset;
+    private final Map<String, Preset> presets;
+    private final ToolSettings tools;
+    private final String id;
+
+    /**
+     * Every value as given, normalized as the configuration and the {@link Builder} rely
+     * on: no {@code null}, labels and the preset trimmed, collections unmodifiable. Use
+     * {@link #builder(String, String)}.
+     */
+    /**
+     * Every value as given, normalized as the configuration and the {@link Builder} rely
+     * on: unset values {@code null}, labels, the preset and the id trimmed (blank means
+     * unset), collections unmodifiable. Use {@link #builder(String, String)}.
+     */
+    private KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
+            String clientId, String clientSecret, String username, String password, String defaultRealm,
+            Set<String> allowedRealms, String version, String issuer, String displayName, String description,
+            Set<String> trustedIssuers, AccessSettings access, Map<String, RealmSettings> realms, String preset,
+            Map<String, Preset> presets, ToolSettings tools, String id) {
+        this.name = name;
+        this.url = url;
+        this.grantType = grantType;
+        this.clientAuth = clientAuth;
+        this.authRealm = authRealm;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+        this.username = username;
+        this.password = password;
+        this.defaultRealm = defaultRealm;
+        this.allowedRealms = allowedRealms == null ? Set.of() : Set.copyOf(allowedRealms);
+        this.version = version;
+        this.issuer = issuer;
+        this.displayName = trimmed(displayName);
+        this.description = trimmed(description);
+        this.trustedIssuers = trustedIssuers == null ? Set.of() : Set.copyOf(trustedIssuers);
+        this.access = access == null ? AccessSettings.NONE : access;
+        this.realms = realms == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(realms));
+        this.preset = trimmed(preset);
+        this.presets = presets == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(presets));
+        this.tools = tools == null ? ToolSettings.NONE : tools;
+        this.id = trimmed(id);
     }
 
-    /** Without an id: a system from configuration or a file. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
-            Optional<String> description, Set<String> trustedIssuers, AccessSettings access,
-            Map<String, RealmSettings> realms, Optional<String> preset, Map<String, Preset> presets,
-            ToolSettings tools) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, description, trustedIssuers, access, realms, preset,
-                presets, tools, Optional.empty());
+    /** {@code null} for {@code null} or blank, else trimmed. */
+    private static String trimmed(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
-    /** Without a tools section. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
-            Optional<String> description, Set<String> trustedIssuers, AccessSettings access,
-            Map<String, RealmSettings> realms, Optional<String> preset, Map<String, Preset> presets) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, description, trustedIssuers, access, realms, preset,
-                presets, ToolSettings.NONE);
+    /** The technical key: the {@code system} argument, the entry path. */
+    public String name() {
+        return name;
+    }
+
+    /** The URL the server reaches Keycloak at. */
+    public String url() {
+        return url;
+    }
+
+    public GrantType grantType() {
+        return grantType;
+    }
+
+    public ClientAuth clientAuth() {
+        return clientAuth;
+    }
+
+    /** The realm the server logs in to. */
+    public String authRealm() {
+        return authRealm;
+    }
+
+    public Optional<String> clientId() {
+        return Optional.ofNullable(clientId);
+    }
+
+    /** The secret itself or a {@code vault:<name>} reference. */
+    public Optional<String> clientSecret() {
+        return Optional.ofNullable(clientSecret);
+    }
+
+    public Optional<String> username() {
+        return Optional.ofNullable(username);
+    }
+
+    /** The password itself or a {@code vault:<name>} reference. */
+    public Optional<String> password() {
+        return Optional.ofNullable(password);
+    }
+
+    public Optional<String> defaultRealm() {
+        return Optional.ofNullable(defaultRealm);
+    }
+
+    /** The realms the server may work in; empty means every realm. */
+    public Set<String> allowedRealms() {
+        return allowedRealms;
+    }
+
+    public Optional<String> version() {
+        return Optional.ofNullable(version);
+    }
+
+    /**
+     * The realm's public issuer URL when it differs from
+     * {@code <url>/realms/<auth realm>}.
+     */
+    public Optional<String> issuer() {
+        return Optional.ofNullable(issuer);
+    }
+
+    /** A label for people. */
+    public Optional<String> displayName() {
+        return Optional.ofNullable(displayName);
+    }
+
+    /** A free text for people: what this Keycloak is, who owns it. */
+    public Optional<String> description() {
+        return Optional.ofNullable(description);
+    }
+
+    /** Issuers besides this Keycloak whose caller tokens the server may hand to it. */
+    public Set<String> trustedIssuers() {
+        return trustedIssuers;
+    }
+
+    /** The system's own access block; see {@link #access(String)} for a realm's. */
+    public AccessSettings access() {
+        return access;
+    }
+
+    /** The realm settings by realm name, sorted. */
+    public Map<String, RealmSettings> realms() {
+        return realms;
+    }
+
+    /** The preset the system's block starts from. */
+    public Optional<String> preset() {
+        return Optional.ofNullable(preset);
+    }
+
+    /** The system's own presets by name, sorted. */
+    public Map<String, Preset> presets() {
+        return presets;
+    }
+
+    /** The system's tools section; see {@link #tools(String)} for a realm's. */
+    public ToolSettings tools() {
+        return tools;
+    }
+
+    /**
+     * The repository's surrogate id; empty for a system from configuration or a file.
+     */
+    public Optional<String> id() {
+        return Optional.ofNullable(id);
     }
 
     /**
@@ -85,28 +225,6 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
     public ToolSettings tools(String realm) {
         RealmSettings r = realm == null ? null : realms.get(realm);
         return r == null ? tools : tools.overlay(r.tools());
-    }
-
-    /** Without presets. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
-            Optional<String> description, Set<String> trustedIssuers, AccessSettings access,
-            Map<String, RealmSettings> realms) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, description, trustedIssuers, access, realms,
-                Optional.empty(), Map.of());
-    }
-
-    /** Without realm settings. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
-            Optional<String> description, Set<String> trustedIssuers, AccessSettings access) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, description, trustedIssuers, access, Map.of());
     }
 
     /**
@@ -138,56 +256,6 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
         return out;
     }
 
-    /** Without an access block: the server's settings of the checks apply. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
-            Optional<String> description, Set<String> trustedIssuers) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, description, trustedIssuers, AccessSettings.NONE);
-    }
-
-    /**
-     * Without trusted issuers: a caller's token may be used here only when this Keycloak
-     * issued it.
-     */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName,
-            Optional<String> description) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, description, Set.of());
-    }
-
-    /** Without a description. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer, Optional<String> displayName) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, displayName, Optional.empty());
-    }
-
-    /** Without a display name. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version, Optional<String> issuer) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, issuer, Optional.empty());
-    }
-
-    /** Without an issuer: the audience of client assertions is derived from the URL. */
-    public KeycloakSystem(String name, String url, GrantType grantType, ClientAuth clientAuth, String authRealm,
-            Optional<String> clientId, Optional<String> clientSecret, Optional<String> username,
-            Optional<String> password, Optional<String> defaultRealm, Set<String> allowedRealms,
-            Optional<String> version) {
-        this(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password, defaultRealm,
-                allowedRealms, version, Optional.empty());
-    }
-
     /**
      * The base URL users and browsers reach this Keycloak at: derived from the configured
      * issuer when it names the auth realm ({@code https://sso.example.com/realms/master}
@@ -196,7 +264,7 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
      */
     public String publicUrl() {
         String suffix = "/realms/" + authRealm;
-        return issuer.map(String::trim)
+        return issuer().map(String::trim)
             .filter(i -> i.endsWith(suffix))
             .map(i -> i.substring(0, i.length() - suffix.length()))
             .orElseGet(() -> url.endsWith("/") ? url.substring(0, url.length() - 1) : url);
@@ -209,7 +277,7 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
      * else {@code <url>/realms/<auth realm>}.
      */
     public String assertionAudience() {
-        return issuer.filter(v -> !v.isBlank()).orElseGet(() -> {
+        return issuer().filter(v -> !v.isBlank()).orElseGet(() -> {
             String base = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
             return base + "/realms/" + authRealm;
         });
@@ -240,20 +308,20 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
         });
         List<String> realms = pick(s.allowedRealms(), d.allowedRealms()).orElse(List.of());
         return new KeycloakSystem(name, url, pick(s.grantType(), d.grantType()).orElse(GrantType.CLIENT_CREDENTIALS),
-                auth, pick(s.authRealm(), d.authRealm()).orElse("master"), pick(s.clientId(), d.clientId()),
-                clientSecret, pick(s.username(), d.username()), pick(s.password(), d.password()),
-                pick(s.defaultRealm(), d.defaultRealm()),
+                auth, pick(s.authRealm(), d.authRealm()).orElse("master"),
+                pick(s.clientId(), d.clientId()).orElse(null), clientSecret.orElse(null),
+                pick(s.username(), d.username()).orElse(null), pick(s.password(), d.password()).orElse(null),
+                pick(s.defaultRealm(), d.defaultRealm()).orElse(null),
                 Set.copyOf(realms.stream().map(String::trim).filter(v -> !v.isEmpty()).toList()),
-                pick(s.version(), d.version()).map(String::trim).filter(v -> !v.isEmpty()),
-                pick(s.issuer(), d.issuer()).map(String::trim).filter(v -> !v.isEmpty()), Optional.empty(),
-                Optional.empty(),
+                pick(s.version(), d.version()).map(String::trim).filter(v -> !v.isEmpty()).orElse(null),
+                pick(s.issuer(), d.issuer()).map(String::trim).filter(v -> !v.isEmpty()).orElse(null), null, null,
                 Set.copyOf(pick(s.trustedIssuers(), d.trustedIssuers()).orElse(List.of())
                     .stream()
                     .map(String::trim)
                     .filter(v -> !v.isEmpty())
                     .toList()),
-                access(name, s), realms(name, s), s.preset().map(String::trim).filter(v -> !v.isEmpty()),
-                presets(name, s), tools("kc-mcp.systems." + name + ".tools.", s.tools()));
+                access(name, s), realms(name, s), s.preset().orElse(null), presets(name, s),
+                tools("kc-mcp.systems." + name + ".tools.", s.tools()), null);
     }
 
     private static ToolSettings tools(String where, Map<String, String> flat) {
@@ -344,23 +412,23 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
             .grantType(grantType)
             .clientAuth(clientAuth)
             .authRealm(authRealm)
-            .clientId(clientId.orElse(null))
-            .clientSecret(clientSecret.orElse(null))
-            .username(username.orElse(null))
-            .password(password.orElse(null))
-            .defaultRealm(defaultRealm.orElse(null))
+            .clientId(clientId)
+            .clientSecret(clientSecret)
+            .username(username)
+            .password(password)
+            .defaultRealm(defaultRealm)
             .allowedRealms(allowedRealms)
-            .version(version.orElse(null))
-            .issuer(issuer.orElse(null))
-            .displayName(displayName.orElse(null))
-            .description(description.orElse(null))
+            .version(version)
+            .issuer(issuer)
+            .displayName(displayName)
+            .description(description)
             .trustedIssuers(trustedIssuers)
             .access(access)
             .tools(tools)
             .realms(realms.values())
-            .preset(preset.orElse(null))
+            .preset(preset)
             .presets(presets.values())
-            .id(id.orElse(null));
+            .id(id);
     }
 
     /**
@@ -615,8 +683,9 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
             }
         }
 
-        private static Optional<String> text(String value) {
-            return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
+        /** {@code null} for {@code null} or blank, else trimmed. */
+        private static String text(String value) {
+            return value == null || value.isBlank() ? null : value.trim();
         }
     }
 
@@ -643,11 +712,81 @@ public record KeycloakSystem(String name, String url, GrantType grantType, Clien
     public boolean hasCredentials() {
         return switch (grantType) {
             case CLIENT_CREDENTIALS -> clientAuth != ClientAuth.NONE;
-            case PASSWORD -> username.filter(v -> !v.isBlank()).isPresent();
+            case PASSWORD -> username().filter(v -> !v.isBlank()).isPresent();
         };
     }
 
     public boolean realmAllowed(String realm) {
         return allowedRealms.isEmpty() || allowedRealms.contains(realm);
+    }
+
+    /**
+     * Every field, in declaration order: what {@link #equals} and {@link #hashCode}
+     * compare. A new field goes here as well.
+     */
+    private List<Object> values() {
+        return Arrays.asList(name, url, grantType, clientAuth, authRealm, clientId, clientSecret, username, password,
+                defaultRealm, allowedRealms, version, issuer, displayName, description, trustedIssuers, access, realms,
+                preset, presets, tools, id);
+    }
+
+    /**
+     * Equal when every field is: a cached connection is reused only while the system it
+     * was made for equals the one the repository serves now, so any change of a setting,
+     * a secret or the id makes a new one.
+     */
+    @Override
+    public boolean equals(Object o) {
+        return this == o || o instanceof KeycloakSystem other && values().equals(other.values());
+    }
+
+    @Override
+    public int hashCode() {
+        return values().hashCode();
+    }
+
+    /**
+     * What is safe to log: the connection settings without the secret and the password
+     * ({@code vault:} references are shown, they only name a secret), and the names of
+     * the realm settings and presets rather than their contents.
+     */
+    @Override
+    public String toString() {
+        StringBuilder b = new StringBuilder("KeycloakSystem[name=").append(name)
+            .append(", url=")
+            .append(url)
+            .append(", grantType=")
+            .append(grantType)
+            .append(", clientAuth=")
+            .append(clientAuth)
+            .append(", authRealm=")
+            .append(authRealm);
+        clientId().ifPresent(v -> b.append(", clientId=").append(v));
+        clientSecret().ifPresent(v -> b.append(", clientSecret=").append(masked(v)));
+        username().ifPresent(v -> b.append(", username=").append(v));
+        password().ifPresent(v -> b.append(", password=").append(masked(v)));
+        defaultRealm().ifPresent(v -> b.append(", defaultRealm=").append(v));
+        if (!allowedRealms.isEmpty()) {
+            b.append(", allowedRealms=").append(new TreeSet<>(allowedRealms));
+        }
+        version().ifPresent(v -> b.append(", version=").append(v));
+        issuer().ifPresent(v -> b.append(", issuer=").append(v));
+        displayName().ifPresent(v -> b.append(", displayName=").append(v));
+        if (!trustedIssuers.isEmpty()) {
+            b.append(", trustedIssuers=").append(new TreeSet<>(trustedIssuers));
+        }
+        if (!realms.isEmpty()) {
+            b.append(", realms=").append(realms.keySet());
+        }
+        preset().ifPresent(v -> b.append(", preset=").append(v));
+        if (!presets.isEmpty()) {
+            b.append(", presets=").append(presets.keySet());
+        }
+        id().ifPresent(v -> b.append(", id=").append(v));
+        return b.append(']').toString();
+    }
+
+    private static String masked(String secret) {
+        return isVaultRef(secret) ? secret : MASKED;
     }
 }

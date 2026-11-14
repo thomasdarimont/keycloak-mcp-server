@@ -2,8 +2,6 @@ package com.github.thomasdarimont.keycloak.mcp.backend.guard;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -41,6 +39,18 @@ class ToolInvokerTest {
 
     private static Confirmer fixed(Decision d) {
         return req -> d;
+    }
+
+    /** A password-grant system at {@code http://<name>}; no allowed realms means all. */
+    private static KeycloakSystem passwordSystem(String name, String defaultRealm, String... allowedRealms) {
+        return KeycloakSystem.builder(name, "http://" + name)
+            .grantType(GrantType.PASSWORD)
+            .clientAuth(ClientAuth.NONE)
+            .username("admin")
+            .password("admin")
+            .defaultRealm(defaultRealm)
+            .allowedRealms(List.of(allowedRealms))
+            .build();
     }
 
     private static Map<String, Object> payload(ToolResult r) {
@@ -164,12 +174,8 @@ class ToolInvokerTest {
 
     @Test
     void routesToTheRequestedSystem() {
-        KeycloakSystem a = new KeycloakSystem("a", "http://a", GrantType.PASSWORD, ClientAuth.NONE, "master",
-                Optional.empty(), Optional.empty(), Optional.of("admin"), Optional.of("admin"), Optional.of("demo"),
-                Set.of(), Optional.empty());
-        KeycloakSystem b = new KeycloakSystem("b", "http://b", GrantType.PASSWORD, ClientAuth.NONE, "master",
-                Optional.empty(), Optional.empty(), Optional.of("admin"), Optional.of("admin"),
-                Optional.of("b-default"), Set.of("only-b", "b-default"), Optional.empty());
+        KeycloakSystem a = passwordSystem("a", "demo");
+        KeycloakSystem b = passwordSystem("b", "b-default", "only-b", "b-default");
         KeycloakSystems systems = new DefaultKeycloakSystems(List.of(a, b), "a", null);
         ToolSpec echo = ToolSpec.builder("keycloak_echo")
             .title("e")
@@ -210,12 +216,8 @@ class ToolInvokerTest {
 
     @Test
     void boundEntriesPinSystemAndRealm() {
-        KeycloakSystem a = new KeycloakSystem("a", "http://a", GrantType.PASSWORD, ClientAuth.NONE, "master",
-                Optional.empty(), Optional.empty(), Optional.of("admin"), Optional.of("admin"), Optional.of("demo"),
-                Set.of(), Optional.empty());
-        KeycloakSystem b = new KeycloakSystem("b", "http://b", GrantType.PASSWORD, ClientAuth.NONE, "master",
-                Optional.empty(), Optional.empty(), Optional.of("admin"), Optional.of("admin"),
-                Optional.of("b-default"), Set.of("only-b", "b-default"), Optional.empty());
+        KeycloakSystem a = passwordSystem("a", "demo");
+        KeycloakSystem b = passwordSystem("b", "b-default", "only-b", "b-default");
         KeycloakSystems systems = new DefaultKeycloakSystems(List.of(a, b), "a", null);
         ToolSpec echo = ToolSpec.builder("keycloak_echo")
             .title("e")
@@ -245,12 +247,8 @@ class ToolInvokerTest {
 
     @Test
     void explicitTargetRefusesDefaultsForDestructiveTools() {
-        KeycloakSystem a = new KeycloakSystem("a", "http://a", GrantType.PASSWORD, ClientAuth.NONE, "master",
-                Optional.empty(), Optional.empty(), Optional.of("admin"), Optional.of("admin"), Optional.of("demo"),
-                Set.of(), Optional.empty());
-        KeycloakSystem b = new KeycloakSystem("b", "http://b", GrantType.PASSWORD, ClientAuth.NONE, "master",
-                Optional.empty(), Optional.empty(), Optional.of("admin"), Optional.of("admin"),
-                Optional.of("b-default"), Set.of(), Optional.empty());
+        KeycloakSystem a = passwordSystem("a", "demo");
+        KeycloakSystem b = passwordSystem("b", "b-default");
         KeycloakSystems systems = new DefaultKeycloakSystems(List.of(a, b), "a", null);
         ToolSpec read = ToolSpec.builder("keycloak_echo")
             .title("e")

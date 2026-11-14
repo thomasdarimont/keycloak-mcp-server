@@ -1,7 +1,5 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.admin;
 
-import java.util.Optional;
-import java.util.Set;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
@@ -39,9 +37,11 @@ class ClosedRegistrationTest {
         // a system that exists already (written by a control plane earlier)
         systems.mutableRepository()
             .orElseThrow()
-            .save(new KeycloakSystem("frozen", "http://127.0.0.1:1", GrantType.CLIENT_CREDENTIALS,
-                    ClientAuth.PRIVATE_KEY_JWT, "master", Optional.of("keycloak-mcp-server"), Optional.empty(),
-                    Optional.empty(), Optional.empty(), Optional.empty(), Set.of(), Optional.empty()));
+            .save(KeycloakSystem.builder("frozen", "http://127.0.0.1:1")
+                .grantType(GrantType.CLIENT_CREDENTIALS)
+                .clientAuth(ClientAuth.PRIVATE_KEY_JWT)
+                .clientId("keycloak-mcp-server")
+                .build());
 
         admin().body("{\"url\": \"http://127.0.0.1:1\"}")
             .put("/admin/systems/newcomer")

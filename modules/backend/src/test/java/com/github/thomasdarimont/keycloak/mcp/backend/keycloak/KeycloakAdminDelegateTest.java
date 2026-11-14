@@ -2,13 +2,10 @@ package com.github.thomasdarimont.keycloak.mcp.backend.keycloak;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Optional;
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
-import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystem;
 
@@ -35,9 +32,11 @@ class KeycloakAdminDelegateTest {
     }
 
     private static KeycloakAdmin admin() {
-        return new DefaultKeycloakAdmin(new KeycloakSystem("default", "http://127.0.0.1:1",
-                GrantType.CLIENT_CREDENTIALS, ClientAuth.NONE, "demo", Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.of("demo"), Set.of(), Optional.empty()), null);
+        return new DefaultKeycloakAdmin(KeycloakSystem.builder("default", "http://127.0.0.1:1")
+            .clientAuth(ClientAuth.NONE)
+            .authRealm("demo")
+            .defaultRealm("demo")
+            .build(), null);
     }
 
     @Test
