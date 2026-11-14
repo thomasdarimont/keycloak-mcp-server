@@ -245,6 +245,37 @@ class UiLoginIT {
             .body("error", equalTo("missing_request_header"));
     }
 
+    /**
+     * A callback the server cannot complete (here a code Keycloak does not know; an ID
+     * token that expired on the way fails the same): a browser goes back to the UI with
+     * {@code signin=failed} instead of an error text, other clients get a JSON 401, and
+     * no session is made.
+     */
+    @Test
+    void aSignInThatCannotBeCompletedSendsTheBrowserBackToTheUi() {
+        Browser.Callback browser = Browser.callback("demo", "alice", "alice");
+        Response back = given().header("Cookie", String.join("; ", browser.stateCookies()))
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .redirects()
+            .follow(false)
+            .get(browser.path().replace("code=", "code=x"));
+        assertEquals(302, back.statusCode(), back.asString());
+        assertEquals("/ui/?signin=failed", back.header("Location"));
+        assertEquals("no-store", back.header("Cache-Control"));
+        assertFalse(back.headers().getValues("Set-Cookie").stream().anyMatch(c -> c.startsWith("q_session")),
+                "no session: " + back.headers().getValues("Set-Cookie"));
+
+        Browser.Callback client = Browser.callback("demo", "alice", "alice");
+        Response api = given().header("Cookie", String.join("; ", client.stateCookies()))
+            .header("Accept", "application/json")
+            .redirects()
+            .follow(false)
+            .get(client.path().replace("code=", "code=x"));
+        assertEquals(401, api.statusCode(), api.asString());
+        assertEquals("sign_in_failed", api.jsonPath().getString("error"));
+        assertFalse(api.asString().contains("claims"), api.asString());
+    }
+
     @Test
     void operatorCanManageMutableSystemsAndRealmSettings() {
         Browser alice = Browser.login("demo", "alice", "alice");
@@ -348,8 +379,14 @@ class UiLoginIT {
                 .delete(path);
         }
 
-        /** Runs the code flow at Keycloak the way a browser does. */
-        static Browser login(String idp, String user, String password) {
+        /**
+         * Steps 1 and 2 of a browser's code flow: the path Keycloak sends the browser
+         * back to, and the state cookies that go with it.
+         */
+        record Callback(String path, List<String> stateCookies) {
+        }
+
+        static Callback callback(String idp, String user, String password) {
             try {
                 // 1. the sign-in button: Quarkus starts the flow with PKCE
                 Response start = given().redirects().follow(false).get("/bff/login?idp=" + idp);
@@ -390,14 +427,24 @@ class UiLoginIT {
                 String callback = submitted.headers().firstValue("Location").orElseThrow();
                 assertTrue(callback.startsWith(params.get("redirect_uri") + "?"), callback);
                 assertTrue(callback.contains("code="), callback);
+                return new Callback(callback.substring(callback.indexOf("/bff/login")), stateCookies);
+            }
+            catch (IOException | InterruptedException e) {
+                throw new IllegalStateException(e);
+            }
+        }
 
+        /** Runs the code flow at Keycloak the way a browser does. */
+        static Browser login(String idp, String user, String password) {
+            Callback callback = callback(idp, user, password);
+            {
                 // 3. back at the server: code exchanged, session cookie set, on to the UI
-                Response exchanged = given().header("Cookie", String.join("; ", stateCookies))
+                Response exchanged = given().header("Cookie", String.join("; ", callback.stateCookies()))
                     .redirects()
                     .follow(false)
-                    .get(callback.substring(callback.indexOf("/bff/login")));
+                    .get(callback.path());
                 assertEquals(302, exchanged.statusCode(), exchanged.asString());
-                assertEquals(params.get("redirect_uri"), exchanged.header("Location"));
+                assertEquals("http://localhost:" + RestAssured.port + "/bff/login", exchanged.header("Location"));
                 String session = null;
                 for (String c : exchanged.headers().getValues("Set-Cookie")) {
                     if (c.startsWith("q_session_kc-mcp-ui-" + idp + "=")) {
@@ -414,9 +461,6 @@ class UiLoginIT {
                 assertEquals(303, login.statusCode(), login.asString());
                 assertTrue(login.header("Location").endsWith("/ui/"), login.header("Location"));
                 return browser;
-            }
-            catch (IOException | InterruptedException e) {
-                throw new IllegalStateException(e);
             }
         }
 

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,8 +24,10 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
 
 import io.quarkus.runtime.StartupEvent;
+import io.quarkus.security.AuthenticationCompletionException;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 
@@ -161,6 +164,70 @@ public class UiRoutes {
         // out
         router.route(HttpMethod.GET, UiTenant.UI_PATH).handler(this::serve);
         router.route(HttpMethod.GET, UiTenant.UI_PATH + "/*").handler(this::serve);
+        // a code flow that cannot be completed: Quarkus answers a bare 401 (in dev mode
+        // with the reason as text), which leaves a browser on an error text
+        router.route(UiTenant.BFF_PATH + "/login").order(-2000).failureHandler(this::signInFailed);
+    }
+
+    /** Where a browser goes when the sign-in could not be completed. */
+    static final String SIGN_IN_FAILED = UiTenant.UI_PATH + "/?signin=failed";
+
+    /**
+     * The callback of a code flow failed, e.g. an ID token already expired when it
+     * arrives (the provider's clock behind, as after a laptop's suspend). A browser goes
+     * back to the UI, which offers to sign in again; restarting the login here could loop
+     * while the cause lasts. Other clients get a JSON 401. The token's claims stay out of
+     * the answer and the log.
+     */
+    private void signInFailed(RoutingContext ctx) {
+        AuthenticationCompletionException failed = completionFailure(ctx.failure());
+        if (failed == null || ctx.response().ended()) {
+            ctx.next();
+            return;
+        }
+        LOG.warnf("Management UI: sign-in could not be completed: %s", withoutClaims(failed));
+        ctx.response().putHeader("Cache-Control", "no-store");
+        if (wantsHtml(ctx.request().getHeader("Accept"))) {
+            ctx.response().setStatusCode(302).putHeader("Location", SIGN_IN_FAILED).end();
+            return;
+        }
+        ctx.response()
+            .setStatusCode(401)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject().put("error", "sign_in_failed")
+                .put("message", "The identity provider's answer could not be verified; sign in again.")
+                .encode());
+    }
+
+    /** The completion failure in a failure's causes, or {@code null}. */
+    static AuthenticationCompletionException completionFailure(Throwable failure) {
+        for (Throwable t = failure; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof AuthenticationCompletionException e) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    /** Whether the request comes from a browser navigating: it accepts HTML. */
+    static boolean wantsHtml(String accept) {
+        return accept != null && accept.toLowerCase(Locale.ROOT).contains("text/html");
+    }
+
+    private static final Pattern CLAIMS = Pattern.compile("\\(claims->\\{.*?\\}\\)", Pattern.DOTALL);
+
+    /** The failure's reason (and its cause's) with any JWT claims left out. */
+    static String withoutClaims(Throwable failure) {
+        StringBuilder out = new StringBuilder();
+        for (Throwable t = failure; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t.getMessage() != null && !t.getMessage().isBlank()) {
+                if (!out.isEmpty()) {
+                    out.append(" <- ");
+                }
+                out.append(CLAIMS.matcher(t.getMessage()).replaceAll("(claims left out)"));
+            }
+        }
+        return out.isEmpty() ? failure.getClass().getSimpleName() : out.toString();
     }
 
     /** A file of the bundle, read once; anything not on the class path passes on. */
