@@ -348,7 +348,10 @@ class DatabaseStorageIT {
                 ((RSAPublicKey) found.publicKey()).getModulus());
         assertEquals(created.privateKey(), found.privateKey(), "PKCS#8 round trip");
 
+        long createdAt = vault.signingKeyCreatedAt(alias).orElseThrow().toEpochMilli();
+        assertTrue(Math.abs(System.currentTimeMillis() - createdAt) < 60_000, "the current key's creation time");
         SigningKey rotated = vault.createSigningKey(alias);
+        assertTrue(vault.signingKeyCreatedAt(alias).orElseThrow().toEpochMilli() >= createdAt, "the new key's");
         assertNotEquals(((RSAPublicKey) created.publicKey()).getModulus(),
                 ((RSAPublicKey) rotated.publicKey()).getModulus());
         assertEquals(((RSAPublicKey) rotated.publicKey()).getModulus(),
@@ -373,6 +376,28 @@ class DatabaseStorageIT {
             .run(() -> SigningKeyEntity.update("retiredAt = ?1 where id = ?2", longAgo, history.get(1).id));
         assertEquals(1, vault.publishedSigningKeys(alias).size(), "retired beyond the grace period, dropped");
         assertEquals(2, vault.history(alias).size(), "but kept in the history");
+
+        // past the grace period the private key goes; the row stays as the key's history
+        assertTrue(vault.purgeRetiredPrivateKeys() >= 1);
+        List<SigningKeyEntity> purged = vault.history(alias);
+        assertEquals(2, purged.size());
+        assertNull(purged.get(1).privateKey, "the retired key's private key is gone");
+        assertTrue(purged.get(1).publicKey != null && purged.get(1).retiredAt != null, "its history stays");
+        assertTrue(purged.getFirst().privateKey != null, "the current key keeps its private key");
+        vault.purgeRetiredPrivateKeys();
+        assertTrue(vault.history(alias).getFirst().privateKey != null, "a second purge leaves the current key alone");
+
+        // after a leak: the key retired just now leaves the JWKS at once
+        SigningKey again = vault.createSigningKey(alias);
+        assertEquals(2, vault.publishedSigningKeys(alias).size(), "rotated: the previous key in its grace period");
+        assertEquals(1, vault.dropRetiredSigningKeys(alias));
+        List<SigningKey> afterDrop = vault.publishedSigningKeys(alias);
+        assertEquals(1, afterDrop.size(), "only the new key is published");
+        assertEquals(((RSAPublicKey) again.publicKey()).getModulus(),
+                ((RSAPublicKey) afterDrop.getFirst().publicKey()).getModulus());
+        assertTrue(vault.history(alias).stream().skip(1).allMatch(e -> e.privateKey == null),
+                "no retired key keeps its private key");
+        assertEquals(0, vault.dropRetiredSigningKeys(alias), "nothing left to drop");
 
         String name = alias + "/client-secret";
         assertTrue(vault.supportsSecretStorage());

@@ -1,5 +1,6 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.keycloak;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -240,6 +241,11 @@ public class SigningKeys {
         return configuredKey() ? Optional.empty() : vault.findSigningKey(keySet(system));
     }
 
+    /** When the system's current key was created, as far as the vault knows. */
+    public Optional<Instant> currentKeyCreatedAt(KeycloakSystem system) {
+        return configuredKey() ? Optional.empty() : vault.signingKeyCreatedAt(keySet(system));
+    }
+
     /**
      * Creates a new key for a system in the vault, retiring the current one, and signs
      * with it from now on; the JWKS gains the new key and keeps the retired one for the
@@ -250,6 +256,15 @@ public class SigningKeys {
      * key serves every system
      */
     public SigningKey rotate(KeycloakSystem system) {
+        return rotate(system, false);
+    }
+
+    /**
+     * {@link #rotate(KeycloakSystem)}, and with {@code dropPrevious} the previous keys
+     * leave the JWKS at once instead of after the grace period (a leaked key). Keycloak
+     * keeps the JWKS it fetched until its keys cache is cleared.
+     */
+    public SigningKey rotate(KeycloakSystem system, boolean dropPrevious) {
         if (configuredKey()) {
             throw new UnsupportedOperationException("One configured key (kc-mcp.jwt.key-file) serves every system");
         }
@@ -261,6 +276,9 @@ public class SigningKeys {
         SigningKey key = vault.createSigningKey(name);
         perSystem.put(name, new JwtSigner(key.privateKey(), key.publicKey(), key.algorithm(), key.keyId()));
         LOG.infof("[%s] private_key_jwt key rotated in %s", system.name(), vault.id());
+        if (dropPrevious) {
+            vault.dropRetiredSigningKeys(name);
+        }
         return key;
     }
 

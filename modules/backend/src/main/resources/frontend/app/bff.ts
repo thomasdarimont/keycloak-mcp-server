@@ -89,6 +89,10 @@ export interface System {
     algorithm?: string;
     kid?: string;
     vault?: string;
+    /** When the current key was created (ISO-8601); absent when the vault does not know. */
+    createdAt?: string;
+    /** How long a rotated-away key stays in the JWKS; absent for a vault without rotation. */
+    retiredKeyGraceSeconds?: number;
     configured?: boolean;
     jwksPath?: string;
     jwksUrl?: string;
@@ -252,8 +256,12 @@ export const deleteSystem = (alias: string): Promise<void> =>
   call<void>(`/api/systems/${encodeURIComponent(alias)}`, { method: 'DELETE' });
 
 /** Rotate the system's signing key (POST /bff/api/systems/{alias}/signing-key). */
-export const rotateSigningKey = (alias: string): Promise<System> =>
-  call<System>(`/api/systems/${encodeURIComponent(alias)}/signing-key`, { method: 'POST' });
+/** Rotate the signing key; with dropPrevious the old key leaves the JWKS at once (a leaked key). */
+export const rotateSigningKey = (alias: string, dropPrevious = false): Promise<System> =>
+  call<System>(
+    `/api/systems/${encodeURIComponent(alias)}/signing-key${dropPrevious ? '?dropPrevious=true' : ''}`,
+    { method: 'POST' },
+  );
 
 /** Realm settings kept for a system (GET /bff/api/systems/{alias}/realms). */
 export const listSystemRealms = (alias: string): Promise<SystemRealmsList> =>
@@ -293,6 +301,8 @@ export interface ClientSetupOptions {
   realms?: string[];
   /** `jwks-url`: Keycloak fetches the keys from this server; `public-key`: the key copied into the client. */
   credential?: 'jwks-url' | 'public-key';
+  /** Where the scripts run kcadm from: a Keycloak installation, or the Keycloak image through docker. */
+  kcadm?: 'installed' | 'docker';
 }
 
 /** The Keycloak client this server needs, its roles and a kcadm.sh script doing both. */
@@ -311,7 +321,14 @@ export interface ClientSetup {
     realmRoles?: string[];
     clientRoles?: Record<string, string[]>;
   };
+  /** The steps for Linux and macOS: bash calling kcadm.sh. */
   script: string;
+  /** The same steps for Windows: PowerShell calling kcadm.bat. */
+  powershellScript: string;
+  /** Where the scripts run kcadm from by default. */
+  kcadm: 'installed' | 'docker';
+  /** The image for kcadm=docker, the system's Keycloak version. */
+  kcadmImage?: string;
   notes: string[];
 }
 
@@ -325,6 +342,9 @@ export const getClientSetup = (alias: string, options: ClientSetupOptions = {}):
   }
   if (options.credential) {
     params.set('credential', options.credential);
+  }
+  if (options.kcadm) {
+    params.set('kcadm', options.kcadm);
   }
   const query = params.toString();
   return call<ClientSetup>(

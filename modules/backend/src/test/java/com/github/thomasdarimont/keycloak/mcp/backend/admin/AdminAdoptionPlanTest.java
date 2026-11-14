@@ -240,4 +240,62 @@ class AdminAdoptionPlanTest {
         assertTrue(script.contains("SA='service-account-keycloak-mcp-server'"), script);
         assertEquals("'it'\\''s'", AdminAdoption.shell("it's"));
     }
+
+    /** The Windows variant: the same grants, PowerShell syntax, kcadm.bat. */
+    @Test
+    void thePowerShellScriptGrantsAndScopesEveryRole() {
+        Map<String, List<String>> grants = new LinkedHashMap<>();
+        grants.put(null, List.of("admin"));
+        grants.put("acme-realm", List.of("view-realm", "view-users"));
+        String script = AdminAdoption.powershellScript(system().build(), "keycloak-mcp-server",
+                Map.of("clientId", "keycloak-mcp-server", "description", "it's $HOME"), grants);
+        assertTrue(script.contains("$Kcadm = if ($env:KCADM) { $env:KCADM } else { 'kcadm.bat' }"), script);
+        assertTrue(script.contains("$SA = 'service-account-keycloak-mcp-server'"), script);
+        assertTrue(script.contains("foreach ($Role in @('admin'))"), script);
+        assertTrue(script.contains("foreach ($Role in @('view-realm', 'view-users'))"), script);
+        assertTrue(script.contains("--cclientid 'acme-realm' --rolename $Role"), script);
+        assertTrue(script.contains("-q 'clientId=acme-realm'"), script);
+        assertTrue(script.contains("scope-mappings/clients/$Rcid"), script);
+        // unquoted, PowerShell would pass id,name as an array
+        assertTrue(script.contains("--fields 'id,name'"), script);
+        assertTrue(script.contains("$LASTEXITCODE -ne 0"), "native exit codes are checked: " + script);
+        // the JSON in a literal here-string, $HOME stays as it is; on stdin as UTF-8
+        assertTrue(script.contains("$clientJson = @'\n{") && script.contains("\"it's $HOME\"")
+                && script.contains("\n'@\n$clientJson | Invoke-Kcadm create clients -r $Realm -f -"), script);
+        assertTrue(script.contains("$OutputEncoding = New-Object System.Text.UTF8Encoding $false"), script);
+        assertTrue(script.contains("$KcadmImage = if ($null -ne $env:KCADM_IMAGE) { $env:KCADM_IMAGE } else { '' }"),
+                "installed by default: " + script);
+        assertFalse(script.contains("#!/usr/bin/env bash") || script.contains("sed "), script);
+        assertEquals("'it''s'", AdminAdoption.powershell("it's"));
+    }
+
+    /** kcadm from the Keycloak image: the system's version, KCADM_IMAGE overrides it. */
+    @Test
+    void theScriptsCanRunKcadmFromTheKeycloakImage() {
+        KeycloakSystem versioned = system().version("26.8.2").build();
+        assertEquals(Optional.of("quay.io/keycloak/keycloak:26.8.2"), AdminAdoption.kcadmImage(versioned, "docker"));
+        assertEquals(Optional.of("quay.io/keycloak/keycloak:latest"),
+                AdminAdoption.kcadmImage(system().build(), "Docker"));
+        assertEquals(Optional.empty(), AdminAdoption.kcadmImage(versioned, null));
+        assertEquals("invalid_kcadm",
+                assertThrows(AdminException.class, () -> AdminAdoption.kcadmImage(versioned, "podman")).code());
+
+        Map<String, List<String>> grants = Map.of("realm-management", List.of("realm-admin"));
+        Optional<String> image = AdminAdoption.kcadmImage(versioned, "docker");
+        String bash = AdminAdoption.script(versioned, "kc-mcp", Map.of("clientId", "kc-mcp"), grants, image);
+        assertTrue(bash.contains("KCADM_IMAGE=\"${KCADM_IMAGE-quay.io/keycloak/keycloak:26.8.2}\""), bash);
+        assertTrue(bash.contains("--entrypoint /opt/keycloak/bin/kcadm.sh \"$KCADM_IMAGE\" \"$@\""), bash);
+        // the login per system, apart from an existing ~/.keycloak
+        assertTrue(bash.contains("KCADM_CONFIG_DIR=\"${KCADM_CONFIG_DIR:-$HOME/.kc-mcp/kcadm/prod}\""), bash);
+        assertTrue(bash.contains("-v \"$KCADM_CONFIG_DIR:/opt/keycloak/.keycloak:z\""), bash);
+        assertFalse(bash.contains("$HOME/.keycloak:"), bash);
+        assertEquals(".kc-mcp/kcadm/a_b", AdminAdoption.kcadmConfigDir(system().name("a/b").build()));
+        assertTrue(bash.contains("#     quay.io/keycloak/keycloak:26.8.2 config credentials --server"), bash);
+        assertFalse(bash.contains("\"$KCADM\""), "every call goes through the kcadm function: " + bash);
+
+        String ps = AdminAdoption.powershellScript(versioned, "kc-mcp", Map.of("clientId", "kc-mcp"), grants, image);
+        assertTrue(ps.contains("else { 'quay.io/keycloak/keycloak:26.8.2' }"), ps);
+        assertTrue(ps.contains("else { Join-Path $HOME '.kc-mcp/kcadm/prod' }"), ps);
+        assertTrue(ps.contains("$input | docker run --rm -i \"--net=$network\" -e HOME=/opt/keycloak"), ps);
+    }
 }

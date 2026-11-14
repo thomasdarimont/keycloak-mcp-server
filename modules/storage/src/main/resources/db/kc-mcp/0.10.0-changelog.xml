@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Schema version 0.10.0: retired signing keys lose their private key. -->
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                                       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="14-signing-key-retired-private-key" author="keycloak-mcp-server">
+        <comment>A retired key is published for the grace period only and never signs again: once the grace period is
+            over its private key is removed, the row stays as the key's history (kid, public key, timestamps)</comment>
+        <dropNotNullConstraint tableName="kc_mcp_signing_key" columnName="private_key" columnDataType="clob"/>
+    </changeSet>
+</databaseChangeLog>

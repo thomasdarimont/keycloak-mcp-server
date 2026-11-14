@@ -2,7 +2,20 @@ import { consume } from '@lit/context';
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { BffError, rotateSigningKey, type System } from '../../bff.js';
+import '../../kc-mcp-help.js';
 import { sessionCanWrite, sessionContext, type SessionState } from '../../session-context.js';
+
+/** A grace period in seconds as people read it: 1 hour, 90 minutes, 45 seconds. */
+function duration(seconds: number): string {
+  const unit = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  if (seconds >= 3600 && seconds % 3600 === 0) {
+    return unit(seconds / 3600, 'hour');
+  }
+  if (seconds >= 60 && seconds % 60 === 0) {
+    return unit(seconds / 60, 'minute');
+  }
+  return unit(seconds, 'second');
+}
 
 /** Signing key details and rotate for private_key_jwt systems. */
 @customElement('kc-mcp-system-keys')
@@ -71,6 +84,16 @@ export class SystemKeys extends LitElement {
       color: var(--muted, #6a6e73);
       margin: 0 0 0.75rem;
     }
+    h3 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+    }
+    .warn {
+      border-left: 3px solid var(--warning, #f0ab00);
+      padding: 0.35rem 0.75rem;
+      margin: 0.5rem 0;
+      font-size: 0.9rem;
+    }
     .muted {
       color: var(--muted, #6a6e73);
     }
@@ -100,6 +123,10 @@ export class SystemKeys extends LitElement {
   @state()
   private confirmRotate = false;
 
+  /** The previous key leaked: it leaves the JWKS with the rotation, without a grace period. */
+  @state()
+  private dropPrevious = false;
+
   private get canWrite(): boolean {
     return sessionCanWrite(this.session);
   }
@@ -112,9 +139,12 @@ export class SystemKeys extends LitElement {
     this.error = null;
     this.ok = null;
     try {
-      const updated = await rotateSigningKey(this.system.alias);
+      const updated = await rotateSigningKey(this.system.alias, this.dropPrevious);
       this.confirmRotate = false;
-      this.ok = 'Signing key rotated.';
+      this.ok = this.dropPrevious
+        ? 'Signing key rotated; the previous key is out of the JWKS. Clear the keys cache in Keycloak too.'
+        : 'Signing key rotated.';
+      this.dropPrevious = false;
       this.dispatchEvent(
         new CustomEvent('system-saved', { detail: updated, bubbles: true, composed: true }),
       );
@@ -152,10 +182,15 @@ export class SystemKeys extends LitElement {
     const key = s.signingKey;
     const writable = this.canWrite && s.writable !== false;
     return html`
-      <p class="lead">
-        The JWKS the Keycloak client trusts for this system's assertions. Rotate creates a new key and keeps the
-        previous one briefly for overlap.
-      </p>
+      <h3>
+        Signing key
+        <kc-mcp-help label="About signing keys">
+          The JWKS the Keycloak client trusts for this system's assertions. Rotate creates a new key; the JWKS keeps
+          the previous one for the retired key grace period
+          (<code>kc-mcp.spi.key-vault.db.retired-key-grace-seconds</code>), so that instances still signing with it
+          are accepted. After that its private key is deleted. A leaked key can be dropped at once when rotating.
+        </kc-mcp-help>
+      </h3>
       ${this.error ? html`<p class="error">${this.error}</p>` : nothing}
       ${this.ok ? html`<p class="ok">${this.ok}</p>` : nothing}
       ${key
@@ -168,20 +203,35 @@ export class SystemKeys extends LitElement {
               ? html`<dt>Algorithm</dt>
                   <dd><code>${key.algorithm}</code></dd>`
               : nothing}
+            ${key.createdAt
+              ? html`<dt>Created</dt>
+                  <dd title=${key.createdAt}>${new Date(key.createdAt).toLocaleString()}</dd>`
+              : nothing}
             ${key.vault
               ? html`<dt>Vault</dt>
                   <dd><code>${key.vault}</code></dd>`
+              : nothing}
+            ${key.retiredKeyGraceSeconds !== undefined
+              ? html`<dt>Retired key grace period</dt>
+                  <dd>
+                    ${key.retiredKeyGraceSeconds > 0
+                      ? html`${key.retiredKeyGraceSeconds} seconds
+                          <span class="muted">(${duration(key.retiredKeyGraceSeconds)})</span>`
+                      : html`off <span class="muted">(a rotated key leaves the JWKS at once)</span>`}
+                  </dd>`
               : nothing}
             ${key.configured
               ? html`<dt>Source</dt>
                   <dd>configured key</dd>`
               : nothing}
-            ${key.jwksPath
-              ? html`<dt>JWKS path</dt>
-                  <dd><code>${key.jwksPath}</code></dd>`
-              : nothing}
             ${key.jwksUrl
-              ? html`<dt>JWKS URL</dt>
+              ? html`<dt>
+                    JWKS URL
+                    <kc-mcp-help label="About the JWKS URL">
+                      What the Keycloak client's <em>Keys</em> tab takes as <em>JWKS URL</em>, with
+                      <em>Use JWKS URL</em> on.
+                    </kc-mcp-help>
+                  </dt>
                   <dd><code>${key.jwksUrl}</code></dd>`
               : nothing}
           </dl>`
@@ -192,9 +242,28 @@ export class SystemKeys extends LitElement {
               <p class="lead" style="margin:0 0 0.5rem">
                 Rotate the signing key for <code>${s.alias}</code>? Clients must refresh JWKS.
               </p>
+              <label>
+                <input
+                  type="checkbox"
+                  .checked=${this.dropPrevious}
+                  ?disabled=${this.busy}
+                  @change=${(e: Event) => {
+                    this.dropPrevious = (e.target as HTMLInputElement).checked;
+                  }}
+                />
+                The previous key leaked: drop it now, without a grace period
+              </label>
+              ${this.dropPrevious
+                ? html`<p class="warn">
+                    The previous key leaves the JWKS at once and its private key is deleted. Keycloak keeps the JWKS
+                    it fetched: clear its keys cache as well (realm settings → Action → Clear keys cache, or
+                    <code>POST /admin/realms/{realm}/clear-keys-cache</code>) for the realm the client lives in.
+                    Other instances of this server sign with the new key from their next token request.
+                  </p>`
+                : nothing}
               <div class="row">
                 <button class="danger" type="button" ?disabled=${this.busy} @click=${() => this.rotate()}>
-                  Rotate key
+                  ${this.dropPrevious ? 'Rotate and drop the previous key' : 'Rotate key'}
                 </button>
                 <button
                   class="secondary"
@@ -202,6 +271,7 @@ export class SystemKeys extends LitElement {
                   ?disabled=${this.busy}
                   @click=${() => {
                     this.confirmRotate = false;
+                    this.dropPrevious = false;
                   }}
                 >
                   Cancel

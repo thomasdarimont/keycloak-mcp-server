@@ -23,6 +23,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -136,6 +137,8 @@ class AdminResourceTest {
         String rotated = admin().post("/admin/systems/acme/signing-key")
             .then()
             .statusCode(200)
+            .body("signingKey.retiredKeyGraceSeconds", equalTo(3600))
+            .body("signingKey.createdAt", notNullValue())
             .extract()
             .path("signingKey.kid");
         assertNotEquals(kid, rotated);
@@ -148,6 +151,20 @@ class AdminResourceTest {
             .body("keys[0].kid", equalTo(rotated))
             .body("keys.kid", hasItem(kid))
             .body("keys.size()", equalTo(2));
+
+        // a leaked key: the rotation takes the previous keys out of the JWKS at once
+        String afterLeak = admin().queryParam("dropPrevious", true)
+            .post("/admin/systems/acme/signing-key")
+            .then()
+            .statusCode(200)
+            .extract()
+            .path("signingKey.kid");
+        assertNotEquals(rotated, afterLeak);
+        given().get(acmeJwks)
+            .then()
+            .statusCode(200)
+            .body("keys.size()", equalTo(1))
+            .body("keys[0].kid", equalTo(afterLeak));
     }
 
     @Test

@@ -276,6 +276,22 @@ class UiLoginIT {
         assertFalse(api.asString().contains("claims"), api.asString());
     }
 
+    /**
+     * An exception in a BFF resource: the UI's error page or JSON, never Quarkus' page.
+     */
+    @Test
+    void aFailingBffResourceAnswersWithTheUisErrorPage() {
+        // what a browser sends when it navigates
+        Response page = given().header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .get("/bff/test-only/boom");
+        assertEquals(500, page.statusCode(), page.asString());
+        assertTrue(page.asString().contains("Something went wrong"), page.asString());
+        assertFalse(page.asString().contains("s3cret"), page.asString());
+        Response json = given().header("Accept", "application/json").get("/bff/test-only/boom");
+        assertEquals(500, json.statusCode(), json.asString());
+        assertEquals("server_error", json.jsonPath().getString("error"));
+    }
+
     @Test
     void operatorCanManageMutableSystemsAndRealmSettings() {
         Browser alice = Browser.login("demo", "alice", "alice");
