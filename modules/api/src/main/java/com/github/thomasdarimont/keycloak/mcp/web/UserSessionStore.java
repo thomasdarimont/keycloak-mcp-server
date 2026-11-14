@@ -59,16 +59,17 @@ public interface UserSessionStore extends Extension {
     }
 
     /**
-     * Moves a session to a new id with new tokens (a refresh by the OIDC layer, which
-     * gives the browser a new id) only while the session {@code previousId} still exists:
-     * a session removed while its tokens were refreshed stays removed. Afterwards
-     * {@code previousId} is gone.
+     * Replaces the session {@code previousId} with {@code next} (a refresh by the OIDC
+     * layer) only while that session still exists: a session removed while its tokens
+     * were refreshed stays removed. The server keeps the id across a refresh, so
+     * {@code next} normally carries {@code previousId}; with another id the session moves
+     * to it and {@code previousId} is gone afterwards.
      * <p>
      * The default reads, saves and removes in separate calls; stores shared by several
      * instances should override it with an atomic operation, one that a concurrent
-     * removal by session or subject either precedes or also applies to.
+     * removal by id, session or subject either precedes or also applies to.
      *
-     * @return whether the session was moved; {@code false} when {@code previousId} was
+     * @return whether the session was replaced; {@code false} when {@code previousId} was
      * gone
      */
     default boolean replace(String previousId, UserSession next) {
@@ -76,7 +77,9 @@ public interface UserSessionStore extends Extension {
             return false;
         }
         save(next);
-        delete(previousId);
+        if (!previousId.equals(next.id())) {
+            delete(previousId);
+        }
         return true;
     }
 

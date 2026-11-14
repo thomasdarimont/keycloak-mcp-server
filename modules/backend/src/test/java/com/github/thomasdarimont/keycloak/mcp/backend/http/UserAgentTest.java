@@ -99,7 +99,7 @@ class UserAgentTest {
     }
 
     @Test
-    void aSystemsClientSendsItsUserAgentOrTheLibrarysOnNone() {
+    void aSystemsClientSendsItsUserAgentOrTheLibraryDefaultOnNone() {
         // the filter DefaultKeycloakAdmin registers on each of a system's clients
         for (String configured : List.of("acme/{version}", "none")) {
             Client c = ClientBuilder.newClient();

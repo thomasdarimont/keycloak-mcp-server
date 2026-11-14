@@ -111,11 +111,12 @@ public class DatabaseUserSessionStore implements UserSessionStore {
     }
 
     /**
-     * One {@code UPDATE} that gives the row its new id and tokens, so it is the same row
-     * throughout: a removal by id, session or subject that came first leaves nothing to
-     * update, and one waiting for the row lock re-checks the updated row, which still has
-     * its session and subject, and removes it. A delete and an insert instead would let a
-     * waiting removal by session miss the inserted row.
+     * One {@code UPDATE} that gives the row its tokens (and its id, should {@code next}
+     * carry another one), so it is the same row throughout: a removal by id, session or
+     * subject that came first leaves nothing to update, and one waiting for the row lock
+     * re-checks the updated row and removes it. A delete and an insert instead would let
+     * a waiting removal miss the inserted row. A removal by the previous id reaches the
+     * row only while the id stays, which is why the server keeps it across a refresh.
      */
     @Override
     @Transactional
@@ -155,11 +156,16 @@ public class DatabaseUserSessionStore implements UserSessionStore {
             .map(this::toSession);
     }
 
+    /**
+     * One {@code DELETE} by id: nothing to load first, so a row removed meanwhile (a
+     * second logout, a back-channel logout) is no error, and one locked by a refresh is
+     * removed once the refresh is through.
+     */
     @Override
     @Transactional
     public void delete(String id) {
         if (id != null && !id.isBlank()) {
-            UserSessionEntity.deleteById(id);
+            UserSessionEntity.delete("id = ?1", id);
         }
     }
 

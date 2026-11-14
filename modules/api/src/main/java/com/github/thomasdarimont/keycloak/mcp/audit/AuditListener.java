@@ -40,7 +40,7 @@ public interface AuditListener extends Extension {
     /**
      * Whether this listener keeps the audit trail operators rely on, as the database
      * listener does. When its delivery fails, the server stops handing it events (the log
-     * line is still written), asks {@link #reachable()} in the background until it
+     * line is still written), asks {@link #canDeliver()} in the background until it
      * answers, and with {@code kc-mcp.audit-on-failure=refuse-changes} refuses tools that
      * change Keycloak meanwhile. Default {@code false}: a failure is logged, nothing
      * else.
@@ -51,10 +51,14 @@ public interface AuditListener extends Extension {
 
     /**
      * For a listener that {@linkplain #keepsAuditTrail() keeps the audit trail}: whether
-     * it can deliver again, asked every few seconds while it is failing, never on a tool
-     * call's thread. Default {@code true}: the next event is tried.
+     * an event would be delivered now, asked every few seconds while it is failing, never
+     * on a tool call's thread. The answer ends the degraded state and lets changes
+     * through again, so it has to prove the delivery itself, not that the other side
+     * answers: the database listener inserts a row and rolls it back, since a database
+     * can be reachable and still refuse every insert. Default {@code true}: the next
+     * event is tried.
      */
-    default boolean reachable() {
+    default boolean canDeliver() {
         return true;
     }
 

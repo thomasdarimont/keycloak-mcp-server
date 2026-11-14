@@ -196,7 +196,7 @@ duration.
 - The MCP traffic log (`quarkus.mcp.server.traffic-logging.enabled`) writes everything verbatim. The `shared` profile
   does not start with it on.
 - **When the trail cannot be written.** A listener that keeps the audit trail (the database listener) and fails is
-  left out until a probe every 2 seconds finds it reachable again; the log line is still written. With
+  left out until a probe every 2 seconds can write a row again (inserted and rolled back); the log line is still written. With
   `kc-mcp.audit-on-failure=refuse-changes` (default in `shared`) write and destructive tools answer
   `audit_unavailable` meanwhile, reads keep running. The first change after the database goes away still runs, as
   nothing has failed before it: its row is the one that fails ([When the database is away](storage.md#when-the-database-is-away)).

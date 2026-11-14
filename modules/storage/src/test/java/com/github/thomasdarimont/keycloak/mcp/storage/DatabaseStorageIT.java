@@ -413,6 +413,38 @@ class DatabaseStorageIT {
         assertFalse(vault.secretNames().contains(name));
     }
 
+    /**
+     * The probe that ends the degraded state proves an insert, not a connection: with the
+     * table out of reach (as with a revoked grant or a read-only standby) the database
+     * answers and the probe still says no.
+     */
+    @Test
+    void theAuditProbeWritesARowAndRollsItBack() {
+        DatabaseAuditListener audit = listeners.select(DatabaseAuditListener.class).get();
+        assertTrue(audit.keepsAuditTrail());
+        long before = QuarkusTransaction.requiringNew().call(() -> AuditEventEntity.count());
+
+        assertTrue(audit.canDeliver());
+        assertEquals(before, QuarkusTransaction.requiringNew().call(() -> AuditEventEntity.count()),
+                "the probe leaves no row");
+
+        rename("kc_mcp_audit_event", "kc_mcp_audit_event_away");
+        try {
+            assertFalse(audit.canDeliver(), "the connection works, the insert does not");
+        }
+        finally {
+            rename("kc_mcp_audit_event_away", "kc_mcp_audit_event");
+        }
+        assertTrue(audit.canDeliver());
+    }
+
+    private static void rename(String from, String to) {
+        QuarkusTransaction.requiringNew()
+            .run(() -> AuditEventEntity.getEntityManager()
+                .createNativeQuery("ALTER TABLE " + from + " RENAME TO " + to)
+                .executeUpdate());
+    }
+
     @Test
     void auditEventsBecomeRows() {
         DatabaseAuditListener audit = listeners.select(DatabaseAuditListener.class).get();
@@ -682,6 +714,44 @@ class DatabaseStorageIT {
         }
         assertTrue(store.find(id).isEmpty());
         assertTrue(store.find(moved).isEmpty(), "the logout wins over the refresh");
+    }
+
+    /**
+     * A logout by the cookie's id that waits for the row while a refresh replaces its
+     * tokens removes the refreshed session: the refresh keeps the id. Under a new id the
+     * logout found nothing and the refreshed session stayed.
+     */
+    @Test
+    void aLogoutByIdWaitingForARefreshRemovesTheRefreshedSession() throws Exception {
+        UserSessionStore store = sessionStores.get();
+        long later = System.currentTimeMillis() + 60_000;
+        String id = UUID.randomUUID().toString();
+        store.save(session(id, "rt-1", later));
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch logoutStarted = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> refresh = pool.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
+                UserSessionEntity.findById(id, LockModeType.PESSIMISTIC_WRITE);
+                locked.countDown();
+                logoutStarted.await(5, TimeUnit.SECONDS);
+                Thread.sleep(300);
+                return store.replace(id, session(id, "rt-2", later));
+            }));
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            Future<?> logout = pool.submit(() -> {
+                logoutStarted.countDown();
+                store.delete(id);
+            });
+            assertTrue(refresh.get(10, TimeUnit.SECONDS), "the refresh replaced the tokens");
+            logout.get(10, TimeUnit.SECONDS); // no exception: the row it waited for is
+                                              // still under its id
+        }
+        finally {
+            pool.shutdownNow();
+        }
+        assertTrue(store.find(id).isEmpty(), "the logout wins over the refresh");
+        store.delete(id); // removing it again is no error
     }
 
     @Test

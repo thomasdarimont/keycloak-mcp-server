@@ -6,6 +6,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 
@@ -67,6 +68,22 @@ class IdpCheckToolProviderTest {
             reply(ex, 302, "");
         });
         server.createContext("/big", ex -> reply(ex, 200, "x".repeat(IdpCheckToolProvider.MAX_BYTES + 10)));
+        // 64 MB without a Content-Length, counting what the client let the server send
+        long total = 64L << 20;
+        AtomicLong sent = new AtomicLong();
+        server.createContext("/endless", ex -> {
+            ex.sendResponseHeaders(200, 0);
+            byte[] chunk = new byte[64 << 10];
+            try (OutputStream out = ex.getResponseBody()) {
+                while (sent.get() < total) {
+                    out.write(chunk);
+                    sent.addAndGet(chunk.length);
+                }
+            }
+            catch (IOException closedByTheClient) {
+                // expected: the client stops reading at its limit
+            }
+        });
         server.start();
         try {
             var check = new IdpCheckToolProvider().restrict(HostAllowList.of(List.of("127.0.0.1")),
@@ -82,6 +99,11 @@ class IdpCheckToolProviderTest {
 
             var big = check.fetch(base + "/big");
             assertTrue(big.problem().startsWith("The document is larger than"), big.problem());
+
+            var endless = check.fetch(base + "/endless");
+            assertTrue(endless.problem().startsWith("The document is larger than"), endless.problem());
+            assertTrue(sent.get() < 8L << 20,
+                    "cut off near the limit, not after the whole document: " + sent.get() + " bytes sent");
         }
         finally {
             server.stop(0);

@@ -63,7 +63,7 @@ class AuditTrailTest {
         }
 
         @Override
-        public boolean reachable() {
+        public boolean canDeliver() {
             return answersProbe;
         }
     }
@@ -123,10 +123,10 @@ class AuditTrailTest {
     }
 
     @Test
-    void aProbeThatThrowsCountsAsUnreachable() {
+    void aProbeThatThrowsMeansItCannotDeliver() {
         Trail throwing = new Trail() {
             @Override
-            public boolean reachable() {
+            public boolean canDeliver() {
                 throw new IllegalStateException("boom");
             }
         };

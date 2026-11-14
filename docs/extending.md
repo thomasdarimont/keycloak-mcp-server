@@ -350,9 +350,11 @@ public class TicketUrlCheck implements ProfileCheck {
 - `AuditListener.onToolCall` once per finished call, any outcome. Built-in: console line (`console`). Synchronous on the
   handler's virtual thread; offload slow sinks. Exceptions logged, never change the result.
 - `keepsAuditTrail()` (default `false`, `true` for `db`): the listener is the trail operators rely on. When it throws,
-  it gets no events until `reachable()` (asked every 2 s on a background thread) answers `true`, the trail counts as
+  it gets no events until `canDeliver()` (asked every 2 s on a background thread) answers `true`, the trail counts as
   degraded (`kc_mcp.audit.trail.degraded`), and `kc-mcp.audit-on-failure=refuse-changes` refuses changes meanwhile.
-  A SIEM listener that must not miss a change says `true` and answers `reachable()` with a cheap check.
+  A SIEM listener that must not miss a change says `true`. `canDeliver()` ends the degraded state, so it has to prove
+  a delivery, not a connection: `db` inserts a row and rolls it back, as a database can answer and still refuse
+  every insert (a read-only standby after a failover, a revoked grant).
 - Password-like arguments arrive as `***`. Personal data does not: that is `AuditScrubber` (`@AutoService` or CDI bean,
   by `order()`). `scrub(event, listener)` runs per listener: treat all sinks alike, or target one by id (`db`,
   `console`). Derive with `mapArgs`, `withMessage`, `withCaller`; return `null` to skip. Default `NoOpAuditScrubber`.

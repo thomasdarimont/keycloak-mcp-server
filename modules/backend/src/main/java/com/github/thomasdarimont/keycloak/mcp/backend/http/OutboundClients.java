@@ -1,10 +1,17 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.http;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 
 import org.jboss.resteasy.reactive.client.api.QuarkusRestClientProperties;
 import org.jboss.resteasy.reactive.client.impl.ClientBuilderImpl;
@@ -187,6 +194,37 @@ public final class OutboundClients {
                 throw new IllegalArgumentException(setting + " is not a duration: '" + v + "' (e.g. 10s, 500ms, PT1M)");
             }
         });
+    }
+
+    /**
+     * What {@link #getLimited} got: the status, the {@code Location} of a redirect, and
+     * the body when the status was 200 and it fit; {@code tooLarge} when it did not.
+     */
+    public record Limited(int status, String location, byte[] body, boolean tooLarge) {
+    }
+
+    /**
+     * A GET whose body is read as it arrives and cut off after {@code maxBytes}: for
+     * documents from addresses the server does not control. The body is asked for as a
+     * stream, which makes the client hand the bytes over while they come in; a plain
+     * {@code get()} would buffer the whole response first, however large. Closing the
+     * stream at the limit, and the client after it, drops the connection.
+     *
+     * @throws ProcessingException when the server cannot be reached or the read times out
+     */
+    public static Limited getLimited(Client client, URI uri, String accept, int maxBytes) {
+        try (InputStream in = client.target(uri).request().header(HttpHeaders.ACCEPT, accept).get(InputStream.class)) {
+            byte[] body = in.readNBytes(maxBytes + 1);
+            return body.length > maxBytes ? new Limited(200, null, null, true) : new Limited(200, null, body, false);
+        }
+        catch (WebApplicationException e) {
+            // every status but 2xx arrives as an exception when a type is asked for
+            Response r = e.getResponse();
+            return new Limited(r.getStatus(), r.getHeaderString(HttpHeaders.LOCATION), null, false);
+        }
+        catch (IOException e) {
+            throw new ProcessingException(e);
+        }
     }
 
     private static ClientBuilder builder(Timeouts t) {

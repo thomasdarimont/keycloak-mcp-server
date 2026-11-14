@@ -1,18 +1,15 @@
 package com.github.thomasdarimont.keycloak.mcp.storage.audit;
 
-import java.sql.Connection;
-import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import javax.sql.DataSource;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
-import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import org.hibernate.Session;
+import org.jboss.logging.Logger;
 
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditEvent;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
@@ -21,6 +18,7 @@ import com.github.thomasdarimont.keycloak.mcp.spi.ConfigSpec;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageEnabledInterceptorFactory;
 
 import io.quarkus.arc.lookup.LookupIfProperty;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.panache.common.Sort;
 import io.vertx.core.json.JsonObject;
 
@@ -39,16 +37,15 @@ public class DatabaseAuditListener implements AuditListener {
 
     public static final String ID = "db";
 
+    private static final Logger LOG = Logger.getLogger(DatabaseAuditListener.class);
+
     /** Read by {@link AuditRetention}. */
     public static final ConfigProperty RETENTION_DAYS = ConfigProperty.integer("retention-days").withDefault("0");
 
     public static final ConfigSpec CONFIG_SPEC = ConfigSpec.of(RETENTION_DAYS);
 
-    /** Seconds the probe waits for the database to answer. */
-    static final int PROBE_TIMEOUT_SECONDS = 2;
-
-    @Inject
-    Instance<DataSource> dataSource;
+    /** The tool name of the row the probe inserts and rolls back. */
+    static final String PROBE_TOOL = "kc_mcp_audit_probe";
 
     @Override
     public String id() {
@@ -96,6 +93,11 @@ public class DatabaseAuditListener implements AuditListener {
     @Override
     @Transactional
     public void onToolCall(AuditEvent event) {
+        insert(event);
+    }
+
+    /** The insert, in the transaction of the caller. */
+    private void insert(AuditEvent event) {
         AuditEventEntity.getEntityManager()
             .unwrap(Session.class)
             .createNativeMutationQuery(INSERT)
@@ -128,19 +130,43 @@ public class DatabaseAuditListener implements AuditListener {
     }
 
     /**
-     * Whether a connection to the database can be had and answers: JDBC's own validity
-     * check, so it needs no grant and runs on every database.
+     * Whether an audit row can be written: inserts one in a transaction of its own and
+     * rolls it back. A connection that answers proves too little: after a failover to a
+     * read-only standby, with a revoked grant or a missing table the database is there
+     * and every insert fails, and reporting the trail as written again would let changes
+     * through unaudited. The transaction is rolled back by an exception thrown after the
+     * insert, which leaves no row (the id it took stays unused), and the insert is the
+     * only grant it needs.
      */
     @Override
-    public boolean reachable() {
-        if (dataSource == null || !dataSource.isResolvable()) {
-            return true;
+    public boolean canDeliver() {
+        try {
+            QuarkusTransaction.requiringNew().run(() -> {
+                insert(AuditEvent.builder().at(Instant.now()).tool(PROBE_TOOL).outcome("probe").build());
+                throw new ProbeRollbackException();
+            });
+            return false; // not reached: the task always throws
         }
-        try (Connection c = dataSource.get().getConnection()) {
-            return c.isValid(PROBE_TIMEOUT_SECONDS);
-        }
-        catch (SQLException | RuntimeException e) {
+        catch (RuntimeException e) {
+            if (e instanceof ProbeRollbackException || e.getCause() instanceof ProbeRollbackException) {
+                return true;
+            }
+            LOG.debugf("The audit probe could not insert a row: %s", e.toString());
             return false;
+        }
+    }
+
+    /**
+     * Ends the probe's transaction with a rollback once its insert went through. Thrown
+     * every few seconds while the trail is failing and never shown, so it has no stack
+     * trace.
+     */
+    private static final class ProbeRollbackException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public Throwable fillInStackTrace() {
+            return this;
         }
     }
 
@@ -185,9 +211,13 @@ public class DatabaseAuditListener implements AuditListener {
         return AuditEventEntity.findByIdOptional(id);
     }
 
-    /** The columns {@link #values} completes, by the name the API uses. */
-    public static final Map<String, String> VALUE_FIELDS = Map.of("caller", "callerName", "system", "system", "realm",
-            "realm", "tool", "tool");
+    /**
+     * The named query that lists the values of each column {@link #values} completes, by
+     * the name the API uses.
+     */
+    public static final Map<String, String> VALUE_FIELDS = Map.of("caller", AuditEventEntity.VALUES_OF_CALLER, "system",
+            AuditEventEntity.VALUES_OF_SYSTEM, "realm", AuditEventEntity.VALUES_OF_REALM, "tool",
+            AuditEventEntity.VALUES_OF_TOOL);
 
     /**
      * The distinct values of one column that contain a text, case-insensitively, in
@@ -195,21 +225,19 @@ public class DatabaseAuditListener implements AuditListener {
      */
     @Transactional
     public List<String> values(String field, String containing, int limit) {
-        String property = VALUE_FIELDS.get(field);
-        if (property == null) {
+        String namedQuery = VALUE_FIELDS.get(field);
+        if (namedQuery == null) {
             throw new IllegalArgumentException("field: one of " + VALUE_FIELDS.keySet());
         }
         String text = containing == null ? "" : containing.trim().toLowerCase(Locale.ROOT);
-        String jpql = "select distinct e." + property + " from AuditEventEntity e where e." + property + " is not null"
-                + (text.isEmpty() ? "" : " and lower(e." + property + ") like :text escape '!'") + " order by e."
-                + property;
-        var query = AuditEventEntity.getEntityManager()
-            .createQuery(jpql, String.class)
-            .setMaxResults(Math.max(1, limit));
-        if (!text.isEmpty()) {
-            query.setParameter("text", "%" + text.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
-        }
-        return query.getResultList();
+        // no text: the pattern % matches every value
+        String pattern = "%" + text.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+                + (text.isEmpty() ? "" : "%");
+        return AuditEventEntity.getEntityManager()
+            .createNamedQuery(namedQuery, String.class)
+            .setParameter("text", pattern)
+            .setMaxResults(Math.max(1, limit))
+            .getResultList();
     }
 
     @Transactional

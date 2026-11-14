@@ -13,8 +13,8 @@ import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 /**
  * Which listeners that {@linkplain AuditListener#keepsAuditTrail() keep the audit trail}
  * failed their last delivery. Such a listener gets no events until a background probe
- * finds it {@linkplain AuditListener#reachable() reachable} again, so tool calls do not
- * wait for a database that is away; the trail counts as degraded meanwhile, which
+ * finds that it {@linkplain AuditListener#canDeliver() can deliver} again, so tool calls
+ * do not wait for a database that is away; the trail counts as degraded meanwhile, which
  * {@code kc-mcp.audit-on-failure=refuse-changes} acts on. One WARN when a listener starts
  * failing, one INFO when it recovers.
  */
@@ -56,7 +56,7 @@ public class AuditTrailHealth {
         if (failing.add(listener)) {
             LOG.warnf(e,
                     "Audit listener %s failed for %s; the audit trail is degraded. It gets no events until it is"
-                            + " reachable again (probed every %d s); the log line is still written",
+                            + " can deliver again (probed every %d s); the log line is still written",
                     listener.id(), tool, probeInterval.toSeconds());
             startProbing();
         }
@@ -67,13 +67,13 @@ public class AuditTrailHealth {
         for (AuditListener l : List.copyOf(failing)) {
             boolean reachable;
             try {
-                reachable = l.reachable();
+                reachable = l.canDeliver();
             }
             catch (RuntimeException e) {
                 reachable = false;
             }
             if (reachable && failing.remove(l)) {
-                LOG.infof("Audit listener %s is reachable again; the audit trail is written again", l.id());
+                LOG.infof("Audit listener %s can deliver again; the audit trail is written again", l.id());
             }
         }
     }

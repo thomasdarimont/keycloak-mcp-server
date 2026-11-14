@@ -6,6 +6,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -36,13 +37,23 @@ import io.vertx.ext.web.RoutingContext;
  * {@link #createTokenState}, which stores them as a {@link UserSession} under a random
  * id, and that id is what the session cookie carries; {@link #getTokens} loads them
  * again, {@link #deleteTokens} ends the session (logout, invalid session). A refresh
- * moves the row to a new id, only while it still exists: a session removed while its
- * tokens were refreshed stays removed ({@link UserSessionStore#replace}). The store is
- * the registered {@link UserSessionStore} with the lowest order, the database storage's
- * by default, which encrypts the tokens at rest (the tenant switches Quarkus's own token
- * encryption off, see {@link UiTenant#config}); with the UI on and no store the first
- * login fails, which {@link UiRoutes} already reports at startup. Database calls run on a
- * worker thread.
+ * replaces the tokens of the row, only while it still exists: a session removed while its
+ * tokens were refreshed stays removed ({@link UserSessionStore#replace}). The id, and
+ * with it the cookie's value, stays the same across refreshes: a logout that still
+ * carries it, from another tab or sent just before the refresh finished, removes the
+ * refreshed session too, which it would miss under a new id.
+ * <p>
+ * Quarkus calls {@link #deleteTokens} for the old cookie before {@link #createTokenState}
+ * on a refresh as well. Removing the row there would leave nothing a concurrent logout or
+ * back-channel logout could remove, and the refreshed session would be stored unguarded.
+ * So a {@code deleteTokens} that belongs to a refresh ({@link #REFRESHED}) keeps the row
+ * for {@code createTokenState} to move, and a {@code createTokenState} for a request that
+ * came with a session but has none to move is refused. The store is the registered
+ * {@link UserSessionStore} with the lowest order, the database storage's by default,
+ * which encrypts the tokens at rest (the tenant switches Quarkus's own token encryption
+ * off, see {@link UiTenant#config}); with the UI on and no store the first login fails,
+ * which {@link UiRoutes} already reports at startup. Database calls run on a worker
+ * thread.
  */
 @ApplicationScoped
 @Alternative
@@ -53,6 +64,22 @@ public class UserSessionTokenStateManager implements TokenStateManager {
 
     /** Routing context key of the id of the session the current request came with. */
     static final String CURRENT_SESSION = "kc-mcp.user-session";
+    /**
+     * Routing context key: this request came with a stored session ({@link #getTokens}
+     * found it). Stays set whatever happens to the session afterwards.
+     */
+    static final String LOADED_SESSION = "kc-mcp.user-session.loaded";
+    /**
+     * Routing context key of a session whose removal waits for {@link #createTokenState}
+     * to move it; removed at the end of the request when that never came.
+     */
+    static final String PENDING_REPLACE = "kc-mcp.user-session.pending-replace";
+    /**
+     * Routing context key Quarkus OIDC sets to {@code TRUE} once it redeemed the refresh
+     * token of the request's session ({@code OidcIdentityProvider}, not public API: the
+     * test pins the value). Without it a refresh is refused, never stored unguarded.
+     */
+    static final String REFRESHED = "refresh_token_grant_response";
     /**
      * Rows live this long past the last token expiry, so a refresh in flight still finds
      * them.
@@ -75,8 +102,14 @@ public class UserSessionTokenStateManager implements TokenStateManager {
     @Override
     public Uni<String> createTokenState(RoutingContext routingContext, OidcTenantConfig oidcConfig,
             AuthorizationCodeTokens tokens, OidcRequestContext<String> requestContext) {
-        String previous = routingContext.get(CURRENT_SESSION);
-        String id = newId();
+        String previous;
+        try {
+            previous = previousOf(routingContext.data());
+        }
+        catch (AuthenticationFailedException e) {
+            return Uni.createFrom().failure(e);
+        }
+        String id = idFor(previous);
         long now = System.currentTimeMillis();
         String issuer = claimOf(tokens.getIdToken(), "iss");
         if (issuer == null) {
@@ -88,15 +121,68 @@ public class UserSessionTokenStateManager implements TokenStateManager {
                 tokens.getAccessTokenScope(), now, expiresAt(tokens, now));
         return requestContext.runBlocking(() -> {
             persist(previous, session);
+            routingContext.data().remove(PENDING_REPLACE);
             routingContext.put(CURRENT_SESSION, id);
             return id;
         });
     }
 
+    /** A login gets a new random id, a refresh keeps the id of its session. */
+    String idFor(String previous) {
+        return previous == null ? newId() : previous;
+    }
+
     /**
-     * Stores a new session, or moves the session {@code previous} to the refreshed one,
-     * only while it still exists: a logout or back-channel logout that came while Quarkus
-     * refreshed the tokens wins.
+     * The session the new one replaces: {@code null} for a login, the request's session
+     * for a refresh.
+     *
+     * @throws AuthenticationFailedException when the request came with a session that is
+     * no longer there to move: {@link #deleteTokens} removed it without recognising the
+     * refresh, so storing the new session could bring back one that was ended meanwhile
+     */
+    String previousOf(Map<String, Object> data) {
+        String previous = (String) data.get(CURRENT_SESSION);
+        if (previous == null && data.get(LOADED_SESSION) != null) {
+            LOG.errorf("Tokens were refreshed for a session that was removed in the same request without the '%s'"
+                    + " marker of Quarkus OIDC; the refreshed session is not stored. If this happens on every refresh,"
+                    + " the marker changed with a Quarkus upgrade", REFRESHED);
+            throw new AuthenticationFailedException("The session cannot be refreshed");
+        }
+        return previous;
+    }
+
+    /**
+     * Whether a {@link #deleteTokens} for {@code tokenState} belongs to a refresh of the
+     * request's own session, whose row {@link #createTokenState} moves; it is then
+     * recorded as {@link #PENDING_REPLACE} and kept.
+     */
+    boolean keptForRefresh(Map<String, Object> data, String tokenState) {
+        if (Boolean.TRUE.equals(data.get(REFRESHED)) && tokenState != null
+                && tokenState.equals(data.get(CURRENT_SESSION))) {
+            data.put(PENDING_REPLACE, tokenState);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Removes the session a refresh kept for {@link #createTokenState} when that never
+     * came (the refreshed ID token was refused, say): the browser's cookie is gone by
+     * then, so the row would only linger.
+     */
+    void removePending(Map<String, Object> data) {
+        Object pending = data.remove(PENDING_REPLACE);
+        if (pending != null) {
+            store().delete((String) pending);
+            data.remove(CURRENT_SESSION);
+            LOG.debugf("User session of an unfinished refresh removed");
+        }
+    }
+
+    /**
+     * Stores a new session, or replaces the session {@code previous} with the refreshed
+     * one, only while it still exists: a logout or back-channel logout that came while
+     * Quarkus refreshed the tokens wins.
      *
      * @throws AuthenticationFailedException when {@code previous} was removed meanwhile
      */
@@ -124,6 +210,7 @@ public class UserSessionTokenStateManager implements TokenStateManager {
                 throw new AuthenticationCompletionException("Unknown or expired user session");
             }
             routingContext.put(CURRENT_SESSION, tokenState);
+            routingContext.put(LOADED_SESSION, tokenState);
             UserSession s = found.get();
             return new AuthorizationCodeTokens(s.idToken(), s.accessToken(), s.refreshToken(), s.accessTokenExpiresIn(),
                     s.scope());
@@ -133,6 +220,16 @@ public class UserSessionTokenStateManager implements TokenStateManager {
     @Override
     public Uni<Void> deleteTokens(RoutingContext routingContext, OidcTenantConfig oidcConfig, String tokenState,
             OidcRequestContext<Void> requestContext) {
+        if (keptForRefresh(routingContext.data(), tokenState)) {
+            routingContext.addEndHandler(done -> {
+                if (routingContext.data().containsKey(PENDING_REPLACE)) {
+                    Thread.ofVirtual()
+                        .name("kc-mcp-user-session-cleanup")
+                        .start(() -> removePending(routingContext.data()));
+                }
+            });
+            return Uni.createFrom().voidItem();
+        }
         return requestContext.runBlocking(() -> {
             store().delete(tokenState);
             routingContext.remove(CURRENT_SESSION);

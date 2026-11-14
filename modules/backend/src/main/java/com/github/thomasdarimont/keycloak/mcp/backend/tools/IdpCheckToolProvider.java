@@ -1,8 +1,6 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.tools;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateFactory;
@@ -20,8 +18,6 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.Response;
 
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.w3c.dom.Document;
@@ -55,8 +51,8 @@ import io.vertx.core.json.JsonObject;
  * a host {@code kc-mcp.allowed-hosts} names literally may be private); only http(s), no
  * redirects, short timeouts, at most {@value #MAX_BYTES} bytes, and XML without DTDs or
  * external entities. The request goes through {@link OutboundClients}, with the server's
- * user agent, as every outgoing request other than Keycloak's. The result is the
- * comparison, never the fetched document.
+ * user agent, and its body is read as it arrives ({@link OutboundClients#getLimited}): a
+ * large or endless document is cut off at the limit instead of being buffered first.
  */
 @AutoService(ToolProvider.class)
 public class IdpCheckToolProvider extends AbstractToolProvider {
@@ -437,29 +433,24 @@ public class IdpCheckToolProvider extends AbstractToolProvider {
                 .replace("a system registered at runtime", "a URL from an identity provider's settings"));
         }
         Client client = OutboundClients.create(new OutboundClients.Timeouts(TIMEOUT, TIMEOUT));
-        try (Response response = client.target(uri)
-            .request()
-            .header(HttpHeaders.ACCEPT, "application/json, application/samlmetadata+xml, application/xml")
-            .get()) {
-            int status = response.getStatus();
-            if (status >= 300 && status < 400) {
-                String location = response.getHeaderString(HttpHeaders.LOCATION);
-                return new Fetch(null, "HTTP " + status + " redirect to " + (location == null ? "?" : location)
-                        + "; redirects are not followed, configure the final URL");
+        try {
+            OutboundClients.Limited got = OutboundClients.getLimited(client, uri,
+                    "application/json, application/samlmetadata+xml, application/xml", MAX_BYTES);
+            if (got.status() >= 300 && got.status() < 400) {
+                return new Fetch(null,
+                        "HTTP " + got.status() + " redirect to " + (got.location() == null ? "?" : got.location())
+                                + "; redirects are not followed, configure the final URL");
             }
-            if (status != 200) {
-                return new Fetch(null, "HTTP " + status + " from " + url);
+            if (got.status() != 200) {
+                return new Fetch(null, "HTTP " + got.status() + " from " + url);
             }
-            try (InputStream in = response.readEntity(InputStream.class)) {
-                byte[] body = in.readNBytes(MAX_BYTES + 1);
-                if (body.length > MAX_BYTES) {
-                    return new Fetch(null, "The document is larger than " + MAX_BYTES + " bytes.");
-                }
-                return new Fetch(body, null);
+            if (got.tooLarge()) {
+                return new Fetch(null, "The document is larger than " + MAX_BYTES + " bytes.");
             }
+            return new Fetch(got.body(), null);
         }
-        catch (IOException | ProcessingException e) {
-            Throwable cause = e instanceof ProcessingException && e.getCause() != null ? e.getCause() : e;
+        catch (ProcessingException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
             return new Fetch(null, "Cannot reach " + uri.getHost() + ": " + cause.getClass().getSimpleName()
                     + (cause.getMessage() == null ? "" : " (" + cause.getMessage() + ")"));
         }
