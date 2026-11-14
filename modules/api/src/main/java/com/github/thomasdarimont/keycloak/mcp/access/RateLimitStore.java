@@ -38,6 +38,8 @@ public interface RateLimitStore extends Extension {
      * @param windowMillis the length of the window, at most {@link #MAX_WINDOW_MILLIS}
      * @return {@code 0} when the call was counted, otherwise the milliseconds until the
      * oldest call in the window leaves it
+     * @throws RateLimitStoreMisconfiguredException when the store cannot count until its
+     * setup is fixed; any other exception counts as a failure that passes
      */
     long admit(String key, long now, int max, long windowMillis);
 }

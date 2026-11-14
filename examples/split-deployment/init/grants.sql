@@ -14,4 +14,11 @@ GRANT INSERT ON kc_mcp_audit_event TO kcmcp_mcp;
 -- CIBA confirmations: the MCP instance that asks for an approval stores and finishes it
 GRANT SELECT, INSERT, UPDATE, DELETE ON kc_mcp_pending_approval TO kcmcp_mcp;
 
+-- rate limits: the calls the rate-limit access check counts, shared by the MCP instances. An instance locks the
+-- caller's bucket row (SELECT ... FOR UPDATE, which PostgreSQL allows only with UPDATE), counts the calls and adds
+-- its own; DELETE is for the hourly purge of calls older than the longest window. Without these grants the
+-- rate-limit check refuses the calls it would count (access_check_failed).
+GRANT SELECT, INSERT, UPDATE, DELETE ON kc_mcp_rate_limit_bucket TO kcmcp_mcp;
+GRANT SELECT, INSERT, DELETE ON kc_mcp_rate_limit_call TO kcmcp_mcp;
+
 -- not listed, so not granted: kc_mcp_user_session (management UI logins) and Liquibase's own tables

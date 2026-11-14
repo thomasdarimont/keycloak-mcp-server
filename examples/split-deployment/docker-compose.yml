@@ -102,7 +102,7 @@ services:
     command:
       - |
         echo "waiting for the admin instance to migrate the schema"
-        until [ "$$(psql -tAc "select count(*) from pg_tables where tablename in ('kc_mcp_system','kc_mcp_realm','kc_mcp_secret','kc_mcp_signing_key','kc_mcp_audit_event','kc_mcp_pending_approval')" 2>/dev/null)" = "6" ] \
+        until [ "$$(psql -tAc "select count(*) from pg_tables where tablename in ('kc_mcp_system','kc_mcp_realm','kc_mcp_secret','kc_mcp_signing_key','kc_mcp_audit_event','kc_mcp_pending_approval','kc_mcp_rate_limit_bucket','kc_mcp_rate_limit_call')" 2>/dev/null)" = "8" ] \
           && [ "$$(psql -tAc "select count(*) from databasechangeloglock where locked" 2>/dev/null)" = "0" ]; do sleep 2; done
         psql -v ON_ERROR_STOP=1 -f /grants.sql && echo "grants applied"
     depends_on:

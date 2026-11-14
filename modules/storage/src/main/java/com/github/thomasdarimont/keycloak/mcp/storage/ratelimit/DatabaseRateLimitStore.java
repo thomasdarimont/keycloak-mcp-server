@@ -3,7 +3,10 @@ package com.github.thomasdarimont.keycloak.mcp.storage.ratelimit;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.SQLException;
 import java.util.HexFormat;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -14,6 +17,7 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStoreMisconfiguredException;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageConfig;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageEnabledInterceptorFactory;
 
@@ -28,6 +32,10 @@ import io.quarkus.scheduler.Scheduled;
  * ({@code SELECT ... FOR UPDATE}) while it counts the window and adds its call: the calls
  * of one bucket are admitted one after the other, those of different buckets do not wait
  * for each other.
+ * <p>
+ * A database that refuses the tables for good (no grants, no table) is reported as
+ * {@link RateLimitStoreMisconfiguredException}, which refuses the counted calls; any
+ * other failure passes on as it is.
  * <p>
  * Calls older than the longest window (24 hours) are removed every hour. Switch the store
  * off alone with {@code kc-mcp.spi.rate-limit-store.db.enabled=false}.
@@ -65,7 +73,13 @@ public class DatabaseRateLimitStore implements RateLimitStore {
     public long admit(String key, long now, int max, long windowMillis) {
         String bucket = bucketId(key);
         for (int attempt = 0; attempt < 3; attempt++) {
-            long retryAfter = admitLocked(bucket, now, max, windowMillis);
+            long retryAfter;
+            try {
+                retryAfter = admitLocked(bucket, now, max, windowMillis);
+            }
+            catch (RuntimeException e) {
+                throw misconfigured(e).orElse(e);
+            }
             if (retryAfter != NO_BUCKET) {
                 return retryAfter;
             }
@@ -73,6 +87,10 @@ public class DatabaseRateLimitStore implements RateLimitStore {
                 createBucket(bucket, now);
             }
             catch (PersistenceException | IllegalStateException e) {
+                Optional<RuntimeException> setup = misconfigured(e);
+                if (setup.isPresent()) {
+                    throw setup.get();
+                }
                 // another instance inserted the bucket first: the primary key said so
                 LOG.debugf("Rate limit bucket %s created concurrently: %s", bucket, e.toString());
             }
@@ -144,6 +162,33 @@ public class DatabaseRateLimitStore implements RateLimitStore {
         catch (RuntimeException e) {
             LOG.warnf(e, "Rate limits: purge failed, next attempt in an hour: %s", e.getMessage());
         }
+    }
+
+    /**
+     * SQL states that say the tables cannot be used as they are, rather than not right
+     * now: insufficient privilege and undefined table on PostgreSQL ({@code 42501},
+     * {@code 42P01}), table not found and not enough rights on H2 ({@code 42S02},
+     * {@code 90096}).
+     */
+    private static final Set<String> SETUP_STATES = Set.of("42501", "42P01", "42S02", "90096");
+
+    /**
+     * The failure as a {@link RateLimitStoreMisconfiguredException} when the database
+     * refused the statement for a reason that only an administrator can remove.
+     */
+    static Optional<RuntimeException> misconfigured(Throwable failure) {
+        Throwable t = failure;
+        for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause()) {
+            if (t instanceof SQLException sql && sql.getSQLState() != null
+                    && SETUP_STATES.contains(sql.getSQLState())) {
+                return Optional.of(new RateLimitStoreMisconfiguredException(
+                        "the database user may not use the tables kc_mcp_rate_limit_bucket and kc_mcp_rate_limit_call,"
+                                + " or they do not exist (SQL state " + sql.getSQLState() + ": " + sql.getMessage()
+                                + ")",
+                        failure));
+            }
+        }
+        return Optional.empty();
     }
 
     public static String bucketId(String key) {

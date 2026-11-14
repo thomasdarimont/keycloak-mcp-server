@@ -18,6 +18,7 @@ import org.jboss.logging.Logger;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStoreMisconfiguredException;
 import com.github.thomasdarimont.keycloak.mcp.backend.spi.DefaultExtensionRegistry;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolLevel;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -41,7 +42,8 @@ import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
  * <p>
  * The calls are counted in the {@link RateLimitStore}: the database's when the storage is
  * on, so the limit holds for all instances on it together, else this instance's memory.
- * While the store fails the check counts in memory, per instance. Callers without an
+ * While the store fails the check counts in memory, per instance; a store that is set up
+ * wrongly (no grants, no table) refuses the counted calls instead. Callers without an
  * identity (an endpoint without authentication) share one count per system.
  */
 @ApplicationScoped
@@ -163,7 +165,20 @@ public class RateLimitCheck implements AccessCheck {
             return Decision.allow();
         }
         long now = clock.getAsLong();
-        long retryAfter = admit(key(ctx.caller(), ctx.system()), now, limit);
+        long retryAfter;
+        try {
+            retryAfter = admit(key(ctx.caller(), ctx.system()), now, limit);
+        }
+        catch (RateLimitStoreMisconfiguredException e) {
+            if (warnNow(now)) {
+                LOG.errorf("Rate limit store '%s' cannot count, so calls under the rate limit are refused: %s",
+                        store().id(), e.getMessage());
+            }
+            return Decision.deny("access_check_failed",
+                    "This server cannot count calls for its rate limit, so it refuses " + ctx.tool().name()
+                            + "; nothing was changed. An administrator has to fix the rate limit store (the server"
+                            + " log names the problem). Do not retry.");
+        }
         if (retryAfter == 0) {
             return Decision.allow();
         }
@@ -181,24 +196,35 @@ public class RateLimitCheck implements AccessCheck {
     /**
      * Counts the call if the limit has room for it, in the store or, while that fails, in
      * this instance's memory: a database that is away loosens the limit to one per
-     * instance instead of lifting it or stopping every counted call.
+     * instance instead of lifting it or stopping every counted call. A store that is set
+     * up wrongly is not bridged.
      *
      * @return {@code 0} when the call was counted, otherwise the milliseconds until the
      * oldest call in the window leaves it
+     * @throws RateLimitStoreMisconfiguredException when the store cannot count until
+     * someone fixes it
      */
     private long admit(String key, long now, Limit limit) {
         RateLimitStore counted = store();
         try {
             return counted.admit(key, now, limit.max(), limit.window().toMillis());
         }
+        catch (RateLimitStoreMisconfiguredException e) {
+            throw e; // will not pass: refuse rather than count somewhere else
+        }
         catch (RuntimeException e) {
-            long last = lastWarned.get();
-            if (now - last >= WARN_EVERY_MILLIS && lastWarned.compareAndSet(last, now)) {
+            if (warnNow(now)) {
                 LOG.warnf(e, "Rate limit store '%s' failed, counting in this instance's memory meanwhile: %s",
                         counted.id(), e.getMessage());
             }
             return local.admit(key, now, limit.max(), limit.window().toMillis());
         }
+    }
+
+    /** Whether a store failure is logged now: at most once a minute. */
+    private boolean warnNow(long now) {
+        long last = lastWarned.get();
+        return now - last >= WARN_EVERY_MILLIS && lastWarned.compareAndSet(last, now);
     }
 
     private static String key(Caller caller, String system) {

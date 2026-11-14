@@ -15,6 +15,7 @@ import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck.Decision;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStoreMisconfiguredException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -173,6 +174,25 @@ class RateLimitCheckTest {
             .forCheck(one);
         assertTrue(degraded.check(ctx).allowed());
         assertEquals("rate_limited", degraded.check(ctx).code());
+    }
+
+    /** Missing grants are not bridged: the counted calls are refused, the others run. */
+    @Test
+    void refusesCountedCallsWhileTheStoreIsMisconfigured() {
+        RateLimitStore noGrants = (key, at, max, window) -> {
+            throw new RateLimitStoreMisconfiguredException("permission denied", null);
+        };
+        RateLimitCheck refusing = new RateLimitCheck(now::get, noGrants);
+        ProviderConfig limit = settings("max", "5");
+        Decision write = refusing
+            .check(new AccessCheck.Context(DELETE, "prod", "demo", Map.of(), GrantedRoles.UNKNOWN, ALICE, null)
+                .forCheck(limit));
+        assertFalse(write.allowed());
+        assertEquals("access_check_failed", write.code());
+        assertTrue(refusing
+            .check(new AccessCheck.Context(SEARCH, "prod", "demo", Map.of(), GrantedRoles.UNKNOWN, ALICE, null)
+                .forCheck(limit))
+            .allowed());
     }
 
     /** Off on the server, switched on and tightened by one system. */

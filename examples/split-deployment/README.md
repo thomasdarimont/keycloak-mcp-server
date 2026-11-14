@@ -65,6 +65,8 @@ The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client and `m
   | `kc_mcp_system`, `kc_mcp_realm`, `kc_mcp_secret`, `kc_mcp_signing_key` | `SELECT` |
   | `kc_mcp_audit_event` | `INSERT` |
   | `kc_mcp_pending_approval` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` (CIBA confirmations) |
+  | `kc_mcp_rate_limit_bucket` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` (the `rate-limit` access check's counters) |
+  | `kc_mcp_rate_limit_call` | `SELECT`, `INSERT`, `DELETE` |
   | `kc_mcp_user_session`, Liquibase's tables | none |
 
 - **What has to happen on the admin side**, because the MCP side cannot write it:

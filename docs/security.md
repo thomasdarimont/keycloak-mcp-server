@@ -319,8 +319,12 @@ The denial is `rate_limited` and says when the next call is possible. What to kn
   Without it each instance counts in its own memory (`memory-rate-limits`), so behind a proxy the effective limit is
   up to `max` times the instances. `kc-mcp.spi.rate-limit-store.provider` names the store,
   `kc-mcp.spi.rate-limit-store.db.enabled=false` keeps the counts out of the database.
-- While the database cannot be reached the check counts in the instance's memory instead of refusing every counted
-  call or admitting all of them: the limit is looser for the time, never gone. The server log says so.
+- While the database cannot be reached, or times out under load, the check counts in the instance's memory instead
+  of refusing every counted call or admitting all of them: the limit is looser for the time, never gone. The server
+  log says so.
+- A database that refuses the tables for good is not bridged: when its user has no grants on
+  `kc_mcp_rate_limit_bucket` and `kc_mcp_rate_limit_call`, or the tables do not exist, the counted calls are refused
+  (`access_check_failed`) until that is fixed, and the server log names the reason. Calls that are not counted run.
 - The instances compare their own clocks, so keep them in sync (NTP); a skew shifts the window by as much.
 - Without authenticated callers ([Callers](#callers)) all calls on a system share one count.
 
