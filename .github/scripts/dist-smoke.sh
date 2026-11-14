@@ -90,8 +90,11 @@ stop_server
 rm -f "$DIST"/data/smoke-ui.*
 
 echo "== 1c. build: the database kind of the unpacked distribution"
-if "$DIST/bin/kcmcp.sh" build --db=mysql 2> build.err; then echo "an unsupported database was accepted"; exit 1; fi
+if "$DIST/bin/kcmcp.sh" build --db=db2 2> build.err; then echo "an unsupported database was accepted"; exit 1; fi
 grep -q 'build needs --db' build.err || { cat build.err; exit 1; }
+# Oracle's driver is not shipped: without it in lib/providers the build is refused before anything changes
+if "$DIST/bin/kcmcp.sh" build --db=oracle 2> build.err; then echo "an Oracle build without its driver was accepted"; exit 1; fi
+grep -q 'lib/providers' build.err || { cat build.err; exit 1; }
 "$DIST/bin/kcmcp.sh" build --db=postgresql
 [ ! -e "$DIST/quarkus-app" ] || { echo "the build left quarkus-app/ behind"; exit 1; }
 if "$DIST/bin/kcmcp.sh" start --clean-env --quarkus.http.port="$PORT" --kc-mcp.startup-check=off \
