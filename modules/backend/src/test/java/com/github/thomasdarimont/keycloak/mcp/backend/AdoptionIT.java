@@ -73,7 +73,23 @@ class AdoptionIT {
     }
 
     static String keycloakId(String path) {
-        return new JsonObject(AdoptionTestResource.keycloak("GET", path, null).body()).getString("id");
+        return field(path, "id");
+    }
+
+    /**
+     * The service account user of a client in master. Keycloak after 26.8 names it on the
+     * client and drops the service-account-user endpoint.
+     */
+    static String serviceAccountUserId(String clientUuid) {
+        String id = field("/admin/realms/master/clients/" + clientUuid, "serviceAccountUserId");
+        return id != null ? id : keycloakId("/admin/realms/master/clients/" + clientUuid + "/service-account-user");
+    }
+
+    /**
+     * A field of the JSON object Keycloak returns for the path; {@code null} when absent.
+     */
+    private static String field(String path, String name) {
+        return new JsonObject(AdoptionTestResource.keycloak("GET", path, null).body()).getString(name);
     }
 
     static String clientUuid(String clientId) {
@@ -114,7 +130,7 @@ class AdoptionIT {
         // what the script does for roles=admin: the role, and the role in the client's
         // scope
         String uuid = clientUuid("kc-mcp-adopt-admin");
-        String user = keycloakId("/admin/realms/master/clients/" + uuid + "/service-account-user");
+        String user = serviceAccountUserId(uuid);
         JsonArray role = new JsonArray()
             .add(new JsonObject(AdoptionTestResource.keycloak("GET", "/admin/realms/master/roles/admin", null).body()));
         assertEquals(204,
