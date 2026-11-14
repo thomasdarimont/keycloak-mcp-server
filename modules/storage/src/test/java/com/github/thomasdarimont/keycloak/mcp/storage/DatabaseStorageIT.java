@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStoreMisconfiguredException;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditEvent;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolLevel;
@@ -843,6 +844,58 @@ class DatabaseStorageIT {
         store.deleteOlderThan(now + window);
         assertEquals(0, countRateLimitCalls(bucket), "calls at or before the cutoff are purged");
         assertEquals(0, store.admit(key, now + window + 1, 1, window), "a purged bucket is created again");
+    }
+
+    /**
+     * The split deployment's MCP role, with exactly the grants its example hands out
+     * ({@code examples/split-deployment/init/grants.sql}), can count, refuse and purge; a
+     * role without them is told apart from a database that is away.
+     */
+    @Test
+    void rateLimitWorksWithTheSplitDeploymentGrantsAndReportsMissingOnes() throws Exception {
+        var store = rateLimitStores.select(DatabaseRateLimitStore.class).get();
+        String grants = java.nio.file.Files
+            .readString(java.nio.file.Path.of("../../examples/split-deployment/init/grants.sql"));
+        assertTrue(grants.contains("kc_mcp_rate_limit_bucket") && grants.contains("kc_mcp_rate_limit_call"),
+                "the example grants name the rate limit tables");
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+            for (String role : List.of("kcmcp_mcp", "kcmcp_nogrants")) {
+                sql("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '" + role + "') THEN CREATE ROLE "
+                        + role + "; END IF; END $$");
+                sql("GRANT USAGE ON SCHEMA public TO " + role);
+            }
+            for (String statement : grants.replaceAll("(?m)^--.*$", "").split(";")) {
+                if (!statement.isBlank()) {
+                    sql(statement);
+                }
+            }
+        });
+
+        String key = "user:demo/" + UUID.randomUUID() + "@prod";
+        long now = System.currentTimeMillis();
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+            sql("SET LOCAL ROLE kcmcp_mcp");
+            assertEquals(0, store.admit(key, now, 2, 60_000), "the bucket is created and the call counted");
+            assertEquals(0, store.admit(key, now + 1, 2, 60_000));
+            assertTrue(store.admit(key, now + 2, 2, 60_000) > 0, "the limit holds");
+            assertEquals(2, store.deleteOlderThan(now + 1), "the hourly purge may delete");
+        });
+
+        RuntimeException refused = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+                () -> io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+                    sql("SET LOCAL ROLE kcmcp_nogrants");
+                    store.admit(key, now, 2, 60_000);
+                }));
+        Throwable cause = refused;
+        while (cause != null && !(cause instanceof RateLimitStoreMisconfiguredException)) {
+            cause = cause.getCause();
+        }
+        assertTrue(cause != null, "missing grants are reported as a matter of setup: " + refused);
+        assertTrue(cause.getMessage().contains("42501"), cause.getMessage());
+    }
+
+    private static void sql(String statement) {
+        RateLimitCallEntity.getEntityManager().createNativeQuery(statement).executeUpdate();
     }
 
     @jakarta.transaction.Transactional
