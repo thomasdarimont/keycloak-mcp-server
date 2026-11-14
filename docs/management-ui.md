@@ -103,6 +103,11 @@ which provider and subject it belongs to.
 - **Back-channel logout.** `POST /bff/backchannel-logout` takes the provider's logout token, verifies it against the
   provider its `iss` and `aud` name, and deletes the sessions with that issuer and `sid` (or subject) at once, on every
   instance. On the Keycloak client: *Backchannel logout URL* `<server>/bff/backchannel-logout`, *session required* on.
+- **A sign-in that cannot be completed.** When the callback to `/bff/login` fails (the code exchange is refused, or
+  the ID token does not verify, e.g. already expired because the provider's clock is behind after a laptop's
+  suspend), a browser (`Accept: text/html`) is sent to `/ui/?signin=failed`, which says so and offers to sign in
+  again; other clients get 401 `sign_in_failed`. The server logs the reason without the token's claims. The login is
+  not restarted on its own: while the cause lasts that would loop.
 - **Several instances.** Set `QUARKUS_OIDC_KC_MCP_UI_<ALIAS>_AUTHENTICATION_STATE_SECRET` so any instance can finish a
   login another one started; the session rows are shared through the database.
 

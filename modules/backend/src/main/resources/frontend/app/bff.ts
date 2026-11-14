@@ -367,7 +367,10 @@ export interface AdoptionRequest {
   realms?: string[];
   /** Every listed realm, and the allowlist cleared so later realms are reachable too. */
   allRealms?: boolean;
-  /** Needed to adopt a selection on a system without an allowlist. */
+  /**
+   * On a system without an allowlist: restrict it to the selected and the already adopted
+   * realms. Without it such a system keeps reaching every realm.
+   */
   restrict?: boolean;
   /** Preset of newly adopted realms. */
   preset?: string;
@@ -380,6 +383,8 @@ export interface AdoptionResult {
   unchanged: string[];
   restricted: boolean;
   allowedRealms: string[];
+  /** Listed realms the system reached before and no longer does. */
+  unreachable: string[];
 }
 
 /** Register realms Keycloak lists (POST /bff/api/systems/{alias}/adoption). */

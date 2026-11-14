@@ -210,14 +210,18 @@ Register the system first (step 2 above), then:
   name); `notListed`: known here, not listed there. Keycloak failures answer 502: `token_refused`,
   `admin_api_unauthorized` (kc-admin-api scope), `admin_api_forbidden` (roles), `keycloak_unreachable`.
 - `POST /admin/systems/<alias>/adoption` `{"realms": [...], "restrict": true, "preset": "read-only"}`: realm id and
-  display name become realm settings (`preset` for new ones), the realms go on the allowlist. Existing settings keep
-  theirs, gain the realm id. On a system without an allowlist a selection restricts it: 409 `would_restrict` without
-  `restrict: true`. `{"allRealms": true}`: every listed realm, allowlist cleared (later realms reachable).
+  display name become realm settings (`preset` for new ones). Existing settings keep theirs, gain the realm id. A
+  system with an allowlist gets the realms added to it. A system without one keeps reaching every realm; with
+  `restrict: true` its allowlist becomes the selected realms and the ones adopted before. `unreachable` in the answer
+  names the listed realms the system no longer reaches. `{"allRealms": true}`: every listed realm, allowlist cleared
+  (later realms reachable).
 - `DELETE /admin/systems/<alias>/adoption/<realm>[?restrict=true]`: gives a realm up. It leaves the allowlist (the
   access ends) and its realm settings go; Keycloak keeps the client and its roles. Without an allowlist the system
   reaches every realm, so leaving one out makes the allowlist the other listed realms: 409 `would_restrict` without
   `restrict=true`. Refused: the last realm on the allowlist (`last_realm`, an empty allowlist means every realm) and
   the default realm (`default_realm`).
+- `DELETE /admin/systems/<alias>/realms/<realm>` (UI: realm page → **Delete settings**) only removes the realm
+  settings: the realm stays reachable (on the allowlist, or through no allowlist). Unadopt ends the access.
 - UI: system → **Adopt** tab, the same steps; **Unadopt** on an adopted or allowed realm.
 
 Without the database, the systems file does the same with a provisioned key: the entry in `kc-mcp.systems-file`

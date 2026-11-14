@@ -156,23 +156,29 @@ class AdoptionIT {
     @Test
     @Order(3)
     void adoptingASelectionRestrictsOnlyWhenAskedTo() {
-        admin().body("{\"realms\": [\"adopt-a\", \"adopt-b\"]}")
+        // without an allowlist adopting only stores settings: every realm stays reachable
+        admin().body("{\"realms\": [\"adopt-a\"]}")
             .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
-            .statusCode(409)
-            .body("error", equalTo("would_restrict"));
-        admin().body("{\"realms\": [\"adopt-a\", \"nope\"], \"restrict\": true}")
+            .statusCode(200)
+            .body("adopted", equalTo(List.of("adopt-a")))
+            .body("restricted", equalTo(false))
+            .body("allowedRealms", equalTo(List.of()))
+            .body("unreachable", equalTo(List.of()));
+        admin().body("{\"realms\": [\"adopt-b\", \"nope\"], \"restrict\": true}")
             .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_keycloak_realm"));
 
-        admin().body("{\"realms\": [\"adopt-a\", \"adopt-b\"], \"restrict\": true}")
+        // restricting keeps the realm adopted before on the allowlist
+        admin().body("{\"realms\": [\"adopt-b\"], \"restrict\": true}")
             .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
             .statusCode(200)
-            .body("adopted", equalTo(List.of("adopt-a", "adopt-b")))
-            .body("allowedRealms", equalTo(List.of("adopt-a", "adopt-b")));
+            .body("adopted", equalTo(List.of("adopt-b")))
+            .body("allowedRealms", equalTo(List.of("adopt-a", "adopt-b")))
+            .body("unreachable", hasItems("adopt-c", "master"));
         admin().get("/admin/systems/" + ADMIN_SYSTEM + "/realms/adopt-a")
             .then()
             .statusCode(200)

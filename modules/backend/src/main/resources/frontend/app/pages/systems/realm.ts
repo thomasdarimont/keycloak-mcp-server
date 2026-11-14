@@ -401,7 +401,8 @@ export class SystemRealmPage extends LitElement {
       ${writable
         ? html`<div class="confirm">
             <p class="lead" style="margin:0 0 0.5rem">
-              Delete realm settings — the system's settings apply again. Type
+              Delete realm settings — the system's settings apply again. The realm stays reachable; to end
+              the access, unadopt it on the <a href=${systemHref(this.alias, 'adopt')}>Adopt</a> tab. Type
               <code>${this.realm}</code> to confirm.
             </p>
             ${this.confirmDelete
