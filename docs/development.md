@@ -31,6 +31,11 @@ Modules under `modules/`:
   `data/`, `docs/`), assembled from `modules/distribution/src/main/content` and the backend's `quarkus-app` by
   `./mvnw package -Pdist` (the module is behind the `dist` profile; the default build stops at the jars)
 
+The instructions MCP clients receive at `initialize` live in
+`modules/backend/src/main/resources/META-INF/kc-mcp/server-instructions.txt` (`ServerInstructionsSourceFactory`):
+wrap lines freely, they are joined with a space; a blank line starts a paragraph. Setting
+`quarkus.mcp.server.server-info.instructions` anywhere (`kcmcp.conf`, an environment variable) replaces the file's text.
+
 ## Management UI
 
 The UI ([Management UI](management-ui.md)) is a [Lit](https://lit.dev) app in

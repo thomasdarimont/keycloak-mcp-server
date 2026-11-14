@@ -33,6 +33,25 @@ class McpEndpointTest {
         mcp = new McpClient().initialize(false);
     }
 
+    /**
+     * The instructions come from META-INF/kc-mcp/server-instructions.txt, as one
+     * paragraph.
+     */
+    @Test
+    void initializeAnswersWithTheServerInstructions() {
+        JsonObject params = new JsonObject().put("protocolVersion", "2025-06-18")
+            .put("capabilities", new JsonObject())
+            .put("clientInfo", new JsonObject().put("name", "test-client").put("version", "1.0"));
+        String instructions = new McpClient().request("initialize", params)
+            .getJsonObject("result")
+            .getString("instructions");
+        assertTrue(instructions.startsWith("Keycloak administration. Common tools are listed directly."), instructions);
+        assertTrue(instructions.contains("so no follow-up call is needed. After a change, report what the tool's"
+                + " answer says, and nothing about objects the call did not touch"), instructions);
+        assertTrue(instructions.endsWith("with role labels in their language."), instructions);
+        assertTrue(!instructions.contains("\n"), "the wrapped lines are joined: " + instructions);
+    }
+
     @Test
     void corsAllowsLocalOriginsOnly() {
         RestAssured.given()
