@@ -58,17 +58,24 @@ public class DatabaseUserSessionStore implements UserSessionStore {
                 + (crypto.enabled() ? ", tokens encrypted at rest" : ", not encrypted (set kc-mcp.storage.secret-key)");
     }
 
+    /**
+     * A new session, or one replaced as a whole. Renewals go through {@link #renew} and
+     * {@link #replace}, which never bring back a session removed meanwhile.
+     */
     @Override
     @Transactional
     public void save(UserSession session) {
-        // locked like deleteUnlessRenewed: an update of a row deleted meanwhile would
-        // fail, losing the renewal; after a delete the row is inserted again instead
         UserSessionEntity e = UserSessionEntity.findById(session.id(), LockModeType.PESSIMISTIC_WRITE);
         if (e == null) {
             e = new UserSessionEntity();
             e.id = session.id();
             e.createdAt = session.createdAt();
         }
+        write(e, session);
+        e.persist();
+    }
+
+    private void write(UserSessionEntity e, UserSession session) {
         e.idp = session.idp();
         e.issuer = session.issuer();
         e.subject = session.subject();
@@ -79,7 +86,62 @@ public class DatabaseUserSessionStore implements UserSessionStore {
         e.accessTokenExpiresIn = session.accessTokenExpiresIn();
         e.scope = session.scope();
         e.expiresAt = session.expiresAt();
-        e.persist();
+    }
+
+    /**
+     * Atomic through a row lock ({@code SELECT ... FOR UPDATE}), like
+     * {@link #deleteUnlessRenewed}: a removal that came first leaves nothing to renew;
+     * one that comes while the row is locked waits and then removes the renewed row,
+     * which still has its id, session and subject. The refresh token is compared
+     * decrypted, it is encrypted with a fresh nonce on every write.
+     */
+    @Override
+    @Transactional
+    public Optional<UserSession> renew(UserSession renewed, String refreshToken) {
+        UserSessionEntity e = UserSessionEntity.findById(renewed.id(), LockModeType.PESSIMISTIC_WRITE);
+        if (e == null || e.expiresAt <= System.currentTimeMillis()) {
+            return Optional.empty();
+        }
+        UserSession now = toSession(e);
+        if (!Objects.equals(now.refreshToken(), refreshToken)) {
+            return Optional.of(now);
+        }
+        write(e, renewed);
+        return Optional.of(renewed);
+    }
+
+    /**
+     * One {@code UPDATE} that gives the row its new id and tokens, so it is the same row
+     * throughout: a removal by id, session or subject that came first leaves nothing to
+     * update, and one waiting for the row lock re-checks the updated row, which still has
+     * its session and subject, and removes it. A delete and an insert instead would let a
+     * waiting removal by session miss the inserted row.
+     */
+    @Override
+    @Transactional
+    public boolean replace(String previousId, UserSession next) {
+        if (previousId == null || previousId.isBlank()) {
+            return false;
+        }
+        int moved = UserSessionEntity.getEntityManager()
+            .createNativeQuery("UPDATE kc_mcp_user_session SET id = ?1, idp = ?2, issuer = ?3, subject = ?4, sid = ?5,"
+                    + " id_token = ?6, access_token = ?7, refresh_token = ?8, access_token_expires_in = ?9, scope = ?10,"
+                    + " expires_at = ?11 WHERE id = ?12 AND expires_at > ?13")
+            .setParameter(1, next.id())
+            .setParameter(2, next.idp())
+            .setParameter(3, next.issuer())
+            .setParameter(4, next.subject())
+            .setParameter(5, next.sid())
+            .setParameter(6, crypto.protect(next.idToken()))
+            .setParameter(7, next.accessToken() == null ? null : crypto.protect(next.accessToken()))
+            .setParameter(8, next.refreshToken() == null ? null : crypto.protect(next.refreshToken()))
+            .setParameter(9, next.accessTokenExpiresIn())
+            .setParameter(10, next.scope())
+            .setParameter(11, next.expiresAt())
+            .setParameter(12, previousId)
+            .setParameter(13, System.currentTimeMillis())
+            .executeUpdate();
+        return moved == 1;
     }
 
     @Override

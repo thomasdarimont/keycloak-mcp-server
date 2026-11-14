@@ -36,7 +36,10 @@ public final class NoEscalationCheck implements AccessCheck {
     static final Set<String> GRANT_TOOLS = Set.of("keycloak_user_role_assign", "keycloak_user_client_role_assign",
             "keycloak_group_role_assign", "keycloak_group_client_role_assign", "keycloak_group_member_add",
             "keycloak_role_composite_add", "keycloak_idp_mapper_create", "keycloak_idp_mapper_update",
-            "keycloak_default_group_add", "keycloak_realm_partial_import");
+            "keycloak_default_group_add", "keycloak_realm_partial_import",
+            // an organization group's members get its roles; joining an organization
+            // widens what the organization group scope lets a caller manage
+            "keycloak_org_group_member_add", "keycloak_org_member_add");
     /** tools that act on a target user: the target must not outrank the caller */
     static final Map<String, String> USER_ARG = Map.ofEntries(Map.entry("keycloak_user_set_enabled", "id"),
             Map.entry("keycloak_user_update", "id"), Map.entry("keycloak_user_delete", "id"),
@@ -138,6 +141,10 @@ public final class NoEscalationCheck implements AccessCheck {
                         .map(p -> directory.groupRoles(ctx.realm(), p))
                         .orElse(Set.of());
                 case "keycloak_realm_partial_import" -> importGrants(directory, ctx);
+                case "keycloak_org_group_member_add" ->
+                    directory.organizationGroup(ctx.realm(), ctx.arg("organizationId"), ctx.arg("group"))
+                        .map(g -> directory.organizationGroupRoles(ctx.realm(), g))
+                        .orElse(Set.of());
                 default -> Set.of();
             };
             Set<String> missing = CallerContext.missing(granting, mine);

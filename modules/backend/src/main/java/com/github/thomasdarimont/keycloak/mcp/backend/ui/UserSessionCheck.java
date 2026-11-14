@@ -169,7 +169,18 @@ public class UserSessionCheck {
                 session.sid(), idToken, accessToken, refreshToken, expiresIn,
                 tokens.path("scope").asText(session.scope()), session.createdAt(),
                 sessions.expiresAt(idToken, refreshToken, now));
-        store.save(renewed);
+        // only while the session still exists: a logout or back-channel logout that came
+        // while the tokens were renewed wins, the session is not written again
+        Optional<UserSession> stored = store.renew(renewed, session.refreshToken());
+        if (stored.isEmpty()) {
+            LOG.infof("Session check: %s was removed while its tokens were renewed, not stored again", session);
+            return Result.ended();
+        }
+        if (stored.get() != renewed) {
+            UserSession other = stored.get();
+            LOG.debugf("Session check: %s was renewed meanwhile, that renewal kept", other);
+            return new Result(true, other, expiryOf(other.idToken()), null, other.refreshToken() != null);
+        }
         LOG.debugf("Session check: %s renewed", renewed);
         return new Result(true, renewed, expiryOf(idToken),
                 expiresIn == null ? null : Instant.ofEpochMilli(now + expiresIn * 1000), refreshToken != null);

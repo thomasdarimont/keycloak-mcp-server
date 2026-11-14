@@ -36,6 +36,51 @@ public interface UserSessionStore extends Extension {
     void delete(String id);
 
     /**
+     * Stores the renewed tokens of a session only while it still exists and still holds
+     * {@code refreshToken}, the token the renewal was redeemed with. A logout or a
+     * back-channel logout that removed the session while its tokens were renewed wins:
+     * the session is not written again. A session renewed meanwhile by another request
+     * keeps that renewal.
+     * <p>
+     * The default reads, compares and saves in separate calls, which leaves a short
+     * window between them; stores shared by several instances should override it with an
+     * atomic operation (a row lock, a compare-and-set script, a versioned write).
+     *
+     * @return the session as it is now: {@code renewed} when it was written, the other
+     * renewal when there was one, empty when the session is gone
+     */
+    default Optional<UserSession> renew(UserSession renewed, String refreshToken) {
+        Optional<UserSession> now = find(renewed.id());
+        if (now.isEmpty() || !java.util.Objects.equals(now.get().refreshToken(), refreshToken)) {
+            return now;
+        }
+        save(renewed);
+        return Optional.of(renewed);
+    }
+
+    /**
+     * Moves a session to a new id with new tokens (a refresh by the OIDC layer, which
+     * gives the browser a new id) only while the session {@code previousId} still exists:
+     * a session removed while its tokens were refreshed stays removed. Afterwards
+     * {@code previousId} is gone.
+     * <p>
+     * The default reads, saves and removes in separate calls; stores shared by several
+     * instances should override it with an atomic operation, one that a concurrent
+     * removal by session or subject either precedes or also applies to.
+     *
+     * @return whether the session was moved; {@code false} when {@code previousId} was
+     * gone
+     */
+    default boolean replace(String previousId, UserSession next) {
+        if (find(previousId).isEmpty()) {
+            return false;
+        }
+        save(next);
+        delete(previousId);
+        return true;
+    }
+
+    /**
      * Removes a session only while it still holds {@code refreshToken}: the session check
      * redeemed that token and the provider refused it, but with rotating refresh tokens
      * another request, on this instance or another one, may have renewed the session in

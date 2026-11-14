@@ -249,7 +249,15 @@ public class OrgToolProvider extends AbstractToolProvider {
     }
 
     static OrganizationRepresentation find(ToolCall call, String idOrAliasOrName) {
-        OrganizationsResource orgs = call.kc().realm(call.realm()).organizations();
+        return find(call.kc(), call.realm(), idOrAliasOrName);
+    }
+
+    /**
+     * An organization by id, alias or exact name, as the tools resolve it; the access
+     * checks use the same so that they judge the organization a tool then changes.
+     */
+    public static OrganizationRepresentation find(KeycloakAdmin kc, String realm, String idOrAliasOrName) {
+        OrganizationsResource orgs = kc.realm(realm).organizations();
         if (KeycloakAdmin.isUuid(idOrAliasOrName)) {
             try {
                 return orgs.get(idOrAliasOrName).toRepresentation();

@@ -109,6 +109,35 @@ class UserSessionCheckTest {
         }
     }
 
+    /**
+     * A logout or back-channel logout that removes the session while its refresh token is
+     * being redeemed wins: the successful renewal does not bring the session back.
+     */
+    @Test
+    void aSessionRemovedDuringItsRenewalStaysRemoved() {
+        store.save(session("rt-1"));
+        UserSessionCheck.Result r = check(s -> {
+            store.delete("s-1");
+            return new UserSessionCheck.TokenAnswer(200, "{\"refresh_token\":\"rt-2\",\"expires_in\":300}");
+        }).check("s-1");
+        assertFalse(r.active());
+        assertTrue(store.rows.isEmpty(), "not stored again: " + store.rows);
+    }
+
+    /**
+     * Another request renewed the session first: its renewal is kept, not overwritten.
+     */
+    @Test
+    void aRenewalDoesNotOverwriteAnotherOne() {
+        store.save(session("rt-1"));
+        UserSessionCheck.Result r = check(s -> {
+            store.save(session("rt-other"));
+            return new UserSessionCheck.TokenAnswer(200, "{\"refresh_token\":\"rt-2\",\"expires_in\":300}");
+        }).check("s-1");
+        assertTrue(r.active());
+        assertEquals("rt-other", store.rows.get("s-1").refreshToken());
+    }
+
     @Test
     void aSessionRenewedMeanwhileIsKept() {
         store.save(session("rt-1"));

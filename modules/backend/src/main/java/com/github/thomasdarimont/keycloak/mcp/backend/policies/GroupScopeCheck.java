@@ -39,6 +39,14 @@ public final class GroupScopeCheck implements AccessCheck {
             Map.entry("keycloak_group_client_role_unassign", "groupId"), Map.entry("keycloak_group_create", "parentId"),
             Map.entry("keycloak_default_group_add", "groupId"), Map.entry("keycloak_default_group_remove", "groupId"));
 
+    /**
+     * Organization group tools (organization API): tool name -> argument naming the
+     * target group; the organization is the {@code organizationId} argument.
+     */
+    static final Map<String, String> ORG_GROUP_ARG = Map.ofEntries(Map.entry("keycloak_org_group_delete", "group"),
+            Map.entry("keycloak_org_group_members_list", "group"), Map.entry("keycloak_org_group_member_add", "group"),
+            Map.entry("keycloak_org_group_member_remove", "group"), Map.entry("keycloak_org_group_create", "parent"));
+
     private final Function<Context, RealmDirectory> directories;
     private final PolicySettings settings;
 
@@ -53,7 +61,9 @@ public final class GroupScopeCheck implements AccessCheck {
 
     @Override
     public Decision check(Context ctx) {
-        if (settings.groupScope() == PolicySettings.GroupScope.OFF || !GROUP_ARG.containsKey(ctx.tool().name())) {
+        String tool = ctx.tool().name();
+        if (settings.groupScope() == PolicySettings.GroupScope.OFF
+                || (!GROUP_ARG.containsKey(tool) && !ORG_GROUP_ARG.containsKey(tool))) {
             return Decision.allow();
         }
         Optional<Decision> pre = CallerContext.preflight(ctx, settings);
@@ -69,7 +79,10 @@ public final class GroupScopeCheck implements AccessCheck {
             return Decision.deny("manager_role_required",
                     "Managing groups requires the role " + settings.managerRole() + ".");
         }
-        String groupRef = ctx.arg(GROUP_ARG.get(ctx.tool().name()));
+        if (ORG_GROUP_ARG.containsKey(tool)) {
+            return organizationGroup(directory, ctx, userId, ctx.arg(ORG_GROUP_ARG.get(tool)));
+        }
+        String groupRef = ctx.arg(GROUP_ARG.get(tool));
         if (groupRef == null) {
             // group_create without parent = a new top-level group outside any scope
             return Decision.deny("group_out_of_scope", "You may only create subgroups of your own groups.");
@@ -83,6 +96,49 @@ public final class GroupScopeCheck implements AccessCheck {
             case ORGANIZATION -> inOwnOrganizations(directory, ctx, userId, target.get());
             default -> Decision.allow();
         };
+    }
+
+    /**
+     * A group of an organization (organization API): in group mode the caller must be in
+     * it or one of its parent groups, in organization mode the organization must be one
+     * of the caller's. A new top-level group lies in no group, but in its organization.
+     */
+    private Decision organizationGroup(RealmDirectory directory, Context ctx, String userId, String groupRef) {
+        String orgRef = ctx.arg("organizationId");
+        if (orgRef == null) {
+            return Decision.allow(); // let the tool produce its invalid_arguments
+        }
+        if (groupRef == null) {
+            if (settings.groupScope() == PolicySettings.GroupScope.GROUP) {
+                return Decision.deny("group_out_of_scope", "You may only create subgroups of your own groups.");
+            }
+            Optional<String> org = directory.organizationId(ctx.realm(), orgRef);
+            return org.isEmpty() ? Decision.allow() : inOwnOrganization(directory, ctx, userId, org.get(), orgRef);
+        }
+        Optional<RealmDirectory.OrganizationGroup> target = directory.organizationGroup(ctx.realm(), orgRef, groupRef);
+        if (target.isEmpty()) {
+            return Decision.allow(); // let the tool produce its not_found
+        }
+        RealmDirectory.OrganizationGroup g = target.get();
+        if (settings.groupScope() == PolicySettings.GroupScope.ORGANIZATION) {
+            return inOwnOrganization(directory, ctx, userId, g.organizationId(), orgRef);
+        }
+        for (String path : directory.organizationGroupPaths(ctx.realm(), g.organizationId(), userId)) {
+            if (g.path().equals(path) || g.path().startsWith(path + "/")) {
+                return Decision.allow();
+            }
+        }
+        return Decision.deny("group_out_of_scope", "Caller '" + ctx.caller().name() + "' is not a member of " + g.path()
+                + " of organization '" + orgRef + "' or one of its parent groups.");
+    }
+
+    private Decision inOwnOrganization(RealmDirectory directory, Context ctx, String userId, String orgId,
+            String orgRef) {
+        if (directory.organizationsOfUser(ctx.realm(), userId).contains(orgId)) {
+            return Decision.allow();
+        }
+        return Decision.deny("group_out_of_scope",
+                "Organization '" + orgRef + "' is not an organization of caller '" + ctx.caller().name() + "'.");
     }
 
     private Decision inOwnGroups(RealmDirectory directory, Context ctx, String userId, String target) {

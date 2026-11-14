@@ -26,6 +26,7 @@ import io.quarkus.oidc.OidcRequestContext;
 import io.quarkus.oidc.OidcTenantConfig;
 import io.quarkus.oidc.TokenStateManager;
 import io.quarkus.security.AuthenticationCompletionException;
+import io.quarkus.security.AuthenticationFailedException;
 import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 
@@ -35,12 +36,13 @@ import io.vertx.ext.web.RoutingContext;
  * {@link #createTokenState}, which stores them as a {@link UserSession} under a random
  * id, and that id is what the session cookie carries; {@link #getTokens} loads them
  * again, {@link #deleteTokens} ends the session (logout, invalid session). A refresh
- * replaces the row under a new id and removes the old one. The store is the registered
- * {@link UserSessionStore} with the lowest order, the database storage's by default,
- * which encrypts the tokens at rest (the tenant switches Quarkus's own token encryption
- * off, see {@link UiTenant#config}); with the UI on and no store the first login fails,
- * which {@link UiRoutes} already reports at startup. Database calls run on a worker
- * thread.
+ * moves the row to a new id, only while it still exists: a session removed while its
+ * tokens were refreshed stays removed ({@link UserSessionStore#replace}). The store is
+ * the registered {@link UserSessionStore} with the lowest order, the database storage's
+ * by default, which encrypts the tokens at rest (the tenant switches Quarkus's own token
+ * encryption off, see {@link UiTenant#config}); with the UI on and no store the first
+ * login fails, which {@link UiRoutes} already reports at startup. Database calls run on a
+ * worker thread.
  */
 @ApplicationScoped
 @Alternative
@@ -85,15 +87,31 @@ public class UserSessionTokenStateManager implements TokenStateManager {
                 tokens.getAccessToken(), tokens.getRefreshToken(), tokens.getAccessTokenExpiresIn(),
                 tokens.getAccessTokenScope(), now, expiresAt(tokens, now));
         return requestContext.runBlocking(() -> {
-            UserSessionStore s = store();
-            if (previous != null) {
-                s.delete(previous);
-            }
-            s.save(session);
+            persist(previous, session);
             routingContext.put(CURRENT_SESSION, id);
-            LOG.debugf("User session %s %s", session, previous == null ? "created" : "refreshed");
             return id;
         });
+    }
+
+    /**
+     * Stores a new session, or moves the session {@code previous} to the refreshed one,
+     * only while it still exists: a logout or back-channel logout that came while Quarkus
+     * refreshed the tokens wins.
+     *
+     * @throws AuthenticationFailedException when {@code previous} was removed meanwhile
+     */
+    void persist(String previous, UserSession session) {
+        UserSessionStore s = store();
+        if (previous == null) {
+            s.save(session);
+            LOG.debugf("User session %s created", session);
+            return;
+        }
+        if (!s.replace(previous, session)) {
+            LOG.infof("User session %s was removed while its tokens were refreshed, not stored again", session);
+            throw new AuthenticationFailedException("The session ended while its tokens were refreshed");
+        }
+        LOG.debugf("User session %s refreshed", session);
     }
 
     @Override

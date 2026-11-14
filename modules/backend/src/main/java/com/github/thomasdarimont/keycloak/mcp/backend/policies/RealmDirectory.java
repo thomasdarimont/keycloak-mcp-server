@@ -50,4 +50,35 @@ public interface RealmDirectory {
 
     /** Organizations a group belongs to. */
     Set<String> organizationsOfGroup(String realm, String groupPath);
+
+    /**
+     * The id of an organization given by id, alias or name, as the organization tools
+     * resolve it; empty when there is no such organization.
+     */
+    Optional<String> organizationId(String realm, String organizationRef);
+
+    /**
+     * A group of an organization (kept apart from the realm's groups), resolved as the
+     * organization tools resolve it: the organization by id, alias or name, the group by
+     * id, path or unique name; empty when either does not exist.
+     */
+    Optional<OrganizationGroup> organizationGroup(String realm, String organizationRef, String groupRef);
+
+    /**
+     * Roles a member of the organization group gets: its and its ancestors' mappings,
+     * composite-expanded.
+     */
+    Set<String> organizationGroupRoles(String realm, OrganizationGroup group);
+
+    /**
+     * Paths (within the organization) of the organization's groups a user is a direct
+     * member of.
+     */
+    List<String> organizationGroupPaths(String realm, String organizationId, String userId);
+
+    /**
+     * A group of an organization: its organization, id and path within the organization.
+     */
+    record OrganizationGroup(String organizationId, String id, String path) {
+    }
 }

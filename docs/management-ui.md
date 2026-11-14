@@ -99,7 +99,11 @@ which provider and subject it belongs to.
   idle timeout) answers 401 `session_ended` and loses its row; 503 when the provider cannot be asked. Only
   `invalid_grant` ends a session: a refusal of the server's client (`invalid_client`, ...) is a 503 and the session
   stays. Concurrent checks of one session share one refresh, and a check whose (rotated) refresh token was already
-  replaced by another request keeps the renewed session instead of deleting it.
+  replaced by another request keeps the renewed session instead of deleting it. A logout that comes while a session's
+  tokens are renewed (by the check or by the OIDC layer's own refresh) wins: the renewal is stored only while the row
+  still exists (`UserSessionStore.renew` / `replace`, one locked row in the database), so a removed session never comes
+  back. In a rare race a renewal that loses against the cleanup after an `invalid_grant` ends the session too; the
+  next request signs in again through the provider's SSO session.
 - **Back-channel logout.** `POST /bff/backchannel-logout` takes the provider's logout token, verifies it against the
   provider its `iss` and `aud` name, and deletes the sessions with that issuer and `sid` (or subject) at once, on every
   instance. On the Keycloak client: *Backchannel logout URL* `<server>/bff/backchannel-logout`, *session required* on.

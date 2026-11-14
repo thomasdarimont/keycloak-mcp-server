@@ -431,7 +431,16 @@ public class OrgMembershipToolProvider extends AbstractToolProvider {
 
     /** Resolves an organization group by id, path or unique name. */
     static GroupRepresentation findGroup(ToolCall call, OrganizationRepresentation o, String ref) {
-        OrganizationGroupsResource groups = org(call, o).groups();
+        return findGroup(call.kc(), call.realm(), o, ref);
+    }
+
+    /**
+     * An organization group by id, path or unique name, as the tools resolve it; the
+     * access checks use the same so that they judge the group a tool then changes.
+     */
+    public static GroupRepresentation findGroup(KeycloakAdmin kc, String realm, OrganizationRepresentation o,
+            String ref) {
+        OrganizationGroupsResource groups = kc.realm(realm).organizations().get(o.getId()).groups();
         if (KeycloakAdmin.isUuid(ref)) {
             try {
                 return groups.group(ref).toRepresentation(true);

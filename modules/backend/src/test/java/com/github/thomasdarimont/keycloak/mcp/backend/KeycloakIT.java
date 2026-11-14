@@ -667,6 +667,85 @@ class KeycloakIT {
                 new JsonObject().put("realm", REALM).put("id", "p-carol").put("enabled", true),
                 new JsonObject().put("kc-mcp/test-caller", "p-alice").put("kc-mcp/test-caller-realm", "elsewhere")));
         assertEquals("caller_foreign_realm", foreign.getString("error"), foreign.encode());
+
+        organizationGroupsUnderThePolicies();
+    }
+
+    /**
+     * Organization groups are kept apart from the realm's groups and take their role
+     * mappings through the organization API: the group scope and the escalation check
+     * cover them as they cover realm groups.
+     */
+    void organizationGroupsUnderThePolicies() {
+        String orgId = call("keycloak_org_create", new JsonObject().put("name", "P Org").put("alias", "p-org"))
+            .getString("id");
+        String otherOrg = call("keycloak_org_create", new JsonObject().put("name", "Q Org").put("alias", "q-org"))
+            .getString("id");
+        // p-carol holds admin by now (granted above); p-dave holds nothing alice lacks
+        call("keycloak_user_create", new JsonObject().put("username", "p-dave"));
+        for (String user : List.of("p-alice", "p-dave")) {
+            call("keycloak_org_member_add", new JsonObject().put("organizationId", orgId).put("userId", user));
+        }
+        call("keycloak_org_group_create", new JsonObject().put("organizationId", orgId).put("name", "team"));
+        JsonObject dev = call("keycloak_org_group_create",
+                new JsonObject().put("organizationId", orgId).put("name", "dev").put("parent", "/team"));
+        call("keycloak_org_group_create", new JsonObject().put("organizationId", orgId).put("name", "admins"));
+        call("keycloak_org_group_member_add",
+                new JsonObject().put("organizationId", orgId).put("group", "/team").put("userId", "p-alice"));
+        // the realm role admin, which alice lacks, on /team/dev through the organization
+        // API
+        try (Keycloak admin = KeycloakBuilder.builder()
+            .serverUrl(keycloakUrl)
+            .realm("master")
+            .clientId("admin-cli")
+            .username("admin")
+            .password("admin")
+            .build()) {
+            String devId = admin.realm(REALM)
+                .organizations()
+                .get(orgId)
+                .groups()
+                .getGroupByPath("/team/dev", false)
+                .getId();
+            JsonArray role = new JsonArray()
+                .add(JsonObject.mapFrom(admin.realm(REALM).roles().get("admin").toRepresentation()));
+            java.net.http.HttpResponse<String> mapped = java.net.http.HttpClient.newHttpClient()
+                .send(java.net.http.HttpRequest
+                    .newBuilder(java.net.URI.create(keycloakUrl + "/admin/realms/" + REALM + "/organizations/" + orgId
+                            + "/groups/" + devId + "/role-mappings/realm"))
+                    .header("Authorization", "Bearer " + admin.tokenManager().getAccessTokenString())
+                    .header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(role.encode()))
+                    .build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+            assertEquals(204, mapped.statusCode(), mapped.body());
+        }
+        catch (java.io.IOException | InterruptedException e) {
+            throw new IllegalStateException(e);
+        }
+        assertFalse(dev.containsKey("error"), dev.encode());
+
+        // group scope: alice is in /team of P Org
+        JsonObject inScope = as("p-alice", "keycloak_org_group_members_list",
+                new JsonObject().put("organizationId", orgId).put("group", "/team/dev"));
+        assertFalse(inScope.containsKey("error"), inScope.encode());
+        JsonObject outOfScope = as("p-alice", "keycloak_org_group_members_list",
+                new JsonObject().put("organizationId", orgId).put("group", "admins"));
+        assertEquals("group_out_of_scope", outOfScope.getString("error"), outOfScope.encode());
+        JsonObject topLevel = as("p-alice", "keycloak_org_group_create",
+                new JsonObject().put("organizationId", orgId).put("name", "x"));
+        assertEquals("group_out_of_scope", topLevel.getString("error"), topLevel.encode());
+
+        // no escalation: /team/dev grants admin through the organization API
+        JsonObject escalate = as("p-alice", "keycloak_org_group_member_add",
+                new JsonObject().put("organizationId", orgId).put("group", "/team/dev").put("userId", "p-dave"));
+        assertEquals("privilege_escalation", escalate.getString("error"), escalate.encode());
+        assertTrue(escalate.getString("message").contains("realm:admin"), escalate.encode());
+        JsonObject self = as("p-alice", "keycloak_org_group_member_add",
+                new JsonObject().put("organizationId", orgId).put("group", "/team").put("userId", "p-alice"));
+        assertEquals("self_grant", self.getString("error"), self.encode());
+        JsonObject joinOther = as("p-alice", "keycloak_org_member_add",
+                new JsonObject().put("organizationId", otherOrg).put("userId", "p-alice"));
+        assertEquals("self_grant", joinOther.getString("error"), joinOther.encode());
     }
 
     @Test

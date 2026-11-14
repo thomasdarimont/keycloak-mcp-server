@@ -20,6 +20,8 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.access.RoleRef;
+import com.github.thomasdarimont.keycloak.mcp.backend.tools.OrgMembershipToolProvider;
+import com.github.thomasdarimont.keycloak.mcp.backend.tools.OrgToolProvider;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
 
@@ -185,6 +187,122 @@ public class KeycloakDirectory implements RealmDirectory {
             }
         }
         return ids;
+    }
+
+    @Override
+    public Optional<String> organizationId(String realm, String organizationRef) {
+        return organization(realm, organizationRef).map(OrganizationRepresentation::getId);
+    }
+
+    private Optional<OrganizationRepresentation> organization(String realm, String organizationRef) {
+        try {
+            return Optional.of(OrgToolProvider.find(kc, realm, organizationRef));
+        }
+        catch (ToolException e) {
+            if ("not_found".equals(e.code())) {
+                return Optional.empty();
+            }
+            throw e;
+        }
+        catch (WebApplicationException e) {
+            if (status(e) == 404) {
+                return Optional.empty();
+            }
+            throw unreadable("Organization '" + organizationRef + "'", realm, e);
+        }
+    }
+
+    @Override
+    public Optional<OrganizationGroup> organizationGroup(String realm, String organizationRef, String groupRef) {
+        Optional<OrganizationRepresentation> found = organization(realm, organizationRef);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        OrganizationRepresentation o = found.get();
+        try {
+            GroupRepresentation g = OrgMembershipToolProvider.findGroup(kc, realm, o, groupRef);
+            return Optional.of(new OrganizationGroup(o.getId(), g.getId(), g.getPath()));
+        }
+        catch (ToolException e) {
+            if ("not_found".equals(e.code())) {
+                return Optional.empty();
+            }
+            // ambiguous: the policies cannot tell which group is meant either
+            throw e;
+        }
+        catch (WebApplicationException e) {
+            if (status(e) == 404) {
+                return Optional.empty();
+            }
+            throw unreadable("Group '" + groupRef + "' of organization '" + organizationRef + "'", realm, e);
+        }
+    }
+
+    /**
+     * Organization groups take their role mappings through the organization API; a member
+     * gets the group's and its ancestors' (by path within the organization).
+     */
+    @Override
+    public Set<String> organizationGroupRoles(String realm, OrganizationGroup group) {
+        List<RoleRepresentation> mappings = new ArrayList<>();
+        for (String path : ancestorPaths(group.path())) {
+            mappings.addAll(organizationGroupMappings(realm, group, path));
+        }
+        Set<String> out = new TreeSet<>();
+        expand(realm, mappings, out, new HashSet<>());
+        return out;
+    }
+
+    private List<RoleRepresentation> organizationGroupMappings(String realm, OrganizationGroup group, String path) {
+        String key = realm + "|org:" + group.organizationId() + '|' + path;
+        List<RoleRepresentation> own = groupMappings.get(key);
+        if (own != null) {
+            return own;
+        }
+        own = new ArrayList<>();
+        try {
+            String id = path.equals(group.path()) ? group.id()
+                    : kc.realm(realm)
+                        .organizations()
+                        .get(group.organizationId())
+                        .groups()
+                        .getGroupByPath(path, true)
+                        .getId();
+            MappingsRepresentation m = kc.queries().organizationGroupRoleMappings(realm, group.organizationId(), id);
+            if (m != null && m.getRealmMappings() != null) {
+                own.addAll(m.getRealmMappings());
+            }
+            addClientMappings(m, own);
+        }
+        catch (WebApplicationException e) {
+            // as for a realm group: a chain that looks smaller than it is would let the
+            // escalation check pass what it should not
+            throw new ToolException("group_unreadable",
+                    "The role mappings of group '" + path + "' of organization '" + group.organizationId()
+                            + "' in realm '" + realm + "' could not be read (HTTP " + status(e)
+                            + "), so the policies cannot judge this call.");
+        }
+        groupMappings.put(key, List.copyOf(own));
+        return own;
+    }
+
+    @Override
+    public List<String> organizationGroupPaths(String realm, String organizationId, String userId) {
+        try {
+            List<String> paths = new ArrayList<>();
+            for (GroupRepresentation g : allGroups((first, max) -> kc.queries()
+                .organizationMemberGroups(realm, organizationId, userId, first, max, true))) {
+                paths.add(g.getPath());
+            }
+            return paths;
+        }
+        catch (WebApplicationException e) {
+            if (status(e) == 404) {
+                // not a member of the organization: none of its groups
+                return List.of();
+            }
+            throw unreadable("The organization groups of user '" + userId + "'", realm, e);
+        }
     }
 
     // ---- helpers

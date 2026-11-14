@@ -605,10 +605,83 @@ class DatabaseStorageIT {
         store.save(session(id, "rt-3", System.currentTimeMillis() - 1));
         assertTrue(store.deleteUnlessRenewed(id, "rt-1").isEmpty());
         assertNull(QuarkusTransaction.requiringNew().call(() -> UserSessionEntity.findById(id)));
-        // a renewal saved after the removal brings the session back
+        // save writes what it gets (a new session); renewals go through renew, which
+        // does not bring a removed session back (below)
         store.save(session(id, "rt-4", later));
         assertEquals("rt-4", store.find(id).orElseThrow().refreshToken());
         store.delete(id);
+    }
+
+    /** A logout during a renewal wins: renew and replace never bring a session back. */
+    @Test
+    void renewalsNeverBringBackARemovedSession() {
+        UserSessionStore store = sessionStores.get();
+        long later = System.currentTimeMillis() + 60_000;
+        String id = UUID.randomUUID().toString();
+        store.save(session(id, "rt-1", later));
+        // renewed with the token it was redeemed with: written
+        assertEquals("rt-2", store.renew(session(id, "rt-2", later), "rt-1").orElseThrow().refreshToken());
+        // another renewal came first: kept, not overwritten
+        assertEquals("rt-2", store.renew(session(id, "rt-3", later), "rt-1").orElseThrow().refreshToken());
+        assertEquals("rt-2", store.find(id).orElseThrow().refreshToken());
+        // removed meanwhile: stays removed
+        store.delete(id);
+        assertTrue(store.renew(session(id, "rt-3", later), "rt-2").isEmpty());
+        assertNull(QuarkusTransaction.requiringNew().call(() -> UserSessionEntity.findById(id)));
+
+        // a refresh under a new id: moved while the session exists, refused once it is
+        // gone
+        String moved = UUID.randomUUID().toString();
+        store.save(session(id, "rt-1", later));
+        assertTrue(store.replace(id, session(moved, "rt-2", later)));
+        assertTrue(store.find(id).isEmpty());
+        assertEquals("rt-2", store.find(moved).orElseThrow().refreshToken(), "tokens decrypt after the move");
+        store.delete(moved);
+        String again = UUID.randomUUID().toString();
+        assertFalse(store.replace(moved, session(again, "rt-3", later)));
+        assertTrue(store.find(again).isEmpty());
+    }
+
+    /**
+     * A back-channel logout that waits for the row while a refresh moves it to a new id
+     * still removes it: the refresh updates the row in place, and the waiting removal
+     * re-checks the updated row by its session.
+     */
+    @Test
+    void aLogoutWaitingForARefreshStillRemovesTheSession() throws Exception {
+        UserSessionStore store = sessionStores.get();
+        long later = System.currentTimeMillis() + 60_000;
+        String sid = "sid-" + UUID.randomUUID();
+        String id = UUID.randomUUID().toString();
+        String moved = UUID.randomUUID().toString();
+        store.save(new UserSession(id, "corp", "https://sso.example.com/realms/corp", "sub-1", sid, "id.token",
+                "access.token", "rt-1", 300L, "openid", System.currentTimeMillis(), later));
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch logoutStarted = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            // a refresh holding the row while it moves the session to its new id
+            Future<Boolean> refresh = pool.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
+                UserSessionEntity.findById(id, LockModeType.PESSIMISTIC_WRITE);
+                locked.countDown();
+                logoutStarted.await(5, TimeUnit.SECONDS);
+                Thread.sleep(300);
+                return store.replace(id, new UserSession(moved, "corp", "https://sso.example.com/realms/corp", "sub-1",
+                        sid, "id.token", "access.token", "rt-2", 300L, "openid", System.currentTimeMillis(), later));
+            }));
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            Future<Long> logout = pool.submit(() -> {
+                logoutStarted.countDown();
+                return store.deleteBySession("https://sso.example.com/realms/corp", sid);
+            });
+            assertTrue(refresh.get(10, TimeUnit.SECONDS), "the refresh moved the session");
+            assertEquals(1L, logout.get(10, TimeUnit.SECONDS), "the logout waited and removed the moved row");
+        }
+        finally {
+            pool.shutdownNow();
+        }
+        assertTrue(store.find(id).isEmpty());
+        assertTrue(store.find(moved).isEmpty(), "the logout wins over the refresh");
     }
 
     @Test

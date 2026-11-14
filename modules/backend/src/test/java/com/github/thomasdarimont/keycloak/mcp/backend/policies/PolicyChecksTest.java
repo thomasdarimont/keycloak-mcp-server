@@ -169,6 +169,85 @@ class PolicyChecksTest {
                 check.check(ctx(groupRole, ALICE, Map.of("groupId", "/team-a", "role", "admin"))).code());
     }
 
+    /**
+     * Organization groups (organization API) hold roles of their own: joining one is a
+     * grant like joining a realm group, and the group scope covers them too.
+     */
+    FakeDirectory withOrganizationGroups() {
+        return dir.orgGroup("org-1", "/staff", Set.of("realm:viewer"))
+            .orgGroup("org-1", "/admins", Set.of("realm:admin", "realm:viewer", "realm:editor", "app.admin"))
+            .orgGroup("org-1", "/team", Set.of())
+            .orgGroup("org-1", "/team/dev", Set.of("realm:editor"))
+            .orgGroup("org-2", "/staff", Set.of("realm:viewer"))
+            .orgGroupMember("org-1", "alice", "/team");
+    }
+
+    @Test
+    void noEscalationThroughOrganizationGroups() {
+        withOrganizationGroups();
+        NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));
+        ToolSpec join = tool("keycloak_org_group_member_add", "organizationId", "group", "userId");
+        assertTrue(
+                check.check(ctx(join, ALICE, Map.of("organizationId", "org-1", "group", "/staff", "userId", "carol")))
+                    .allowed());
+        assertEquals("self_grant",
+                check.check(ctx(join, ALICE, Map.of("organizationId", "org-1", "group", "/admins", "userId", "alice")))
+                    .code(),
+                "a caller cannot add themselves to an organization group");
+        AccessCheck.Decision d = check
+            .check(ctx(join, ALICE, Map.of("organizationId", "org-1", "group", "admins", "userId", "carol")));
+        assertEquals("privilege_escalation", d.code(), "by name too");
+        assertTrue(d.message().contains("realm:admin"), d.message());
+        // unknown organization or group: nothing to grant, the tool reports not_found
+        assertTrue(check.check(ctx(join, ALICE, Map.of("organizationId", "org-9", "group", "/x", "userId", "carol")))
+            .allowed());
+        // joining an organization widens the organization group scope: not for oneself
+        ToolSpec member = tool("keycloak_org_member_add", "organizationId", "userId");
+        assertEquals("self_grant",
+                check.check(ctx(member, ALICE, Map.of("organizationId", "org-2", "userId", "alice"))).code());
+        assertTrue(check.check(ctx(member, ALICE, Map.of("organizationId", "org-2", "userId", "carol"))).allowed());
+    }
+
+    @Test
+    void groupScopeCoversOrganizationGroups() {
+        withOrganizationGroups();
+        ToolSpec add = tool("keycloak_org_group_member_add", "organizationId", "group", "userId");
+        ToolSpec create = tool("keycloak_org_group_create", "organizationId", "name", "parent");
+
+        GroupScopeCheck byOrg = new GroupScopeCheck(dir, settings(PolicySettings.GroupScope.ORGANIZATION, null, false));
+        assertTrue(byOrg.check(ctx(add, ALICE, Map.of("organizationId", "org-1", "group", "/staff", "userId", "carol")))
+            .allowed());
+        assertEquals("group_out_of_scope",
+                byOrg.check(ctx(add, ALICE, Map.of("organizationId", "org-2", "group", "/staff", "userId", "carol")))
+                    .code(),
+                "another organization's group");
+        assertTrue(byOrg.check(ctx(create, ALICE, Map.of("organizationId", "org-1", "name", "x"))).allowed(),
+                "a top-level group in an own organization");
+        assertEquals("group_out_of_scope",
+                byOrg.check(ctx(create, ALICE, Map.of("organizationId", "org-2", "name", "x"))).code());
+
+        GroupScopeCheck byGroup = new GroupScopeCheck(dir, settings(PolicySettings.GroupScope.GROUP, null, false));
+        assertTrue(byGroup
+            .check(ctx(add, ALICE, Map.of("organizationId", "org-1", "group", "/team/dev", "userId", "carol")))
+            .allowed(), "a subgroup of an own organization group");
+        assertEquals("group_out_of_scope",
+                byGroup.check(ctx(add, ALICE, Map.of("organizationId", "org-1", "group", "/staff", "userId", "carol")))
+                    .code());
+        assertEquals("group_out_of_scope",
+                byGroup.check(ctx(create, ALICE, Map.of("organizationId", "org-1", "name", "x"))).code());
+        assertTrue(byGroup.check(ctx(create, ALICE, Map.of("organizationId", "org-1", "name", "x", "parent", "/team")))
+            .allowed());
+        for (String tool : GroupScopeCheck.ORG_GROUP_ARG.keySet()) {
+            assertEquals("group_out_of_scope",
+                    byOrg
+                        .check(ctx(tool(tool, "organizationId", "group", "parent", "userId", "name"), ALICE,
+                                Map.of("organizationId", "org-2", "group", "/staff", "parent", "/staff", "userId",
+                                        "carol", "name", "x")))
+                        .code(),
+                    tool);
+        }
+    }
+
     @Test
     void noEscalationOnManagingOutrankingUsers() {
         NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));

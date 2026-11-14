@@ -107,4 +107,49 @@ public class FakeDirectory implements RealmDirectory {
     public Set<String> organizationsOfGroup(String realm, String groupPath) {
         return groupOrgs.getOrDefault(groupPath, Set.of());
     }
+
+    /** organization id -> (group path within the organization -> roles a member gets) */
+    final Map<String, Map<String, Set<String>>> orgGroups = new HashMap<>();
+    /**
+     * organization id + '|' + user id -> paths of the user's groups in the organization
+     */
+    final Map<String, List<String>> orgGroupMembers = new HashMap<>();
+
+    FakeDirectory orgGroup(String orgId, String path, Set<String> roles) {
+        orgGroups.computeIfAbsent(orgId, k -> new HashMap<>()).put(path, roles);
+        return this;
+    }
+
+    FakeDirectory orgGroupMember(String orgId, String user, String... paths) {
+        orgGroupMembers.put(orgId + '|' + "id-" + user, List.of(paths));
+        return this;
+    }
+
+    @Override
+    public Optional<String> organizationId(String realm, String organizationRef) {
+        return orgGroups.containsKey(organizationRef) ? Optional.of(organizationRef) : Optional.empty();
+    }
+
+    @Override
+    public Optional<OrganizationGroup> organizationGroup(String realm, String organizationRef, String groupRef) {
+        Map<String, Set<String>> groups = orgGroups.get(organizationRef);
+        if (groups == null) {
+            return Optional.empty();
+        }
+        return groups.keySet()
+            .stream()
+            .filter(path -> path.equals(groupRef) || path.endsWith("/" + groupRef))
+            .findFirst()
+            .map(path -> new OrganizationGroup(organizationRef, "gid" + path, path));
+    }
+
+    @Override
+    public Set<String> organizationGroupRoles(String realm, OrganizationGroup group) {
+        return orgGroups.getOrDefault(group.organizationId(), Map.of()).getOrDefault(group.path(), Set.of());
+    }
+
+    @Override
+    public List<String> organizationGroupPaths(String realm, String organizationId, String userId) {
+        return orgGroupMembers.getOrDefault(organizationId + '|' + userId, List.of());
+    }
 }

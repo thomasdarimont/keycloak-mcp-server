@@ -16,6 +16,8 @@ import jakarta.ws.rs.core.Response;
 
 import org.keycloak.representations.idm.AdminEventRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.MappingsRepresentation;
 import org.keycloak.representations.idm.MembershipType;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -29,6 +31,21 @@ import org.keycloak.representations.idm.UserRepresentation;
 @Path("/admin/realms/{realm}")
 @Produces(MediaType.APPLICATION_JSON)
 public interface AdminQueries {
+
+    /** A page of the groups of an organization a member belongs to (organization API). */
+    @GET
+    @Path("organizations/{org}/members/{member}/groups")
+    List<GroupRepresentation> organizationMemberGroups(@PathParam("realm") String realm, @PathParam("org") String org,
+            @PathParam("member") String member, @QueryParam("first") Integer first, @QueryParam("max") Integer max,
+            @QueryParam("briefRepresentation") Boolean brief);
+
+    /**
+     * The role mappings of an organization group, not its ancestors' (organization API).
+     */
+    @GET
+    @Path("organizations/{org}/groups/{group}/role-mappings")
+    MappingsRepresentation organizationGroupRoleMappings(@PathParam("realm") String realm, @PathParam("org") String org,
+            @PathParam("group") String group);
 
     @GET
     @Path("users")
