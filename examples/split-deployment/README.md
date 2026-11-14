@@ -58,7 +58,8 @@ The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client and `m
 - **The grants** (`init/grants.sql`) come from the one-shot `grants` service, once the admin instance has migrated
   the schema; the MCP instance waits for it. After an upgrade that adds tables, start the admin instance, then
   `docker compose run --rm grants`, then the MCP instances. A table not listed there has no grants, so a new feature
-  fails closed on the MCP side until someone decides what that side may do with it.
+  fails closed on the MCP side until someone decides what that side may do with it. The list itself, independent of
+  the database: [Database storage](../../docs/storage.md).
 
   | table | `kcmcp_mcp` |
   |---|---|

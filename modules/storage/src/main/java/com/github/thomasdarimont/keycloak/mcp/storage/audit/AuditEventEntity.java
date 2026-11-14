@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.Table;
 
+import org.hibernate.Length;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -64,7 +65,7 @@ public class AuditEventEntity extends PanacheEntityBase {
 
     /** The arguments as a JSON object, secrets already replaced by {@code ***}. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "args")
+    @Column(name = "args", length = Length.LONG32)
     public String args;
 
     /** {@code ok} or the error code. */
@@ -73,7 +74,7 @@ public class AuditEventEntity extends PanacheEntityBase {
 
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
 
-    @Column(name = "message")
+    @Column(name = "message", length = Length.LONG32)
     public String message;
 
     /** {@code direct} or {@code execute_tool}. */

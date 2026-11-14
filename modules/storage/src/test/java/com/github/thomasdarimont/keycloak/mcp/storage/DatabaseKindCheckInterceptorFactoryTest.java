@@ -28,6 +28,6 @@ class DatabaseKindCheckInterceptorFactoryTest {
     void missingValuesAndUnknownUrlsAreLeftAlone() {
         assertFalse(DatabaseKindCheckInterceptorFactory.mismatch("h2", null).isPresent());
         assertFalse(DatabaseKindCheckInterceptorFactory.mismatch(null, "jdbc:h2:mem:x").isPresent());
-        assertFalse(DatabaseKindCheckInterceptorFactory.mismatch("h2", "jdbc:mysql://db/kcmcp").isPresent());
+        assertFalse(DatabaseKindCheckInterceptorFactory.mismatch("h2", "jdbc:db2://db/kcmcp").isPresent());
     }
 }

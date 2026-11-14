@@ -1,5 +1,6 @@
 package com.github.thomasdarimont.keycloak.mcp.storage;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -24,6 +25,13 @@ import io.smallrye.config.Priorities;
  */
 @AutoService(ConfigSourceInterceptorFactory.class)
 public class DatabaseKindCheckInterceptorFactory implements ConfigSourceInterceptorFactory {
+
+    /**
+     * The start of a JDBC URL and the database kind the server must be built for to use
+     * it ({@code bin/kcmcp.sh build --db=<kind>}).
+     */
+    static final Map<String, String> KINDS = Map.of("jdbc:h2:", "h2", "jdbc:postgresql:", "postgresql", "jdbc:mariadb:",
+            "mariadb", "jdbc:mysql:", "mysql", "jdbc:sqlserver:", "mssql", "jdbc:oracle:", "oracle");
 
     static final String DB_KIND = "quarkus.datasource.db-kind";
     /**
@@ -58,15 +66,19 @@ public class DatabaseKindCheckInterceptorFactory implements ConfigSourceIntercep
     }
 
     /**
-     * The problem with this combination, if any. A URL of a database other than the two
-     * supported kinds is left to the driver.
+     * The problem with this combination, if any. A URL of a database the server cannot be
+     * built for is left to the driver.
      */
     static Optional<String> mismatch(String builtKind, String jdbcUrl) {
         if (builtKind == null || jdbcUrl == null) {
             return Optional.empty();
         }
-        String urlKind = jdbcUrl.startsWith("jdbc:h2:") ? "h2"
-                : jdbcUrl.startsWith("jdbc:postgresql:") ? "postgresql" : null;
+        String urlKind = KINDS.entrySet()
+            .stream()
+            .filter(kind -> jdbcUrl.startsWith(kind.getKey()))
+            .map(Map.Entry::getValue)
+            .findFirst()
+            .orElse(null);
         if (urlKind == null || urlKind.equals(builtKind)) {
             return Optional.empty();
         }

@@ -5,7 +5,7 @@
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="6-user-sessions" author="keycloak-mcp-server">
+    <changeSet id="6-user-sessions" author="keycloak-mcp-server" dbms="!mariadb,!mysql">
         <comment>Server-side sessions of the management UI: the tokens of a logged-in browser, keyed by the opaque id
             the session cookie carries; rows past expires_at are purged hourly</comment>
         <createTable tableName="kc_mcp_user_session">
@@ -48,5 +48,45 @@
             <column name="issuer"/>
             <column name="sid"/>
         </createIndex>
+    </changeSet>
+
+    <changeSet id="6-user-sessions-mysql" author="keycloak-mcp-server" dbms="mariadb,mysql">
+        <comment>6-user-sessions for MariaDB and MySQL, whose index keys end at 3072 bytes: the two indexes that start
+            with the issuer (1024 characters, four bytes each) take its first 255 characters only. The table is the
+            same; later changesets apply to both</comment>
+        <createTable tableName="kc_mcp_user_session">
+            <column name="id" type="varchar(64)">
+                <constraints primaryKey="true" primaryKeyName="pk_kc_mcp_user_session" nullable="false"/>
+            </column>
+            <!-- alias of the identity provider (kc-mcp.ui.idps.<alias>), its issuer URL, the user's sub and the
+                 provider's session id there: issuer + sid (or sub) is what a back-channel logout names -->
+            <column name="idp" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="issuer" type="varchar(1024)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="subject" type="varchar(255)"/>
+            <column name="sid" type="varchar(255)"/>
+            <!-- tokens are encrypted when kc-mcp.storage.secret-key is set -->
+            <column name="id_token" type="clob">
+                <constraints nullable="false"/>
+            </column>
+            <column name="access_token" type="clob"/>
+            <column name="refresh_token" type="clob"/>
+            <column name="access_token_expires_in" type="bigint"/>
+            <column name="scope" type="varchar(1024)"/>
+            <column name="created_at" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="kc_mcp_user_session" indexName="ix_kc_mcp_user_session_expires">
+            <column name="expires_at"/>
+        </createIndex>
+        <sql>CREATE INDEX ix_kc_mcp_user_session_subject ON kc_mcp_user_session (issuer(255), subject)</sql>
+        <sql>CREATE INDEX ix_kc_mcp_user_session_sid ON kc_mcp_user_session (issuer(255), sid)</sql>
     </changeSet>
 </databaseChangeLog>

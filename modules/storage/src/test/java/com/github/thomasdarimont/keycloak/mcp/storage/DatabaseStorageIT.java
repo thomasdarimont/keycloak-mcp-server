@@ -797,6 +797,19 @@ class DatabaseStorageIT {
         store.delete(id);
     }
 
+    /**
+     * The stores count on READ COMMITTED, which MariaDB and MySQL do not default to: the
+     * datasource asks for it on every database.
+     */
+    @Test
+    @jakarta.transaction.Transactional
+    void connectionsRunReadCommitted() {
+        int level = RateLimitCallEntity.getEntityManager()
+            .unwrap(org.hibernate.Session.class)
+            .doReturningWork(java.sql.Connection::getTransactionIsolation);
+        assertEquals(java.sql.Connection.TRANSACTION_READ_COMMITTED, level);
+    }
+
     @Inject
     @Any
     Instance<RateLimitStore> rateLimitStores;
@@ -853,6 +866,10 @@ class DatabaseStorageIT {
      */
     @Test
     void rateLimitWorksWithTheSplitDeploymentGrantsAndReportsMissingOnes() throws Exception {
+        // roles, SET LOCAL ROLE and the example's grants are PostgreSQL's
+        org.junit.jupiter.api.Assumptions
+            .assumeTrue("postgresql".equals(org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                .getValue("quarkus.datasource.db-kind", String.class)));
         var store = rateLimitStores.select(DatabaseRateLimitStore.class).get();
         String grants = java.nio.file.Files
             .readString(java.nio.file.Path.of("../../examples/split-deployment/init/grants.sql"));

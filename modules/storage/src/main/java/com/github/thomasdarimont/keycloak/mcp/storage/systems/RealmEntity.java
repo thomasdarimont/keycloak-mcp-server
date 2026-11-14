@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.hibernate.Length;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -42,7 +43,7 @@ public class RealmEntity extends PanacheEntityBase {
 
     /** Free text for people; optional, unbounded. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "description")
+    @Column(name = "description", length = Length.LONG32)
     public String description;
 
     /**
@@ -50,7 +51,7 @@ public class RealmEntity extends PanacheEntityBase {
      * client secret since it may carry a check's credentials; null for none.
      */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "access_settings")
+    @Column(name = "access_settings", length = Length.LONG32)
     public String access;
 
     /** The preset the block goes over; null for none. */
@@ -59,7 +60,7 @@ public class RealmEntity extends PanacheEntityBase {
 
     /** The tool restrictions as JSON ({@code ToolSettings}); null for none. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "tool_settings")
+    @Column(name = "tool_settings", length = Length.LONG32)
     public String tools;
 
     /** Epoch milliseconds. */

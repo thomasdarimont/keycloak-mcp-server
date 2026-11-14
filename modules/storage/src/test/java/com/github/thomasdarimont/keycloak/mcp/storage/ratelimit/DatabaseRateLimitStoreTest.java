@@ -28,6 +28,18 @@ class DatabaseRateLimitStoreTest {
     }
 
     @Test
+    void mariaDbAndMySqlSayItByErrorCode() {
+        PersistenceException denied = new PersistenceException(new SQLException(
+                "INSERT command denied to user 'mcp'@'%' for table 'kc_mcp_rate_limit_bucket'", "42000", 1142));
+        assertInstanceOf(RateLimitStoreMisconfiguredException.class,
+                DatabaseRateLimitStore.misconfigured(denied).orElseThrow());
+        // the same state for a syntax error is not a matter of grants
+        assertTrue(DatabaseRateLimitStore
+            .misconfigured(new PersistenceException(new SQLException("syntax error", "42000", 1064)))
+            .isEmpty());
+    }
+
+    @Test
     void whatPassesIsNot() {
         assertTrue(DatabaseRateLimitStore
             .misconfigured(new PersistenceException(new SQLTransientConnectionException("pool exhausted", "08001")))

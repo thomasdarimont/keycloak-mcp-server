@@ -35,9 +35,32 @@ KC_MCP_STORAGE_SECRET_KEY=$(openssl rand -base64 32) java -jar modules/backend/t
 - **The database kind is fixed at build time.** The distribution comes built for H2 (`jdbc:h2:file:...`, a single
   instance). For PostgreSQL (`jdbc:postgresql://host:5432/kcmcp` with `quarkus.datasource.username` and `password`), stop
   the server and run `bin/kcmcp.sh build --db=postgresql` once, in the unpacked distribution or while building an image;
-  it needs neither Maven nor network access, and `--db=h2` goes back. From source: `./mvnw package -Ppostgresql`. Both
-  drivers ship, but the dialect does not switch at runtime: a JDBC URL for the other database stops the start and names
-  this command.
+  it needs neither Maven nor network access, and `--db=h2` goes back. From source: `./mvnw package -Ppostgresql`
+  (`-Pmariadb`, `-Pmysql`, `-Pmssql`). The
+  drivers ship, but the dialect does not switch at runtime: a JDBC URL for another database than the one built for
+  stops the start and names this command.
+- **Which databases.** The distribution carries the integration and the driver of each of these, as Keycloak does;
+  what "supported" means is that the storage tests (`DatabaseStorageIT`: every store, the migrations, the concurrency
+  cases) run and pass on it.
+
+  | `--db=` / `-P` | JDBC URL | status |
+  |---|---|---|
+  | `h2` | `jdbc:h2:file:...` | supported, single instance |
+  | `postgresql` | `jdbc:postgresql://...` | supported; the storage tests run on it by default |
+  | `mariadb` | `jdbc:mariadb://...` | the storage tests pass (MariaDB 11.8); not yet part of the regular test run, no split-deployment grants script |
+  | `mysql` | `jdbc:mysql://...` | available, not supported: the stores pass their tests (MySQL 8), Hibernate's schema validation does not (boolean columns) |
+  | `mssql` | `jdbc:sqlserver://...` | available, untested |
+  | `oracle` | `jdbc:oracle:thin:@//...` | available in the distribution, untested: the build works and the server reaches for the database with Oracle's driver, the stores have not run on one |
+
+  Oracle's driver is not part of the distribution: put `ojdbc17.jar` (and `orai18n.jar`) into `lib/providers`, then
+  run `bin/kcmcp.sh build --db=oracle`. A build takes the integrations and drivers of the other databases off the
+  class path, as Keycloak's does. From source there is no Oracle build; the distribution (`-Pdist`) carries the
+  integration.
+- **Transaction isolation is READ COMMITTED on every database.** The stores count on a statement that waited for a
+  row lock seeing the row as the other transaction left it. PostgreSQL, H2, SQL Server and Oracle default to that
+  level, MariaDB and MySQL do not, so the datasource asks for it
+  (`quarkus.datasource.jdbc.transaction-isolation-level`). On SQL Server, also switch `READ_COMMITTED_SNAPSHOT` on
+  for the database.
 - **Share a database server with Keycloak, never its schema.** The tables are prefixed `kc_mcp_`.
 
 ## Encryption and key rotation
@@ -113,10 +136,25 @@ callers. Systems registered there, their keys and secrets reach the MCP instance
 table above.
 
 The two sides can also use two database users, so that the MCP instances cannot change what the admin side
-configured: they read systems, realms, secrets and keys, append audit rows and keep the CIBA approvals, nothing more.
-The admin instance owns the schema and runs the migrations; the MCP instances run with
-`quarkus.liquibase.migrate-at-start=false`, and the audit retention runs on the admin instance. The grants and a
-working setup: [`examples/split-deployment/`](../examples/split-deployment/).
+configured: they read systems, realms, secrets and keys, append audit rows and keep the CIBA approvals and the rate
+limit counts, nothing more. The admin instance owns the schema and runs the migrations; the MCP instances run with
+`quarkus.liquibase.migrate-at-start=false`, and the audit retention runs on the admin instance.
+
+What the database user of the MCP instances needs, whatever the database; the admin instance's user owns the tables:
+
+| table | MCP instances | why |
+|---|---|---|
+| `kc_mcp_system`, `kc_mcp_realm`, `kc_mcp_secret`, `kc_mcp_signing_key` | `SELECT` | the configuration the tools run under, read only |
+| `kc_mcp_audit_event` | `INSERT` | append only; the rows stay unreadable for the MCP side |
+| `kc_mcp_pending_approval` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | the instance that asks for a CIBA approval stores and finishes it |
+| `kc_mcp_rate_limit_bucket` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | the `rate-limit` check locks the caller's row (`SELECT ... FOR UPDATE`, which needs `UPDATE` on PostgreSQL) and purges old ones |
+| `kc_mcp_rate_limit_call` | `SELECT`, `INSERT`, `DELETE` | the counted calls; `DELETE` for the hourly purge |
+| `kc_mcp_user_session`, Liquibase's `databasechangelog*` | none | management UI logins and the migrations belong to the admin side |
+
+A table without grants keeps its feature from working on the MCP side until someone decides what that side may do
+with it, so run the grants again after an upgrade that adds tables. As a script for PostgreSQL, with a working setup:
+[`examples/split-deployment/`](../examples/split-deployment/) (`init/grants.sql`); for another database the table
+above is the list to translate.
 
 **MCP sessions and several instances.** The streamable HTTP transport keeps a session (the `Mcp-Session-Id` the
 `initialize` answer hands out) in the memory of the instance that opened it: the MCP server extension's

@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.hibernate.Length;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -34,7 +35,7 @@ public class SystemEntity extends PanacheEntityBase {
 
     /** Free text for people: what this Keycloak is, who owns it; optional, unbounded. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "description")
+    @Column(name = "description", length = Length.LONG32)
     public String description;
 
     @Column(name = "url", nullable = false, length = 1024)
@@ -56,7 +57,7 @@ public class SystemEntity extends PanacheEntityBase {
 
     /** Encrypted when {@code kc-mcp.storage.secret-key} is set. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "client_secret")
+    @Column(name = "client_secret", length = Length.LONG32)
     public String clientSecret;
 
     @Column(name = "default_realm", length = 255)
@@ -64,7 +65,7 @@ public class SystemEntity extends PanacheEntityBase {
 
     /** JSON array of realm names; empty or null for all realms. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "allowed_realms")
+    @Column(name = "allowed_realms", length = Length.LONG32)
     public String allowedRealms;
 
     /**
@@ -72,7 +73,7 @@ public class SystemEntity extends PanacheEntityBase {
      * its own; null for none.
      */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "trusted_issuers")
+    @Column(name = "trusted_issuers", length = Length.LONG32)
     public String trustedIssuers;
 
     /**
@@ -80,7 +81,7 @@ public class SystemEntity extends PanacheEntityBase {
      * client secret since it may carry a check's credentials; null for none.
      */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "access_settings")
+    @Column(name = "access_settings", length = Length.LONG32)
     public String access;
 
     /** The preset the block goes over; null for none. */
@@ -89,14 +90,14 @@ public class SystemEntity extends PanacheEntityBase {
 
     /** The tool restrictions as JSON ({@code ToolSettings}); null for none. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "tool_settings")
+    @Column(name = "tool_settings", length = Length.LONG32)
     public String tools;
 
     /**
      * The system's own presets as JSON, encrypted like the access block; null for none.
      */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "presets")
+    @Column(name = "presets", length = Length.LONG32)
     public String presets;
 
     @Column(name = "version", length = 64)

@@ -13,7 +13,8 @@
 #   bin/kcmcp.sh show-config [all]                         the settings in effect and their sources, secrets masked
 #   bin/kcmcp.sh validate [--offline]                      run the startup checks and print every problem; starts no server
 #   bin/kcmcp.sh providers                                 the installed extensions and whether each takes part
-#   bin/kcmcp.sh build --db=postgresql                    build for a database, h2 or postgresql; stop the server first
+#   bin/kcmcp.sh build --db=postgresql                    build for a database: h2, postgresql, mariadb, mysql, mssql or
+#                                                          oracle (its driver in lib/providers); stop the server first
 #   bin/kcmcp.sh --version | --help
 #
 # Any --kc-mcp.name=value or --quarkus.name=value sets that configuration property; environment variables (KC_MCP_SYSTEMS_DEFAULT_URL=...) work as well and
@@ -107,8 +108,8 @@ if [ -z "$COMMAND" ]; then
 fi
 if [ "$COMMAND" = "build" ]; then
     case "$DB" in
-        h2|postgresql) ;;
-        *) echo "build needs --db=h2 or --db=postgresql" >&2; exit 2 ;;
+        h2|postgresql|mariadb|mysql|mssql|oracle) ;;
+        *) echo "build needs --db=h2, postgresql, mariadb, mysql, mssql or oracle" >&2; exit 2 ;;
     esac
 elif [ -n "$DB" ]; then
     echo "--db belongs to the build command" >&2; exit 2
@@ -148,10 +149,30 @@ fi
 if [ "$COMMAND" = "build" ]; then
     # Quarkus re-augments the package from lib/lib/deployment: no Maven or network. It expects lib/providers to exist,
     # and leaves a partial copy of the package in quarkus-app/ next to the output directory.
-    echo "Building for $DB. Please wait." >&2
     mkdir -p "$KCMCP_HOME/lib/providers"
+    if [ "$DB" = "oracle" ] && ! ls "$KCMCP_HOME"/lib/providers/ojdbc*.jar >/dev/null 2>&1; then
+        echo "Oracle's JDBC driver is not part of this distribution: put ojdbc17.jar (and orai18n.jar) into lib/providers, then build again." >&2
+        exit 2
+    fi
+    # The integrations and drivers of the databases the server is not built for stay off the class path, as in
+    # Keycloak; the Oracle integration in particular fails without Oracle's driver.
+    REMOVED=""
+    for KIND in h2 postgresql mariadb mysql mssql oracle; do
+        [ "$KIND" = "$DB" ] && continue
+        case "$KIND" in
+            h2) ARTIFACTS="io.quarkus:quarkus-jdbc-h2,io.quarkus:quarkus-jdbc-h2-deployment,com.h2database:h2" ;;
+            postgresql) ARTIFACTS="io.quarkus:quarkus-jdbc-postgresql,io.quarkus:quarkus-jdbc-postgresql-deployment,org.postgresql:postgresql" ;;
+            mariadb) ARTIFACTS="io.quarkus:quarkus-jdbc-mariadb,io.quarkus:quarkus-jdbc-mariadb-deployment,org.mariadb.jdbc:mariadb-java-client" ;;
+            mysql) ARTIFACTS="io.quarkus:quarkus-jdbc-mysql,io.quarkus:quarkus-jdbc-mysql-deployment,com.mysql:mysql-connector-j" ;;
+            mssql) ARTIFACTS="io.quarkus:quarkus-jdbc-mssql,io.quarkus:quarkus-jdbc-mssql-deployment,com.microsoft.sqlserver:mssql-jdbc" ;;
+            oracle) ARTIFACTS="io.quarkus:quarkus-jdbc-oracle,io.quarkus:quarkus-jdbc-oracle-deployment" ;;
+        esac
+        REMOVED="${REMOVED:+$REMOVED,}$ARTIFACTS"
+    done
+    echo "Building for $DB. Please wait." >&2
     cd "$KCMCP_HOME" || exit 1
     "$JAVA" -Dquarkus.launch.rebuild=true -Dquarkus.package.output-directory=lib \
+        -Dquarkus.class-loading.removed-artifacts="$REMOVED" \
         -Dquarkus.datasource.db-kind="$DB" -jar "$(abs_path "$KCMCP_HOME/lib/quarkus-run.jar")"
     STATUS=$?
     rm -rf "$KCMCP_HOME/quarkus-app" "$KCMCP_HOME/quarkus-artifact.properties"

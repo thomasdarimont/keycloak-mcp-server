@@ -14,7 +14,8 @@ rem   bin\kcmcp.bat start --clean-env                         ignore KC_MCP_* an
 rem   bin\kcmcp.bat show-config [all]                         the settings in effect and their sources, secrets masked
 rem   bin\kcmcp.bat validate [--offline]                      run the startup checks and print every problem; starts no server
 rem   bin\kcmcp.bat providers                                 the installed extensions and whether each takes part
-rem   bin\kcmcp.bat build --db=postgresql                    build for a database, h2 or postgresql; stop the server first
+rem   bin\kcmcp.bat build --db=postgresql                    build for a database: h2, postgresql, mariadb, mysql, mssql or
+rem                                                          oracle (its driver in lib\providers); stop the server first
 rem   bin\kcmcp.bat --version | --help
 rem
 rem Any --kc-mcp.name=value or --quarkus.name=value sets that configuration property; environment variables (KC_MCP_SYSTEMS_DEFAULT_URL=...) work as well and
@@ -176,8 +177,8 @@ if not "%COMMAND%" == "build" if not "%DB%" == "" (
     echo --db belongs to the build command 1>&2
     exit /b 2
 )
-if "%COMMAND%" == "build" if not "%DB%" == "h2" if not "%DB%" == "postgresql" (
-    echo build needs --db=h2 or --db=postgresql 1>&2
+if "%COMMAND%" == "build" if not "%DB%" == "h2" if not "%DB%" == "postgresql" if not "%DB%" == "mariadb" if not "%DB%" == "mysql" if not "%DB%" == "mssql" if not "%DB%" == "oracle" (
+    echo build needs --db=h2, postgresql, mariadb, mysql, mssql or oracle 1>&2
     exit /b 2
 )
 
@@ -230,12 +231,31 @@ exit /b %ERRORLEVEL%
 rem Quarkus re-augments the package from lib\lib\deployment: no Maven or network. It expects lib\providers to exist,
 rem and leaves a partial copy of the package in quarkus-app\ next to the output directory.
 :BUILD
-echo Building for %DB%. Please wait. 1>&2
 if not exist "%KCMCP_HOME%\lib\providers" mkdir "%KCMCP_HOME%\lib\providers"
+if "%DB%" == "oracle" if not exist "%KCMCP_HOME%\lib\providers\ojdbc*.jar" (
+    echo Oracle's JDBC driver is not part of this distribution: put ojdbc17.jar ^(and orai18n.jar^) into lib\providers, then build again. 1>&2
+    exit /b 2
+)
+rem The integrations and drivers of the databases the server is not built for stay off the class path, as in
+rem Keycloak; the Oracle integration in particular fails without Oracle's driver.
+set "REMOVED="
+for %%K in (h2 postgresql mariadb mysql mssql oracle) do if not "%%K" == "%DB%" call :REMOVE_JDBC %%K
+echo Building for %DB%. Please wait. 1>&2
 cd /d "%KCMCP_HOME%"
-"%JAVA%" -Dquarkus.launch.rebuild=true -Dquarkus.package.output-directory=lib -Dquarkus.datasource.db-kind=%DB% -jar "%KCMCP_HOME%\lib\quarkus-run.jar"
+"%JAVA%" -Dquarkus.launch.rebuild=true -Dquarkus.package.output-directory=lib "-Dquarkus.class-loading.removed-artifacts=%REMOVED%" -Dquarkus.datasource.db-kind=%DB% -jar "%KCMCP_HOME%\lib\quarkus-run.jar"
 set STATUS=%ERRORLEVEL%
 if exist "%KCMCP_HOME%\quarkus-app" rmdir /s /q "%KCMCP_HOME%\quarkus-app"
 if exist "%KCMCP_HOME%\quarkus-artifact.properties" del "%KCMCP_HOME%\quarkus-artifact.properties"
 if "%STATUS%" == "0" (echo %DB%> "%KCMCP_HOME%\lib\quarkus\db-kind" & echo Built for %DB%. 1>&2) else (echo The build failed; the previous build is unchanged. 1>&2)
 exit /b %STATUS%
+
+rem Adds the integration and the driver of one database kind to REMOVED.
+:REMOVE_JDBC
+if "%1" == "h2" set "ARTIFACTS=io.quarkus:quarkus-jdbc-h2,io.quarkus:quarkus-jdbc-h2-deployment,com.h2database:h2"
+if "%1" == "postgresql" set "ARTIFACTS=io.quarkus:quarkus-jdbc-postgresql,io.quarkus:quarkus-jdbc-postgresql-deployment,org.postgresql:postgresql"
+if "%1" == "mariadb" set "ARTIFACTS=io.quarkus:quarkus-jdbc-mariadb,io.quarkus:quarkus-jdbc-mariadb-deployment,org.mariadb.jdbc:mariadb-java-client"
+if "%1" == "mysql" set "ARTIFACTS=io.quarkus:quarkus-jdbc-mysql,io.quarkus:quarkus-jdbc-mysql-deployment,com.mysql:mysql-connector-j"
+if "%1" == "mssql" set "ARTIFACTS=io.quarkus:quarkus-jdbc-mssql,io.quarkus:quarkus-jdbc-mssql-deployment,com.microsoft.sqlserver:mssql-jdbc"
+if "%1" == "oracle" set "ARTIFACTS=io.quarkus:quarkus-jdbc-oracle,io.quarkus:quarkus-jdbc-oracle-deployment"
+if defined REMOVED (set "REMOVED=%REMOVED%,%ARTIFACTS%") else (set "REMOVED=%ARTIFACTS%")
+goto :EOF

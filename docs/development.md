@@ -9,7 +9,9 @@ Building, running and testing the server; the modules; formatting; open items.
 ./mvnw test                                     # unit + in-process MCP tests, no Keycloak
 ./mvnw verify -DskipITs=false                   # + Testcontainers Keycloak 26.8.2 and 389 Directory Server, + storage IT on Dev Services PostgreSQL
 ./mvnw package && java -jar modules/backend/target/quarkus-app/quarkus-run.jar start
-./mvnw package -Ppostgresql                     # PostgreSQL build
+./mvnw package -Ppostgresql                     # PostgreSQL build; also -Pmariadb, -Pmysql, -Pmssql
+./mvnw -pl modules/storage -am verify -DskipITs=false -Dit.db-kind=mariadb -Dit.db-image=mariadb:11.8
+                                                # the storage IT on another database (Dev Services starts the image)
 ./mvnw spotless:apply                           # format; `verify` fails on unformatted code
 etc/typos.sh                                    # the spell check of CI (_typos.toml); --write-changes fixes
 conformance/run.sh                              # MCP conformance suite against the packaged server (conformance/README.md)

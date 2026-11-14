@@ -406,5 +406,23 @@
                 <storage.db-kind>postgresql</storage.db-kind>
             </properties>
         </profile>
+        <profile>
+            <id>mariadb</id>
+            <properties>
+                <storage.db-kind>mariadb</storage.db-kind>
+            </properties>
+        </profile>
+        <profile>
+            <id>mysql</id>
+            <properties>
+                <storage.db-kind>mysql</storage.db-kind>
+            </properties>
+        </profile>
+        <profile>
+            <id>mssql</id>
+            <properties>
+                <storage.db-kind>mssql</storage.db-kind>
+            </properties>
+        </profile>
     </profiles>
 </project>

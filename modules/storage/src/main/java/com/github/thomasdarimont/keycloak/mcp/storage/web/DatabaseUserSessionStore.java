@@ -1,10 +1,13 @@
 package com.github.thomasdarimont.keycloak.mcp.storage.web;
 
+import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.LongSupplier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
@@ -207,21 +210,61 @@ public class DatabaseUserSessionStore implements UserSessionStore {
     }
 
     @Override
-    @Transactional
     public long deleteBySession(String issuer, String sid) {
         if (issuer == null || sid == null || sid.isBlank()) {
             return 0;
         }
+        return retryingDeadlocks(() -> removeBySession(issuer, sid));
+    }
+
+    @Transactional
+    long removeBySession(String issuer, String sid) {
         return UserSessionEntity.delete("issuer = ?1 and sid = ?2", issuer, sid);
     }
 
     @Override
-    @Transactional
     public long deleteBySubject(String issuer, String subject) {
         if (issuer == null || subject == null || subject.isBlank()) {
             return 0;
         }
+        return retryingDeadlocks(() -> removeBySubject(issuer, subject));
+    }
+
+    @Transactional
+    long removeBySubject(String issuer, String subject) {
         return UserSessionEntity.delete("issuer = ?1 and subject = ?2", issuer, subject);
+    }
+
+    /**
+     * Runs a removal again when the database chose it as the victim of a deadlock. On
+     * PostgreSQL a logout that meets a refresh waits for the row and then removes the
+     * refreshed one. MariaDB and MySQL (InnoDB) lock the index entries the removal found
+     * and those the refresh is about to change in opposite orders and end the removal
+     * instead; run again once the refresh is through, it finds the refreshed row.
+     */
+    private static long retryingDeadlocks(LongSupplier removal) {
+        for (int attempt = 1;; attempt++) {
+            try {
+                return removal.getAsLong();
+            }
+            catch (PersistenceException e) {
+                if (attempt == 3 || !deadlock(e)) {
+                    throw e;
+                }
+                LOG.debugf("Session removal lost a deadlock, attempt %d: %s", attempt, e.getMessage());
+            }
+        }
+    }
+
+    /** SQL states of class 40: the transaction was rolled back, deadlocks among them. */
+    static boolean deadlock(Throwable failure) {
+        Throwable t = failure;
+        for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause()) {
+            if (t instanceof SQLException sql && sql.getSQLState() != null && sql.getSQLState().startsWith("40")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Scheduled(every = "1h", delayed = "2m", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)

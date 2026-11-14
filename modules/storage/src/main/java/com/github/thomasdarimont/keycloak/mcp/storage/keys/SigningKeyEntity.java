@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.hibernate.Length;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -44,12 +45,12 @@ public class SigningKeyEntity extends PanacheEntityBase {
      * {@code null} once the key was retired longer than the grace period ago.
      */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "private_key")
+    @Column(name = "private_key", length = Length.LONG32)
     public String privateKey;
 
     /** Base64 X.509 SubjectPublicKeyInfo. */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "public_key", nullable = false)
+    @Column(name = "public_key", nullable = false, length = Length.LONG32)
     public String publicKey;
 
     /** Epoch milliseconds. */

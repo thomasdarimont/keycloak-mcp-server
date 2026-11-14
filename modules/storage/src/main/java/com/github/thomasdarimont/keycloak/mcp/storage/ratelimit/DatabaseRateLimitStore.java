@@ -168,9 +168,16 @@ public class DatabaseRateLimitStore implements RateLimitStore {
      * SQL states that say the tables cannot be used as they are, rather than not right
      * now: insufficient privilege and undefined table on PostgreSQL ({@code 42501},
      * {@code 42P01}), table not found and not enough rights on H2 ({@code 42S02},
-     * {@code 90096}).
+     * {@code 90096}); MariaDB and MySQL report a missing table as {@code 42S02} too.
      */
     private static final Set<String> SETUP_STATES = Set.of("42501", "42P01", "42S02", "90096");
+
+    /**
+     * MariaDB and MySQL report a missing privilege under the catch-all SQL state
+     * {@code 42000}, told apart by the error code: access denied to the table
+     * ({@code 1142}), to a column ({@code 1143}), to the database ({@code 1044}).
+     */
+    private static final Set<Integer> MYSQL_ACCESS_DENIED = Set.of(1142, 1143, 1044);
 
     /**
      * The failure as a {@link RateLimitStoreMisconfiguredException} when the database
@@ -179,8 +186,8 @@ public class DatabaseRateLimitStore implements RateLimitStore {
     static Optional<RuntimeException> misconfigured(Throwable failure) {
         Throwable t = failure;
         for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause()) {
-            if (t instanceof SQLException sql && sql.getSQLState() != null
-                    && SETUP_STATES.contains(sql.getSQLState())) {
+            if (t instanceof SQLException sql && sql.getSQLState() != null && (SETUP_STATES.contains(sql.getSQLState())
+                    || ("42000".equals(sql.getSQLState()) && MYSQL_ACCESS_DENIED.contains(sql.getErrorCode())))) {
                 return Optional.of(new RateLimitStoreMisconfiguredException(
                         "the database user may not use the tables kc_mcp_rate_limit_bucket and kc_mcp_rate_limit_call,"
                                 + " or they do not exist (SQL state " + sql.getSQLState() + ": " + sql.getMessage()

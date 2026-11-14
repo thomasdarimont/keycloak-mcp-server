@@ -93,7 +93,7 @@ the database connection.
 | `kc-mcp.static-systems-order`   | `-1000`                     | rank of static configuration among repositories (lower first, repositories default 0) |
 | `kc-mcp.static-systems`         | `true`                      | `false`: repositories only |
 | `kc-mcp.keys-dir`               | `data/keys`                 | read-only built-in `KeyVault`: `<system>.pem`, `secrets/<name>` |
-| `quarkus.datasource.jdbc.url`   |                             | turns database storage on: `jdbc:h2:file:./data/kc-mcp`, or `jdbc:postgresql://...` after `bin/kcmcp.sh build --db=postgresql` (from source: `-Ppostgresql`) (+ `quarkus.datasource.username`/`password`) |
+| `quarkus.datasource.jdbc.url`   |                             | turns database storage on: `jdbc:h2:file:./data/kc-mcp`, or `jdbc:postgresql://...` after `bin/kcmcp.sh build --db=postgresql` (from source: `-Ppostgresql`); other databases: [Database storage](storage.md) (+ `quarkus.datasource.username`/`password`) |
 | `kc-mcp.storage.enabled`        | `true` with a jdbc url      | force storage on or off |
 | `kc-mcp.storage.secret-key`     |                             | AES-256-GCM key for stored private keys, client secrets, passwords; base64 of 32 bytes or passphrase (Argon2id) |
 | `kc-mcp.storage.previous-secret-keys` |                       | rotated-away keys (csv) that still decrypt; rows are rewritten under `secret-key` at startup and by `POST /admin/storage/rekey` |
