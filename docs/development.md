@@ -106,6 +106,12 @@ management UI (login, sessions, BFF; pages for systems, their realms and signing
   (`PasswordGrantSessionsIT` covers the token manager against a client-jwt client with a fixed key)
 - Admin API read access to the signing-key history
 - Management UI pages for secrets and storage (today: placeholders)
+- Effective access preview: which systems, realms and tools a given user or MCP client can reach, and why
+- Client assertions signed on the admin instance, so MCP instances hold no private keys
+  ([Threat model](security.md#planned-signing-on-the-admin-instance))
+- Faster invalidation of the system snapshot on every instance, database-neutral: a change counter bumped in the
+  same transaction as every system write, read by primary key every second or so, reloading the snapshot only when it
+  moved (instead of a full reload every `cache-seconds`)
 
 ## Quarkus notes
 

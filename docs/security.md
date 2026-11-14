@@ -1,4 +1,4 @@
-# Security: guardrails, access levels, callers
+# Security: guardrails, access levels, callers, threat model
 
 [keycloak-mcp-server](../README.md) › documentation
 
@@ -316,3 +316,87 @@ require an audience). `KC_MCP_DELEGATION` then decides whose identity reaches Ke
   Walkthrough and Keycloak setup: `examples/delegated-auth/`.
 - **In code.** `Caller` offers `claims()`, `claim("department")` and `rawToken()`; `toString()` never prints the token,
   and audit events get `withoutToken()`. Per-caller admin clients are cached until the token expires.
+
+## Threat model
+
+The guardrails above stop a model or a caller. This section is about the server itself: an instance an attacker runs
+code on, a memory dump, a stolen database backup together with the `secret-key`.
+
+### What an instance holds
+
+| deployment | what a compromised instance holds |
+|---|---|
+| local, static configuration | the credentials in its configuration and key files |
+| one shared instance with database storage | every system, secret and private signing key, readable with `kc-mcp.storage.secret-key`; the admin API |
+| split deployment (`kc-mcp.instance-role=mcp` / `admin`, two database users, [`examples/split-deployment/`](../examples/split-deployment/)) | an MCP instance: read access to systems, realms, secrets and private keys, the `secret-key` to decrypt them, appending to the audit trail. The admin instance: everything |
+
+In the split deployment a compromised MCP instance **cannot** register, change, enable or remove systems, store
+secrets, rotate keys, or delete or rewrite audit rows: its database user lacks the grants. It **can** decrypt every
+secret and private signing key and use them against the managed Keycloaks, from anywhere, with the roles of each
+system's service client. It can also read the tokens of the callers whose requests pass through it, for as long as
+those tokens are valid. The database roles protect the inventory from being changed. They do not keep the credentials
+secret.
+
+So the Keycloak side decides what a stolen credential is worth:
+
+- **The narrowest roles per service client.** Only the `realm-management` roles the tools of that system need, in
+  the realms they need them (`GET /admin/systems/<alias>/client-setup?roles=read|manage|admin` prints them).
+- **The user's identity instead of the service account's.** With `KC_MCP_DELEGATION=exchange` the server's client
+  holds no admin role at all: its credentials alone get a token that cannot call the Admin API, so a stolen
+  credential is useless without a user's token. With `forward` the server needs no credentials for the calls.
+- **Short access token lifespans** for the service clients, so a token taken from memory is good for minutes, not
+  hours.
+
+### Prefer signed JWT over client secrets
+
+Register systems with `clientAuth: private_key_jwt` (*Signed JWT* with a JWKS URL on the Keycloak client) rather
+than `client_secret`:
+
+- **A secret is a reusable bearer credential.** It is sent to Keycloak on every token request, it works from any
+  host until someone changes it in Keycloak, and replacing it means a change on every Keycloak client that knows it.
+- **A signed JWT keeps the key on the server.** The server signs a short-lived assertion (`jti`, `exp`, `aud` the
+  realm's issuer) per token request, and Keycloak fetches the public key from the server's JWKS. The private key never
+  leaves the server, nothing replayable travels to Keycloak, and rotation and revocation happen on the server alone:
+  `POST /admin/systems/<alias>/signing-key` rotates with a grace period,
+  `?dropPrevious=true` takes the previous keys out of the JWKS at once
+  ([Several Keycloak systems](systems.md#walkthrough-a-new-system-with-private_key_jwt)). The Keycloak client
+  stays as it is.
+- **The same weakness otherwise.** A private key read out of a compromised instance signs assertions just as well
+  as a secret authenticates, until it is rotated out.
+
+### Planned: signing on the admin instance
+
+In the split deployment, the MCP instances would ask the admin instance for client assertions instead of holding
+the private keys, and their database user would lose read access to the private keys. A compromised MCP instance
+then gets assertions only while it runs and only through an interface that audits every request and that the
+operator can cut off on the admin instance. Nothing it can carry away signs anything.
+
+- **Cost.** The admin instance is on the token path. That is only when a token is requested or refreshed, not on
+  every call: access tokens are reused until 30 seconds before they expire. It has to be available like the MCP
+  instances, and it needs an internal endpoint the MCP instances can reach, with authentication of its own (mTLS or a
+  per-instance credential, one that is good against the admin instance only, never against a Keycloak).
+- **Client secrets cannot work this way:** the secret itself has to reach Keycloak. One more reason to prefer
+  signed JWT.
+- **Caller tokens** passing through an MCP instance are not affected; short lifespans are the defence there.
+
+### Revoking access: what takes effect when
+
+Changes made on the server do not reach every instance at once. Changes made in Keycloak do.
+
+| action | takes effect |
+|---|---|
+| disable or remove a system (admin API or UI) | at once on the instance that made the change; on the other instances once their snapshot is older than `kc-mcp.spi.system-repository.db.cache-seconds` (10). Calls already running finish |
+| change a stored secret | on each instance's next tool call |
+| rotate a signing key | new assertions are signed with the new key; the retired key stays in the JWKS for `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` (3600) |
+| rotate with `dropPrevious=true` | the previous keys leave the JWKS at once, private keys deleted; Keycloak keeps the JWKS it fetched until its keys cache is cleared (*Realm settings → Action → Clear keys cache*, or `POST /admin/realms/<realm>/clear-keys-cache`) |
+| in Keycloak: disable the client, regenerate its secret, change its JWKS URL | Keycloak issues no new token at once; tokens it already issued may stay usable until they expire |
+
+**In an emergency, start in Keycloak.** Disable the affected client in every Keycloak it exists in: that is the
+only step that takes effect everywhere at once. Then clean up on the server: disable the system or rotate its key with
+`dropPrevious=true`, clear Keycloak's keys cache, and read the audit trail (`GET /admin/audit`) for what the instance
+did. Within the `cache-seconds` window an MCP instance may still serve a system disabled on the server. A faster,
+database-neutral invalidation is planned ([roadmap](development.md#status-and-roadmap)).
+
+**A compromised MCP instance** counts everything it could decrypt as leaked: rotate every system's signing key with
+`dropPrevious=true`, regenerate every client secret in Keycloak, rotate `kc-mcp.storage.secret-key`
+([Database storage](storage.md), key rotation), and replace the instance.

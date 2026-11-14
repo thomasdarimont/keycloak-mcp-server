@@ -35,6 +35,19 @@ The same server also runs locally for a single administrator, which is where the
 - **Extensible.** An SPI for your own tools, prompts, access checks, confirmers, audit sinks and system registries,
   loaded from a jar.
 
+## Two ways to run it
+
+| | standalone | fleet |
+|---|---|---|
+| for | a developer, a local assistant, a team with one or two Keycloaks | an IAM team running several environments, installations and realms |
+| shape | one process, MCP endpoint only | one internal admin instance (admin API, management UI) and any number of MCP instances behind a load balancer |
+| systems | in the configuration (properties, env vars) | registered at runtime, signing keys created and rotated centrally |
+| state | none, or an H2 file | PostgreSQL, a database user per side so MCP instances cannot change what the admin side configured |
+| start with | the [quick start](#quick-start) below | [Scenario 6](docs/scenarios.md#6-a-shared-server-per-environment), [`examples/split-deployment/`](examples/split-deployment/), [Several instances](docs/storage.md#several-instances-on-one-database), [Threat model](docs/security.md#threat-model) |
+
+Both run the same server with the same tools, guardrails and audit. The fleet shape adds central management on top,
+so a standalone setup can grow into it without a different product.
+
 ## Quick start
 
 The shortest path is local, in the shape the server is meant for: one Keycloak, the server on your machine, and you
@@ -113,7 +126,7 @@ for a complete stack.
 | [Scenarios in pictures](docs/scenarios.md) | diagrams of the ways the server runs: service account, user login, delegated agent, several systems, a shared deployment, registration, CIBA, read-only troubleshooting, the call pipeline |
 | [Tools](docs/tools.md) | what the model sees, the tool areas, prompts |
 | [Integrations](docs/integrations.md) | adding the server to LM Studio, Claude Code, Claude Desktop, VS Code and Copilot, Cursor, Codex; the login's Keycloak side |
-| [Security](docs/security.md) | guardrails, profiles `local` and `shared`, access levels, per-tool checks, policies, callers and delegation |
+| [Security](docs/security.md) | guardrails, profiles `local` and `shared`, access levels, per-tool checks, policies, callers and delegation, threat model and revocation |
 | [Configuration](docs/configuration.md) | every property with default and meaning |
 | [HTTPS and trusted certificates](docs/tls.md) | HTTPS for the server, a Keycloak behind a private CA |
 | [Several Keycloak systems](docs/systems.md) | static and dynamic systems, per-system keys, the admin API, one MCP entry per system or realm |
