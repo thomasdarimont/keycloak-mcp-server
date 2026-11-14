@@ -68,7 +68,8 @@ system but stops serving it. Only service clients are stored: there are no usern
 repository refuses the password grant.
 
 Reads are served from a snapshot, reloaded when older than `kc-mcp.spi.system-repository.db.cache-seconds` (10; a local write
-reloads at once). A tool call costs no query, and event-loop threads get the snapshot as is.
+reloads at once). A tool call costs no query, and event-loop threads get the snapshot as is. While the database cannot be read,
+the last snapshot stays in use ([When the database is away](#when-the-database-is-away)).
 
 ## Audit retention and personal data
 
@@ -143,6 +144,32 @@ taken from the request itself (the caller from the token, system and realm from 
   by opening a session on the spot, honouring capabilities the client puts into `_meta` and assuming none otherwise. The
   extension documents it as a stop-gap until every client speaks the stateless protocol; without the capabilities the
   server cannot tell whether a client supports elicitation, so on a shared server prefer sticky routing and leave it off.
+
+## When the database is away
+
+A restart for maintenance, a failover, a network cut: what an instance does until the database answers again,
+measured with [`examples/split-deployment/db-outage.sh`](../examples/split-deployment/).
+
+| | while the database is away |
+|---|---|
+| systems | the last snapshot is served. Callers do not wait: one background reload retries after 1 s, doubling up to `cache-seconds`, and the first that succeeds ends it. One WARN when it starts, one INFO when it recovers. Before the first load ever succeeded, the instance knows no systems |
+| tool calls with `forward` | keep working: the caller brings the token, the instance needs no credentials of its own |
+| service account and `exchange` calls | keep working with the tokens the instance holds; a new token request fails once they expire, as the signing key and stored secrets are read from the database on each request |
+| audit | the console line is written, the row is not: the call itself runs and its result is unchanged ([the audit gap](#the-audit-gap)) |
+| admin API, management UI, UI logins, CIBA approvals, JWKS | fail; Keycloak keeps the JWKS it fetched until its keys cache expires |
+
+**Latency.** Every database access on a caller's thread costs about a second while the connection cannot be made
+(the pool tries to create a connection and fails), and the attempts of concurrent threads queue up. The audit insert
+is such an access on every tool call, so calls take a second or two longer during the outage, not a timeout.
+
+**After the restart.** Connections in the pool are dead. Each fails exactly one operation (`terminating connection due
+to administrator command`) and is discarded, so the first few database accesses after the restart may fail once.
+
+### The audit gap
+
+The row is written after the tool has run, so a failing insert cannot stop the call it records: the change is made in
+Keycloak by then. With the logs shipped to a central system, the console line is the record; without, calls during the
+outage leave none. Refusing changes while the audit trail cannot be written is under consideration.
 
 ## From code
 

@@ -11,7 +11,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -54,6 +58,11 @@ import io.vertx.core.json.JsonObject;
  * on another replica shows up within that time. The server asks repositories from event
  * loop threads too (the {@code tools/list} filter), where no database call is allowed:
  * there the current snapshot is served as is and a refresh is left to a worker thread.
+ * <p>
+ * When the database cannot be read (a restart for maintenance, a network cut), the last
+ * snapshot keeps being served. Callers no longer wait for the database: one background
+ * reload retries after a backoff of 1 second, doubling up to {@code cache-seconds}, and
+ * the first reload that succeeds ends the outage.
  */
 @ApplicationScoped
 @LookupIfProperty(name = StorageEnabledInterceptorFactory.ENABLED, stringValue = "true")
@@ -69,9 +78,18 @@ public class DatabaseKeycloakSystemRepository implements MutableKeycloakSystemRe
 
     private static final Logger LOG = Logger.getLogger(DatabaseKeycloakSystemRepository.class);
 
-    /** The enabled systems by alias as last read; {@code loadedAt} 0 means stale. */
-    private record Snapshot(Map<String, KeycloakSystem> systems, long loadedAt, boolean loaded) {
-        static final Snapshot EMPTY = new Snapshot(Map.of(), 0, false);
+    private static final long FIRST_RETRY_MILLIS = 1000L;
+
+    /**
+     * The enabled systems by alias as last read, served until {@code freshUntil} (epoch
+     * millis, 0 means stale); {@code failures} counts the reloads that failed in a row.
+     */
+    private record Snapshot(Map<String, KeycloakSystem> systems, long freshUntil, boolean loaded, int failures) {
+        static final Snapshot EMPTY = new Snapshot(Map.of(), 0, false, 0);
+
+        boolean fresh(long now) {
+            return now < freshUntil;
+        }
     }
 
     private final StorageCrypto crypto;
@@ -79,6 +97,14 @@ public class DatabaseKeycloakSystemRepository implements MutableKeycloakSystemRe
     private long cacheMillis = Long.parseLong(CACHE_SECONDS.defaultValue()) * 1000L;
     private final ReentrantLock reloading = new ReentrantLock();
     private volatile Snapshot snapshot = Snapshot.EMPTY;
+    /**
+     * Test seams: where the rows come from, the clock, where background reloads run,
+     * whether the calling thread may block.
+     */
+    Supplier<Map<String, KeycloakSystem>> loader = this::readRows;
+    LongSupplier clock = System::currentTimeMillis;
+    BooleanSupplier blockingAllowed = BlockingOperationControl::isBlockingAllowed;
+    Executor background = task -> Thread.ofVirtual().name("kc-mcp-db-systems-reload").start(task);
 
     /** Configured by {@link #configure}. */
     @Inject
@@ -136,22 +162,49 @@ public class DatabaseKeycloakSystemRepository implements MutableKeycloakSystemRe
     }
 
     /**
-     * The snapshot, reloaded when stale and the thread may block; on an event loop thread
-     * the snapshot as it is, with the reload handed to a virtual thread.
+     * The snapshot, reloaded when stale and the thread may block. On an event loop
+     * thread, and while the database is failing, the snapshot as it is, with the reload
+     * handed to a background thread.
      */
     private Map<String, KeycloakSystem> current() {
         Snapshot s = snapshot;
-        if (s.loaded() && System.currentTimeMillis() - s.loadedAt() < cacheMillis) {
+        if (s.fresh(clock.getAsLong())) {
             return s.systems();
         }
-        if (!BlockingOperationControl.isBlockingAllowed()) {
-            if (!s.loaded()) {
+        if (!blockingAllowed.getAsBoolean() || s.failures() > 0) {
+            if (!s.loaded() && s.failures() == 0) {
                 LOG.debug("Systems asked on an event loop thread before the first load; reloading in the background");
             }
-            Thread.ofVirtual().name("kc-mcp-db-systems-reload").start(this::reload);
+            background.execute(this::reloadInBackground);
             return s.systems();
         }
+        if (s.loaded()) {
+            // another caller reloading already: serve what is known rather than wait for
+            // it,
+            // so a database that hangs holds up one caller, not all of them
+            if (!reloading.tryLock()) {
+                return s.systems();
+            }
+            try {
+                return reloadLocked();
+            }
+            finally {
+                reloading.unlock();
+            }
+        }
         return reload();
+    }
+
+    /** A reload unless one is running already: background reloads never queue up. */
+    private void reloadInBackground() {
+        if (reloading.tryLock()) {
+            try {
+                reloadLocked();
+            }
+            finally {
+                reloading.unlock();
+            }
+        }
     }
 
     /**
@@ -161,36 +214,72 @@ public class DatabaseKeycloakSystemRepository implements MutableKeycloakSystemRe
     Map<String, KeycloakSystem> reload() {
         reloading.lock();
         try {
-            Snapshot s = snapshot;
-            if (s.loaded() && System.currentTimeMillis() - s.loadedAt() < cacheMillis) {
-                return s.systems();
-            }
-            Map<String, KeycloakSystem> loaded = QuarkusTransaction.requiringNew().call(() -> {
-                Map<String, KeycloakSystem> out = new LinkedHashMap<>();
-                Map<String, List<RealmEntity>> realms = new LinkedHashMap<>();
-                for (RealmEntity r : RealmEntity.<RealmEntity>list("order by name")) {
-                    realms.computeIfAbsent(r.systemId, k -> new ArrayList<>()).add(r);
-                }
-                for (SystemEntity e : SystemEntity.<SystemEntity>list(ENABLED_IN_ORDER)) {
-                    out.put(e.alias, toSystem(e, realms.getOrDefault(e.id, List.of())));
-                }
-                return Collections.unmodifiableMap(out);
-            });
-            snapshot = new Snapshot(loaded, System.currentTimeMillis(), true);
-            return loaded;
-        }
-        catch (RuntimeException e) {
-            LOG.warnf("Cannot read the Keycloak systems from the database: %s", e.toString());
-            return snapshot.systems();
+            return reloadLocked();
         }
         finally {
             reloading.unlock();
         }
     }
 
-    /** Forgets the snapshot after a write, so the next read sees the change. */
+    private Map<String, KeycloakSystem> reloadLocked() {
+        Snapshot s = snapshot;
+        if (s.fresh(clock.getAsLong())) {
+            return s.systems();
+        }
+        Map<String, KeycloakSystem> loaded;
+        try {
+            loaded = loader.get();
+        }
+        catch (RuntimeException e) {
+            int failures = s.failures() + 1;
+            long retryIn = retryDelayMillis(failures);
+            if (failures == 1) {
+                LOG.warnf(
+                        "Cannot read the Keycloak systems from the database, serving the last %d known; retrying in the background: %s",
+                        s.systems().size(), e.toString());
+            }
+            else {
+                LOG.debugf("Still cannot read the Keycloak systems (%d attempts), next in %d ms: %s", failures, retryIn,
+                        e.toString());
+            }
+            snapshot = new Snapshot(s.systems(), clock.getAsLong() + retryIn, s.loaded(), failures);
+            return s.systems();
+        }
+        if (s.failures() > 0) {
+            LOG.infof("Read the Keycloak systems from the database again after %d failed attempts", s.failures());
+        }
+        snapshot = new Snapshot(loaded, clock.getAsLong() + cacheMillis, true, 0);
+        return loaded;
+    }
+
+    /** 1 s, 2 s, 4 s, ... up to {@code cache-seconds} (at least 1 s). */
+    long retryDelayMillis(int failures) {
+        long cap = Math.max(FIRST_RETRY_MILLIS, cacheMillis);
+        long delay = FIRST_RETRY_MILLIS << Math.min(failures - 1, 20);
+        return Math.min(delay, cap);
+    }
+
+    /** The enabled rows with their realms, in a transaction of its own. */
+    private Map<String, KeycloakSystem> readRows() {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Map<String, KeycloakSystem> out = new LinkedHashMap<>();
+            Map<String, List<RealmEntity>> realms = new LinkedHashMap<>();
+            for (RealmEntity r : RealmEntity.<RealmEntity>list("order by name")) {
+                realms.computeIfAbsent(r.systemId, k -> new ArrayList<>()).add(r);
+            }
+            for (SystemEntity e : SystemEntity.<SystemEntity>list(ENABLED_IN_ORDER)) {
+                out.put(e.alias, toSystem(e, realms.getOrDefault(e.id, List.of())));
+            }
+            return Collections.unmodifiableMap(out);
+        });
+    }
+
+    /**
+     * Forgets the snapshot after a write, so the next read sees the change. A write that
+     * succeeded proves the database is back, so the failure count starts over.
+     */
     private void invalidate() {
-        snapshot = new Snapshot(snapshot.systems(), 0, snapshot.loaded());
+        snapshot = new Snapshot(snapshot.systems(), 0, snapshot.loaded(), 0);
     }
 
     /** Every stored system, disabled ones included, oldest first. */

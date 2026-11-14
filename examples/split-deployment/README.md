@@ -10,7 +10,8 @@ The same server in two instance roles on one PostgreSQL database
 
 Keycloak runs on :8093 (`admin`/`admin`), PostgreSQL on :5491. In a real deployment `mcp` sits behind the public
 ingress and `admin` on the internal network only. The MCP clients, and the models behind them, never reach the admin
-API. Even a compromised MCP instance cannot change what the admin side configured: its database user may not.
+API. Even a compromised MCP instance cannot change what the admin side configured: its database user may not. What it
+can still read, and what that means for the credentials: [Threat model](../../docs/security.md#threat-model).
 
 ```shell
 ../../mvnw -f ../../pom.xml package -DskipTests -Ppostgresql    # PostgreSQL build
@@ -73,6 +74,15 @@ The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client and `m
   - the audit retention (`KC_MCP_SPI_AUDIT_LISTENER_DB_RETENTION_DAYS`): set it on the admin instance only.
 - **The management UI** would run on the admin instance as well (`KC_MCP_UI_ENABLED=true`, with HTTPS and its client).
   Its session rows are the admin user's alone. See [management-ui](../management-ui/).
+
+## When the database is away
+
+`./db-outage.sh` (after `demo.sh`) calls a tool once a second before, during and after an outage of the MCP
+instance's database, and prints each call's duration and outcome, the time to recover and the calls that left no audit
+row. By default it cuts off only the `kcmcp_mcp` user (`NOLOGIN`, its sessions terminated), which to the MCP instance
+looks like a restart while Keycloak keeps its own database. `./db-outage.sh restart` stops the PostgreSQL container
+itself, Keycloak's database included. `OUTAGE_SECONDS` (30) sets the duration. What to expect:
+[When the database is away](../../docs/storage.md#when-the-database-is-away).
 
 ## Inspect
 
