@@ -144,7 +144,7 @@ the database connection.
 | `kc-mcp.providers-dir`          | `providers`                 | extension jars ([Extension jars](extending.md#extension-jars-providers)) |
 | `kc-mcp.prompts-dir`            | `prompts`                   | prompts as text files, one `.md` per prompt; resolved like `providers-dir`, the distribution sets `conf/prompts` ([Prompts as text files](tools.md#prompts-as-text-files)) |
 | `kc-mcp.prompt-overrides`       | `true`                      | a later prompt replaces an earlier one of the same name, logged at startup; `false`: a name used twice stops the start |
-| `kc-mcp.spi.<spi>.provider`    | lowest `order()`            | which extension serves `key-vault`, `key-generator`, `session-store` or `approval-store` ([Extending](extending.md)) |
+| `kc-mcp.spi.<spi>.provider`    | lowest `order()`            | which extension serves `key-vault`, `key-generator`, `session-store`, `approval-store` or `rate-limit-store` ([Extending](extending.md)) |
 | `kc-mcp.spi.<spi>.<id>.<key>`         |                             | per extension; `enabled=false` disables; id kebab-case (`acmeTicketChecker` → `acme-ticket-checker`, env `KC_MCP_SPI_ACCESS_CHECK_ACME_TICKET_CHECKER_*`, resolved by the server) |
 | `quarkus.http.cors.origins`     | local origins               | browser MCP clients; set to the client origin(s) in production |
 | `quarkus.otel.sdk.disabled`     | `true`                      | `false` exports metrics and traces to `quarkus.otel.exporter.otlp.endpoint` ([Metrics](metrics.md)) |

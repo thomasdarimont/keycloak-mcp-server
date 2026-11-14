@@ -21,6 +21,7 @@ import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditEvent;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolLevel;
@@ -43,6 +44,8 @@ import com.github.thomasdarimont.keycloak.mcp.storage.crypto.StorageCrypto;
 import com.github.thomasdarimont.keycloak.mcp.storage.keys.DatabaseKeyVault;
 import com.github.thomasdarimont.keycloak.mcp.storage.keys.SecretEntity;
 import com.github.thomasdarimont.keycloak.mcp.storage.keys.SigningKeyEntity;
+import com.github.thomasdarimont.keycloak.mcp.storage.ratelimit.DatabaseRateLimitStore;
+import com.github.thomasdarimont.keycloak.mcp.storage.ratelimit.RateLimitCallEntity;
 import com.github.thomasdarimont.keycloak.mcp.storage.systems.DatabaseKeycloakSystemRepository;
 import com.github.thomasdarimont.keycloak.mcp.storage.systems.RealmEntity;
 import com.github.thomasdarimont.keycloak.mcp.storage.systems.SystemEntity;
@@ -791,6 +794,60 @@ class DatabaseStorageIT {
         }
         assertEquals("rt-2", store.find(id).orElseThrow().refreshToken());
         store.delete(id);
+    }
+
+    @Inject
+    @Any
+    Instance<RateLimitStore> rateLimitStores;
+
+    @Test
+    void rateLimitHoldsForParallelCallsAndForgetsWhatLeftTheWindow() throws Exception {
+        var store = rateLimitStores.select(DatabaseRateLimitStore.class).get();
+        assertEquals("db", store.id());
+        String key = "user:demo/" + UUID.randomUUID() + "@prod";
+        long now = System.currentTimeMillis();
+        long window = 600_000;
+
+        // as many instances calling at once: exactly max are counted
+        int callers = 24;
+        var admitted = new java.util.concurrent.atomic.AtomicInteger();
+        var failed = new java.util.concurrent.ConcurrentLinkedQueue<Throwable>();
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+            for (int i = 0; i < callers; i++) {
+                executor.submit(() -> {
+                    try {
+                        if (store.admit(key, now, 5, window) == 0) {
+                            admitted.incrementAndGet();
+                        }
+                    }
+                    catch (Throwable t) {
+                        failed.add(t);
+                    }
+                });
+            }
+        }
+        assertEquals(List.of(), List.copyOf(failed));
+        assertEquals(5, admitted.get());
+
+        // full: says when the oldest call leaves the window; another key is not affected
+        assertEquals(window - 1_000, store.admit(key, now + 1_000, 5, window));
+        assertEquals(0, store.admit(key + "-other", now, 5, window));
+        // a shorter window over the same calls has room again once they left it
+        assertEquals(0, store.admit(key, now + 61_000, 5, 60_000));
+        // the window moved past the first five calls; the one at +61s still counts
+        assertEquals(0, store.admit(key, now + window, 2, window));
+        assertTrue(store.admit(key, now + window, 2, window) > 0);
+
+        String bucket = DatabaseRateLimitStore.bucketId(key);
+        assertEquals(7, countRateLimitCalls(bucket));
+        store.deleteOlderThan(now + window);
+        assertEquals(0, countRateLimitCalls(bucket), "calls at or before the cutoff are purged");
+        assertEquals(0, store.admit(key, now + window + 1, 1, window), "a purged bucket is created again");
+    }
+
+    @jakarta.transaction.Transactional
+    long countRateLimitCalls(String bucket) {
+        return RateLimitCallEntity.count("bucket", bucket);
     }
 
     @Inject

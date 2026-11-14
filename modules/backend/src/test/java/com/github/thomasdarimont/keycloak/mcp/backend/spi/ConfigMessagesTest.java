@@ -13,6 +13,7 @@ import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
 import com.github.thomasdarimont.keycloak.mcp.backend.authzen.AuthZenSettings;
 import com.github.thomasdarimont.keycloak.mcp.backend.ciba.CibaSettings;
+import com.github.thomasdarimont.keycloak.mcp.backend.guard.RateLimitCheck;
 import com.github.thomasdarimont.keycloak.mcp.backend.oauth.ClientAuthenticators;
 import com.github.thomasdarimont.keycloak.mcp.backend.policies.PolicySettings;
 import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
@@ -47,6 +48,7 @@ class ConfigMessagesTest {
         for (String check : List.of("group-scope", "no-escalation", "self-protection")) {
             specs.put(ConfigMessageKeys.prefix(AccessCheck.SPI, check), PolicySettings.spec(check));
         }
+        specs.put(ConfigMessageKeys.prefix(AccessCheck.SPI, RateLimitCheck.ID), RateLimitCheck.CONFIG_SPEC);
         specs.put(ConfigMessageKeys.prefix(AuditScrubber.SPI, PiiAuditScrubber.ID), PiiAuditScrubber.CONFIG_SPEC);
         specs.put(ConfigMessageKeys.prefix(AuditListener.SPI, DatabaseAuditListener.ID),
                 DatabaseAuditListener.CONFIG_SPEC);

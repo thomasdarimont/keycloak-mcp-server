@@ -285,6 +285,45 @@ Denials: `group_out_of_scope`, `manager_role_required`, `privilege_escalation`, 
 `self_protection`, `caller_unknown`, `caller_foreign_realm`, `caller_required`. Effective roles come from Keycloak: direct, through groups,
 composite; a caller's group memberships are read in full, page by page, never only the first page.
 
+### Rate limit
+
+A brake on a caller that runs away, a model in a loop above all: the `rate-limit` [access check](access-checks.md)
+admits at most `max` counted calls per caller and Keycloak system within a sliding `window`. It is off until the
+server, a system or a realm asks for it, and is configured like every access check.
+
+| `kc-mcp.spi.access-check.rate-limit.` | default | meaning |
+|---|---|---|
+| `default` | `off` | `on` runs the check everywhere; a system's or realm's `access.rate-limit.enabled: true` only there |
+| `max` | `30` | counted calls a caller may make on a system within the window |
+| `window` | `10m` | the sliding window, at most `24h` |
+| `levels` | `write,destructive` | the tool levels that count: `read`, `write`, `destructive` |
+| `tools` | | tools that count instead of the levels, by name, e.g. `client_secret_get` |
+| `on-limit` | `deny` | `confirm` lets a call over the limit through only after the human confirmed it themselves, by elicitation or a confirmer that asks them such as [CIBA](ciba-confirmation.md), never by the model's `confirm: true` |
+
+```properties
+kc-mcp.spi.access-check.rate-limit.default=on
+# prod: five destructive calls in ten minutes, then the human decides
+kc-mcp.systems.prod.access.rate-limit.levels=destructive
+kc-mcp.systems.prod.access.rate-limit.max=5
+kc-mcp.systems.prod.access.rate-limit.on-limit=confirm
+```
+
+The denial is `rate_limited` and says when the next call is possible. What to know:
+
+- The check runs after the other checks, so only calls they admit are counted. A call is counted when it is admitted,
+  whether or not it then succeeds or is confirmed; a call over the limit is not counted.
+- One count per caller and system. A realm may set its own `max` and `window`, which then apply to the calls into that
+  realm, over the caller's count on the system.
+- Where the calls are counted is the `RateLimitStore`. With the [database storage](storage.md) on it is the database
+  (`db`): the limit holds for all instances on it together, whichever one the proxy picks, and survives a restart.
+  Without it each instance counts in its own memory (`memory-rate-limits`), so behind a proxy the effective limit is
+  up to `max` times the instances. `kc-mcp.spi.rate-limit-store.provider` names the store,
+  `kc-mcp.spi.rate-limit-store.db.enabled=false` keeps the counts out of the database.
+- While the database cannot be reached the check counts in the instance's memory instead of refusing every counted
+  call or admitting all of them: the limit is looser for the time, never gone. The server log says so.
+- The instances compare their own clocks, so keep them in sync (NTP); a skew shifts the window by as much.
+- Without authenticated callers ([Callers](#callers)) all calls on a system share one count.
+
 ## Callers
 
 `CallerProvider` reads the Quarkus `SecurityIdentity`: subject, username, issuing realm, roles. The OIDC tenant is off

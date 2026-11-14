@@ -14,6 +14,7 @@ policy service may be too expensive, or not possible at all, in one environment 
 | `self-protection` | the caller cannot lock themselves out | yes |
 | `no-escalation` | grants only within the caller's own rights | yes |
 | `group-scope` | group management limited to the caller's groups or organizations | no |
+| `rate-limit` | at most so many calls per caller and system within a time window ([Security](security.md#rate-limit)) | no |
 | `authorization` | hands the call to authorization engines such as AuthZEN ([External authorization](authzen.md)) | yes, the engines decide whether they are concerned |
 | extensions' checks | whatever they check ([Extending](extending.md)) | the check's own choice |
 

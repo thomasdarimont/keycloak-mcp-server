@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Schema version 0.11.0: the calls the rate-limit access check counts, shared by all instances. -->
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                                       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="15-rate-limits" author="keycloak-mcp-server">
+        <comment>The rate-limit access check across instances: one bucket row per counted caller and system, which an
+            instance locks while it counts the window and adds its call, and one row per counted call; calls older than
+            the longest window (24 hours) are purged hourly</comment>
+        <createTable tableName="kc_mcp_rate_limit_bucket">
+            <!-- SHA-256 (hex) of caller and system -->
+            <column name="id" type="varchar(64)">
+                <constraints primaryKey="true" primaryKeyName="pk_kc_mcp_rate_limit_bucket" nullable="false"/>
+            </column>
+            <column name="last_call_at" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createTable tableName="kc_mcp_rate_limit_call">
+            <column name="id" type="varchar(36)">
+                <constraints primaryKey="true" primaryKeyName="pk_kc_mcp_rate_limit_call" nullable="false"/>
+            </column>
+            <column name="bucket" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="kc_mcp_rate_limit_call" indexName="ix_kc_mcp_rate_limit_call_bucket_at">
+            <column name="bucket"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <createIndex tableName="kc_mcp_rate_limit_call" indexName="ix_kc_mcp_rate_limit_call_at">
+            <column name="occurred_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

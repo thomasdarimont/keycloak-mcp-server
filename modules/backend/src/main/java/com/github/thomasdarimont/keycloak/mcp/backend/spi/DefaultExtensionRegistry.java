@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
 import com.github.thomasdarimont.keycloak.mcp.access.CallerIssuerPolicy;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenRequestCustomizer;
@@ -127,10 +128,10 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
             }
             byId.put(e.id(), e);
         }
-        if (discovery != null && type == PendingApprovalStore.class) {
+        String selectedSpi = SELECTED.get(type);
+        if (discovery != null && selectedSpi != null) {
             return discovery
-                .select(List.copyOf(byId.values()), List.of(), PendingApprovalStore.SPI, type.getSimpleName(),
-                        serverConfig)
+                .select(List.copyOf(byId.values()), List.of(), selectedSpi, type.getSimpleName(), serverConfig)
                 .map(List::of)
                 .orElse(List.of());
         }
@@ -168,10 +169,17 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
         return accessChecks;
     }
 
+    /**
+     * The extension points the registry hands out that exactly one extension serves, with
+     * their name in {@code kc-mcp.spi.<spi>.provider}.
+     */
+    private static final Map<Class<? extends Extension>, String> SELECTED = Map.of(PendingApprovalStore.class,
+            PendingApprovalStore.SPI, RateLimitStore.class, RateLimitStore.SPI);
+
     /** The extension points the registry hands out, resolved at startup. */
     static final List<Class<? extends Extension>> STARTUP_TYPES = List.of(PromptProvider.class, AccessCheck.class,
             AuthorizationEngine.class, AuthZenRequestCustomizer.class, Confirmer.class, AuditListener.class,
-            AuditScrubber.class, ProfileCheck.class, PendingApprovalStore.class);
+            AuditScrubber.class, ProfileCheck.class, PendingApprovalStore.class, RateLimitStore.class);
 
     /**
      * Extension points picked outside the registry; discovered here too, so that their

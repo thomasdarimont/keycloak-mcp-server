@@ -14,6 +14,7 @@ approvals. With it, several instances share one state. Without a JDBC URL it sta
 | keys and secrets | `db` (`KeyVault`) | `kc_mcp_signing_key`, `kc_mcp_secret` | per-system signing keys, client secrets |
 | audit | `db` (`AuditListener`) | `kc_mcp_audit_event` | one row per call, denials and reads included |
 | UI sessions | `db` (`UserSessionStore`) | `kc_mcp_user_session` | the management UI's sessions, tokens encrypted, expired rows purged hourly |
+| rate limits | `db` (`RateLimitStore`) | `kc_mcp_rate_limit_bucket`, `kc_mcp_rate_limit_call` | the calls the `rate-limit` access check counts, shared by all instances; purged hourly once older than 24 hours ([Rate limit](security.md#rate-limit)) |
 | pending approvals | `db` (`PendingApprovalStore`) | `kc_mcp_pending_approval` | CIBA requests waiting for a device ([CIBA confirmation](ciba-confirmation.md)) |
 
 Hibernate ORM with Panache; Liquibase creates and migrates the schema at startup (`db/kc-mcp/changelog.xml` includes

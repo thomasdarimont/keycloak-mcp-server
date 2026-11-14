@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
 import com.github.thomasdarimont.keycloak.mcp.access.CallerIssuerPolicy;
+import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenRequestCustomizer;
@@ -59,8 +60,8 @@ public final class ProviderConfig {
     /** The names of the extension points, the first segment after {@link #PREFIX}. */
     public static final Set<String> SPIS = Set.of(ToolProvider.SPI, PromptProvider.SPI, Confirmer.SPI, AccessCheck.SPI,
             AuthorizationEngine.SPI, AuthZenRequestCustomizer.SPI, CallerIssuerPolicy.SPI, AuditListener.SPI,
-            AuditScrubber.SPI, ProfileCheck.SPI, PendingApprovalStore.SPI, KeycloakSystemRepository.SPI, KeyVault.SPI,
-            SigningKeyGenerator.SPI, UserSessionStore.SPI);
+            AuditScrubber.SPI, ProfileCheck.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI,
+            KeycloakSystemRepository.SPI, KeyVault.SPI, SigningKeyGenerator.SPI, UserSessionStore.SPI);
 
     /**
      * Settings every extension has, handled by the server: {@code enabled} and
@@ -76,7 +77,7 @@ public final class ProviderConfig {
 
     /** The extension points served by exactly one extension. */
     public static final Set<String> SINGLE_PROVIDER_SPIS = Set.of(KeyVault.SPI, SigningKeyGenerator.SPI,
-            UserSessionStore.SPI, PendingApprovalStore.SPI);
+            UserSessionStore.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI);
 
     private final String spi;
     private final String providerId;
