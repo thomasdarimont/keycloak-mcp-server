@@ -54,8 +54,9 @@ KC_MCP_STORAGE_SECRET_KEY=$(openssl rand -base64 32) java -jar modules/backend/t
 
   Oracle's driver is not part of the distribution: put `ojdbc17.jar` (and `orai18n.jar`) into `lib/providers`, then
   run `bin/kcmcp.sh build --db=oracle`. A build takes the integrations and drivers of the other databases off the
-  class path, as Keycloak's does. From source there is no Oracle build; the distribution (`-Pdist`) carries the
-  integration.
+  class path, as Keycloak's does. From source there is no Oracle build; a build with `-Pdist` carries the
+  integration and is rebuilt once without loading it, so the distribution, the container image and
+  `target/quarkus-app` all start without it.
 - **Transaction isolation is READ COMMITTED on every database.** The stores count on a statement that waited for a
   row lock seeing the row as the other transaction left it. PostgreSQL, H2, SQL Server and Oracle default to that
   level, MariaDB and MySQL do not, so the datasource asks for it

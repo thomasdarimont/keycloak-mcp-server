@@ -15,10 +15,9 @@
     <description>The downloadable distribution: bin/kcmcp.sh and kcmcp.bat, conf/, the packaged server under lib/, providers/, data/, docs/</description>
 
     <properties>
-        <!-- the fast-jar layout the backend's package phase produces -->
+        <!-- the fast-jar layout the backend's package phase produces, in the dist profile rebuilt without the Oracle
+             integration (modules/backend/pom.xml) -->
         <backend.quarkus-app>${project.basedir}/../backend/target/quarkus-app</backend.quarkus-app>
-        <!-- a copy of it, rebuilt for the default database without the Oracle integration, is what gets packaged -->
-        <stage>${project.build.directory}/stage</stage>
     </properties>
 
     <dependencies>
@@ -35,57 +34,6 @@
     <build>
         <finalName>keycloak-mcp-server-${project.version}</finalName>
         <plugins>
-            <plugin>
-                <artifactId>maven-resources-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>stage-server</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${stage}/lib</outputDirectory>
-                            <includeEmptyDirs>true</includeEmptyDirs>
-                            <resources>
-                                <resource>
-                                    <directory>${backend.quarkus-app}</directory>
-                                    <filtering>false</filtering>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <!-- What `bin/kcmcp.sh build` does, once, for the database the server is built for: the package keeps
-                     the Oracle integration, the server as shipped does not load it. Without this every start of the
-                     distribution would end with an error of the Oracle integration, which has no driver. -->
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.5.0</version>
-                <executions>
-                    <execution>
-                        <id>rebuild-without-oracle</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${java.home}/bin/java</executable>
-                            <workingDirectory>${stage}</workingDirectory>
-                            <arguments>
-                                <argument>-Dquarkus.launch.rebuild=true</argument>
-                                <argument>-Dquarkus.package.output-directory=lib</argument>
-                                <argument>-Dquarkus.class-loading.removed-artifacts=io.quarkus:quarkus-jdbc-oracle,io.quarkus:quarkus-jdbc-oracle-deployment</argument>
-                                <argument>-Dquarkus.datasource.db-kind=${storage.db-kind}</argument>
-                                <argument>-jar</argument>
-                                <argument>lib/quarkus-run.jar</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.8.0</version>

@@ -47,9 +47,9 @@
                 <exclude>version.txt</exclude>
             </excludes>
         </fileSet>
-        <!-- the server: the backend's fast-jar layout, rebuilt without the Oracle integration (pom.xml) -->
+        <!-- the server: the backend's fast-jar layout as it is -->
         <fileSet>
-            <directory>${stage}/lib</directory>
+            <directory>${backend.quarkus-app}</directory>
             <outputDirectory>lib</outputDirectory>
             <excludes>
                 <exclude>quarkus-app-dependencies.txt</exclude>

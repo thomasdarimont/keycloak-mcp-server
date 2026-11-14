@@ -130,8 +130,8 @@
             <!-- The distribution also carries the Oracle integration, without Oracle's driver, which is not ours to
                  ship: an administrator puts ojdbc17 (and orai18n) into lib/providers and builds for oracle, as with
                  Keycloak. The integration fails when a datasource closes without the driver, so it must not be loaded
-                 unless the server is built for oracle: the distribution is rebuilt without it after packaging
-                 (modules/distribution), bin/kcmcp.sh build leaves out every database but the chosen one, and builds
+                 unless the server is built for oracle: the backend's package is rebuilt without it after packaging
+                 (modules/backend), bin/kcmcp.sh build leaves out every database but the chosen one, and builds
                  without this profile do not have it at all. -->
             <id>dist</id>
             <dependencies>

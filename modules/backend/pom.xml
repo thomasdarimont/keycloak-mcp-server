@@ -215,6 +215,48 @@
                     </exclusions>
                 </dependency>
             </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <!-- The dist profile packages the Oracle integration without Oracle's driver (modules/storage),
+                             and without the driver it must not be loaded: it fails whenever a datasource closes. An
+                             artifact removed while packaging is not packaged at all, so the package is rebuilt once
+                             without it, which is what `bin/kcmcp.sh build` does: in a copy laid out like the
+                             distribution, whose result replaces quarkus-app/quarkus. The distribution, the container
+                             image and the compose stacks that mount target/quarkus-app all take it from there. -->
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.2.0</version>
+                        <executions>
+                            <execution>
+                                <id>rebuild-without-oracle</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <delete dir="${project.build.directory}/rebuild"/>
+                                        <copy todir="${project.build.directory}/rebuild/lib" includeEmptyDirs="true">
+                                            <fileset dir="${project.build.directory}/quarkus-app"/>
+                                        </copy>
+                                        <mkdir dir="${project.build.directory}/rebuild/lib/providers"/>
+                                        <java jar="${project.build.directory}/rebuild/lib/quarkus-run.jar" fork="true" failonerror="true" dir="${project.build.directory}/rebuild">
+                                            <sysproperty key="quarkus.launch.rebuild" value="true"/>
+                                            <sysproperty key="quarkus.package.output-directory" value="lib"/>
+                                            <sysproperty key="quarkus.class-loading.removed-artifacts" value="io.quarkus:quarkus-jdbc-oracle,io.quarkus:quarkus-jdbc-oracle-deployment"/>
+                                            <sysproperty key="quarkus.datasource.db-kind" value="${storage.db-kind}"/>
+                                        </java>
+                                        <copy todir="${project.build.directory}/quarkus-app/quarkus" overwrite="true">
+                                            <fileset dir="${project.build.directory}/rebuild/lib/quarkus"/>
+                                        </copy>
+                                        <delete dir="${project.build.directory}/rebuild"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>
