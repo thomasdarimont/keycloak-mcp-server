@@ -350,7 +350,8 @@ export class SystemAdopt extends LitElement {
     }
     const what = l.restricted
       ? 'It leaves the allowlist and loses its settings.'
-      : `The system reaches every realm now: its allowlist becomes the ${othersListed} other realm(s) Keycloak lists.`;
+      : `The system reaches every realm now: its allowlist becomes the ${othersListed} other realm(s) Keycloak ` +
+        'lists, and realms created later are not reachable.';
     return html`<div class="confirm">
       <span class="muted">${what}</span>
       <button class="danger small" type="button" ?disabled=${this.busy} @click=${() => this.unadopt(realm)}>
@@ -566,7 +567,11 @@ export class SystemAdopt extends LitElement {
                             ${r.allowed
                               ? l.restricted
                                 ? html`<span class="badge">on allowlist</span>`
-                                : nothing
+                                : r.adopted
+                                  ? nothing
+                                  : html`<span class="badge" title="No allowlist: the system reaches every realm"
+                                      >reachable, no settings</span
+                                    >`
                               : html`<span class="badge">not reachable</span>`}
                             ${r.enabled === false ? html`<span class="badge">disabled</span>` : nothing}
                             ${r.renamedFrom
@@ -608,14 +613,19 @@ export class SystemAdopt extends LitElement {
     }
     const presets = Object.keys(s.presets ?? {});
     const count = this.allRealms ? l.count : this.selected.size;
-    const needsRestrict = !l.restricted && !this.allRealms && this.selected.size > 0;
-    const can = this.writable && count > 0 && (!needsRestrict || this.restrict) && !this.busy;
+    // without an allowlist adopting only stores settings; restricting is opt-in
+    const canRestrict = !l.restricted && !this.allRealms && this.selected.size > 0;
+    const losing = canRestrict
+      ? l.realms.filter((r) => !r.adopted && !this.selected.has(r.name)).map((r) => r.name)
+      : [];
+    const can = this.writable && count > 0 && !this.busy;
     return html`
       <section>
         <h3>3. Adopt</h3>
         <p class="lead">
-          Keycloak's realm id and display name become realm settings here and the realms go on the allowlist.
-          Settings already kept stay; they gain the realm id. Who may use a realm is up to its access settings and
+          Keycloak's realm id and display name become realm settings here. A system with an allowlist gets the
+          realms added to it; one without keeps reaching every realm. Settings already kept stay; they gain the
+          realm id. Who may use a realm is up to its access settings and
           presets (<a href=${systemHref(s.alias, 'realms')}>Realms</a>).
         </p>
         <div class="row">
@@ -644,11 +654,8 @@ export class SystemAdopt extends LitElement {
           </label>
           <datalist id="adopt-presets">${presets.map((p) => html`<option value=${p}></option>`)}</datalist>
         </div>
-        ${needsRestrict
-          ? html`<div class="warn">
-              <code>${s.alias}</code> reaches every realm now (no allowlist). Adopting a selection puts only the
-              selected realms on its allowlist; the others become unreachable.
-              <div>
+        ${canRestrict
+          ? html`<div class="row">
                 <label>
                   <input
                     type="checkbox"
@@ -657,10 +664,14 @@ export class SystemAdopt extends LitElement {
                       this.restrict = (e.target as HTMLInputElement).checked;
                     }}
                   />
-                  Restrict to the ${this.selected.size} selected realm(s)
+                  Also restrict <code>${s.alias}</code> to the selected and the already adopted realms
                 </label>
               </div>
-            </div>`
+              ${this.restrict && losing.length
+                ? html`<div class="warn">
+                    These realms become unreachable: ${losing.map((n) => html`<code>${n}</code> `)}
+                  </div>`
+                : nothing}`
           : nothing}
         <div class="row">
           <button type="button" ?disabled=${!can} @click=${() => this.adopt()}>
@@ -676,6 +687,9 @@ export class SystemAdopt extends LitElement {
               ${this.result.restricted
                 ? html`Allowlist: ${this.result.allowedRealms.map((r) => html`<code>${r}</code> `)}`
                 : html`Every realm is reachable.`}
+              ${this.result.unreachable?.length
+                ? html`No longer reachable: ${this.result.unreachable.map((r) => html`<code>${r}</code> `)}`
+                : nothing}
             </p>`
           : nothing}
       </section>

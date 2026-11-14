@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.ProcessingException;
@@ -118,8 +117,13 @@ public class AdminAdoption {
      * @param allowedRealms the new allowlist; empty: unchanged (an empty set inside:
      * every realm)
      */
+    /**
+     * @param allowedRealms the new allowlist; empty when it stays as it is
+     * @param unreachable the listed realms the new allowlist leaves out that the system
+     * reached before
+     */
     record Plan(List<RealmSettings> created, List<RealmSettings> updated, List<String> unchanged,
-            Optional<Set<String>> allowedRealms) {
+            Optional<Set<String>> allowedRealms, List<String> unreachable) {
     }
 
     /**
@@ -184,11 +188,12 @@ public class AdminAdoption {
 
     /**
      * Registers realms the service account sees: Keycloak's realm id and display name
-     * become realm settings (a new realm also gets {@code preset}), the realms go on the
-     * allowlist. {@code allRealms: true} adopts every listed realm and clears the
-     * allowlist, so later realms are reachable too. Adopting a selection on a system
-     * without an allowlist would restrict it and needs {@code restrict: true}. Existing
-     * settings keep everything but the realm id, and gain a display name they lack.
+     * become realm settings (a new realm also gets {@code preset}). On a system with an
+     * allowlist the realms are added to it. A system without one keeps reaching every
+     * realm, unless {@code restrict: true} asks for an allowlist: the selected realms and
+     * the ones adopted before. {@code allRealms: true} adopts every listed realm and
+     * clears the allowlist, so later realms are reachable too. Existing settings keep
+     * everything but the realm id, and gain a display name they lack.
      */
     public Map<String, Object> adopt(String alias, Map<String, Object> body) {
         MutableKeycloakSystemRepository owner = admin.mutableOwner(alias);
@@ -217,6 +222,7 @@ public class AdminAdoption {
         out.put("unchanged", plan.unchanged());
         out.put("restricted", !changed.allowedRealms().isEmpty());
         out.put("allowedRealms", changed.allowedRealms().stream().sorted().toList());
+        out.put("unreachable", plan.unreachable());
         return out;
     }
 
@@ -332,14 +338,23 @@ public class AdminAdoption {
             newAllowed = union.size() == allowed.size() ? Optional.empty() : Optional.of(union);
         }
         else if (!request.restrict()) {
-            throw new AdminException(409, "would_restrict", "'" + system.name() + "' reaches every realm now (no"
-                    + " allowedRealms); adopting " + chosen.size() + " realm(s) puts only those on its allowlist."
-                    + " Send \"restrict\": true for that, or \"allRealms\": true to keep every realm reachable.");
+            // adopting stores settings; restricting is asked for on its own
+            newAllowed = Optional.empty();
         }
         else {
-            newAllowed = Optional
-                .of(chosen.stream().map(KeycloakRealm::name).collect(Collectors.toCollection(TreeSet::new)));
+            // the realms adopted before keep their access: only the others leave
+            Set<String> restricted = new TreeSet<>();
+            chosen.forEach(r -> restricted.add(r.name()));
+            listed.stream().map(KeycloakRealm::name).filter(system.realms()::containsKey).forEach(restricted::add);
+            newAllowed = Optional.of(restricted);
         }
+        List<String> unreachable = newAllowed
+            .map(next -> listed.stream()
+                .map(KeycloakRealm::name)
+                .filter(system::realmAllowed)
+                .filter(n -> !next.isEmpty() && !next.contains(n))
+                .toList())
+            .orElse(List.of());
         List<RealmSettings> created = new ArrayList<>();
         List<RealmSettings> updated = new ArrayList<>();
         List<String> unchanged = new ArrayList<>();
@@ -363,7 +378,7 @@ public class AdminAdoption {
                 updated.add(merged);
             }
         }
-        return new Plan(created, updated, unchanged, newAllowed);
+        return new Plan(created, updated, unchanged, newAllowed, unreachable);
     }
 
     /** Keycloak's realms for the system's service account, by name. */

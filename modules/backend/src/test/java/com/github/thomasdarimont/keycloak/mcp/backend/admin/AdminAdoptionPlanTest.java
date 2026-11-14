@@ -43,21 +43,58 @@ class AdminAdoptionPlanTest {
     }
 
     @Test
-    void aSelectionOnAnUnrestrictedSystemNeedsRestrict() {
-        AdminException e = assertThrows(AdminException.class,
-                () -> AdminAdoption.plan(system().build(), LISTED, request(List.of("acme"), false, false, null)));
-        assertEquals(409, e.status());
-        assertEquals("would_restrict", e.code());
-
+    void aSelectionOnAnUnrestrictedSystemOnlyStoresSettings() {
         AdminAdoption.Plan plan = AdminAdoption.plan(system().build(), LISTED,
-                request(List.of("acme", "beta"), false, true, "read-only"));
+                request(List.of("acme"), false, false, null));
+        assertEquals(Optional.empty(), plan.allowedRealms(), "every realm stays reachable");
+        assertEquals(List.of(), plan.unreachable());
+        assertEquals(List.of("acme"), plan.created().stream().map(RealmSettings::name).toList());
+
+        plan = AdminAdoption.plan(system().build(), LISTED, request(List.of("acme", "beta"), false, true, "read-only"));
         assertEquals(Optional.of(Set.of("acme", "beta")), plan.allowedRealms());
+        assertEquals(List.of("master"), plan.unreachable());
         assertEquals(List.of("acme", "beta"), plan.created().stream().map(RealmSettings::name).toList());
         RealmSettings acme = plan.created().getFirst();
         assertEquals(Optional.of("id-acme"), acme.realmId());
         assertEquals(Optional.of("ACME Corp."), acme.displayName());
         assertEquals(Optional.of("read-only"), acme.preset());
         assertEquals(Optional.empty(), plan.created().get(1).displayName());
+    }
+
+    /**
+     * Every realm adopted, one realm's settings deleted, that realm adopted again: the
+     * others keep their access, with or without a restriction.
+     */
+    @Test
+    void readoptingARealmKeepsTheOthersReachable() {
+        List<AdminAdoption.KeycloakRealm> listed = List.of(realm("alpha", "id-alpha", null),
+                realm("beta", "id-beta", null), realm("gamma", "id-gamma", null), realm("master", "id-master", null));
+        KeycloakSystem.Builder everyRealm = system();
+        for (String name : List.of("alpha", "gamma", "master")) {
+            // beta's settings were deleted; the system has no allowlist
+            everyRealm.realm(new RealmSettings(name, Optional.of("id-" + name), Optional.empty(), Optional.empty(),
+                    Optional.empty(), AccessSettings.NONE, ToolSettings.NONE));
+        }
+        KeycloakSystem system = everyRealm.build();
+
+        AdminAdoption.Plan plan = AdminAdoption.plan(system, listed, request(List.of("beta"), false, false, null));
+        assertEquals(Optional.empty(), plan.allowedRealms(), "no restriction asked for: every realm stays reachable");
+        assertEquals(List.of("beta"), plan.created().stream().map(RealmSettings::name).toList());
+        assertEquals(List.of(), plan.unreachable());
+
+        AdminAdoption.Plan restricted = AdminAdoption.plan(system, listed, request(List.of("beta"), false, true, null));
+        assertEquals(Optional.of(Set.of("alpha", "beta", "gamma", "master")), restricted.allowedRealms(),
+                "the realms adopted before stay on the allowlist");
+        assertEquals(List.of(), restricted.unreachable());
+
+        // a realm never adopted is what a restriction leaves out
+        KeycloakSystem withoutGamma = system.toBuilder()
+            .realms(system.realms().values().stream().filter(r -> !r.name().equals("gamma")).toList())
+            .build();
+        AdminAdoption.Plan leavesGamma = AdminAdoption.plan(withoutGamma, listed,
+                request(List.of("beta"), false, true, null));
+        assertEquals(Optional.of(Set.of("alpha", "beta", "master")), leavesGamma.allowedRealms());
+        assertEquals(List.of("gamma"), leavesGamma.unreachable());
     }
 
     @Test

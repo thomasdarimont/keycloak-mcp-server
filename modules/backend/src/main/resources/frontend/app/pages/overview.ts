@@ -76,8 +76,20 @@ export class OverviewPage extends LitElement {
   @state()
   private systemsError: string | null = null;
 
+  /** The BFF sent the browser back here because a sign-in could not be completed. */
+  @state()
+  private signInFailed = false;
+
   connectedCallback(): void {
     super.connectedCallback();
+    const params = new URLSearchParams(location.search);
+    if (params.get('signin') === 'failed') {
+      this.signInFailed = true;
+      // shown once: a reload or a bookmark does not repeat it
+      params.delete('signin');
+      const query = params.toString();
+      history.replaceState(history.state, '', location.pathname + (query ? `?${query}` : '') + location.hash);
+    }
     void this.loadSystems();
   }
 
@@ -104,6 +116,12 @@ export class OverviewPage extends LitElement {
     if (!s?.authenticated) {
       return html`
         <h2>Overview</h2>
+        ${this.signInFailed
+          ? html`<p class="error" role="alert">
+              The sign-in could not be completed: the identity provider's answer was rejected, for example because a
+              clock is out of sync after the computer woke up. Sign in again.
+            </p>`
+          : nothing}
         <p class="lead">Sign in to manage Keycloak systems through the server-side session (BFF).</p>
       `;
     }
