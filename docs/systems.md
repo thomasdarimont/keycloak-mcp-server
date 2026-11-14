@@ -191,15 +191,26 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
    it is the auth realm's issuer (`https://sso.example.com/realms/master`, not the base URL; a save refuses anything
    else with `invalid_issuer`), needed only when the server reaches Keycloak at an internal URL.
 5. **Rotate** with `POST /admin/systems/acme/signing-key`: the JWKS lists the new key first and keeps the retired one
-   for `kc-mcp.spi.key-vault.db.retired-key-grace-seconds`, so Keycloak switches without a gap.
+   for `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` (an hour by default), so Keycloak switches without a gap.
+   After the grace period the retired key's private key is deleted; its row (kid, public key, timestamps) stays.
+6. **A leaked key:** `POST /admin/systems/acme/signing-key?dropPrevious=true` (UI: Keys → Rotate… → *The previous
+   key leaked*) rotates and takes the previous keys out of the JWKS at once, private keys deleted. Keycloak keeps the
+   JWKS it fetched until its keys cache is cleared: *Realm settings → Action → Clear keys cache* in the client's realm,
+   or `POST /admin/realms/<realm>/clear-keys-cache`.
 
 ### Adopting a Keycloak's realms
 
 Register the system first (step 2 above), then:
 
-- `GET /admin/systems/<alias>/client-setup[?roles=admin|read|manage&realms=a,b&credential=jwks-url|public-key]`: the
-  client for the system's `authRealm` as JSON (`POST /admin/realms/<realm>/clients`), the roles of its service account
-  and a `kcadm.sh` script doing both (role and role scope; full scope is off). The server creates nothing in Keycloak.
+- `GET /admin/systems/<alias>/client-setup[?roles=admin|read|manage&realms=a,b&credential=jwks-url|public-key&kcadm=installed|docker]`:
+  the client for the system's `authRealm` as JSON (`POST /admin/realms/<realm>/clients`), the roles of its service
+  account and a script doing both (role and role scope; full scope is off): `script` for Linux and macOS (bash,
+  `kcadm.sh`), `powershellScript` for Windows (PowerShell 5.1 or 7, `kcadm.bat`). The server creates nothing in Keycloak.
+  - kcadm comes from a Keycloak installation (`KCADM`, default `kcadm.sh` / `kcadm.bat` on the PATH), or with
+    `kcadm=docker` (or `KCADM_IMAGE` set) from the Keycloak image of the system's version through `docker run`. The
+    login is then kept per system in `~/.kc-mcp/kcadm/<alias>` (`KCADM_CONFIG_DIR`), apart from an existing
+    `~/.keycloak`; the script's header shows the login command. `--net=host` reaches a Keycloak at `localhost` on
+    Linux and with Docker Desktop's host networking; `KCADM_DOCKER_NETWORK` names another network.
   - `roles=admin` (default): master's `admin` role, every realm, later ones too, incl. creating realms;
     `read` / `manage`: view/query (and manage) roles of the `<realm>-realm` clients of `realms` only. Outside master:
     `realm-management` roles of that realm.

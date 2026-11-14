@@ -585,16 +585,27 @@ public class AdminSystems {
 
     /** Creates a new key for the system; the previous one is retired. */
     public Map<String, Object> rotate(String alias, String publicBase) {
+        return rotate(alias, publicBase, false);
+    }
+
+    /**
+     * Creates a new key for the system; the previous one is retired, with
+     * {@code dropPrevious} it leaves the JWKS at once (a leaked key).
+     */
+    public Map<String, Object> rotate(String alias, String publicBase, boolean dropPrevious) {
         KeycloakSystem system = known(alias);
         if (system.clientAuth() != ClientAuth.PRIVATE_KEY_JWT) {
             throw new AdminException(409, "no_private_key_jwt",
                     "'" + alias + "' does not authenticate with private_key_jwt.");
         }
         try {
-            keys.rotate(system);
+            keys.rotate(system, dropPrevious);
         }
         catch (UnsupportedOperationException e) {
             throw new AdminException(409, "vault_read_only", e.getMessage());
+        }
+        if (dropPrevious) {
+            LOG.warnf("Admin API: system '%s' rotated its signing key and dropped the previous ones", alias);
         }
         return represent(system, publicBase);
     }
@@ -667,6 +678,8 @@ public class AdminSystems {
                     key.put("kid", Jwks.jwk(k.publicKey(), k.algorithm(), k.keyId()).getString("kid"));
                 });
                 key.put("vault", keys.vault().id());
+                keys.currentKeyCreatedAt(s).ifPresent(t -> key.put("createdAt", t.toString()));
+                keys.vault().retiredKeyGrace().ifPresent(g -> key.put("retiredKeyGraceSeconds", g.toSeconds()));
             }
             key.put("jwksPath", paths.absolute(path));
             key.put("jwksUrl", publicBase + paths.absolute(path));

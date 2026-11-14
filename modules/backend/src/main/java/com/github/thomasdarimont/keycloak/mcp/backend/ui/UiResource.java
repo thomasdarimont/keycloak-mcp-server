@@ -59,7 +59,7 @@ import io.quarkus.vertx.http.runtime.CurrentVertxRequest;
  * GET /bff/api/systems/{alias}             one system, as GET /admin/systems/{alias}
  * PUT /bff/api/systems/{alias}             replace a mutable system, as PUT /admin/systems/{alias} (operator + CSRF)
  * DELETE /bff/api/systems/{alias}          remove a mutable system (operator + CSRF)
- * POST /bff/api/systems/{alias}/signing-key  rotate the signing key (operator + CSRF)
+ * POST /bff/api/systems/{alias}/signing-key  rotate the signing key (operator + CSRF; ?dropPrevious=true)
  * GET /bff/api/systems/{alias}/realms      realm settings for the system
  * GET /bff/api/systems/{alias}/realms/{r}  one realm's settings
  * PUT /bff/api/systems/{alias}/realms/{r}  add or replace realm settings (operator + CSRF)
@@ -255,9 +255,9 @@ public class UiResource {
 
     @POST
     @Path("api/systems/{alias}/signing-key")
-    public Map<String, Object> rotateSigningKey(@PathParam("alias") String alias, @Context UriInfo uri,
-            @Context HttpHeaders headers) {
-        return systems.rotate(alias, AdminResource.publicBase(config.hostname(), uri, headers));
+    public Map<String, Object> rotateSigningKey(@PathParam("alias") String alias,
+            @QueryParam("dropPrevious") boolean dropPrevious, @Context UriInfo uri, @Context HttpHeaders headers) {
+        return systems.rotate(alias, AdminResource.publicBase(config.hostname(), uri, headers), dropPrevious);
     }
 
     @GET
@@ -291,10 +291,10 @@ public class UiResource {
     @GET
     @Path("api/systems/{alias}/client-setup")
     public Map<String, Object> clientSetup(@PathParam("alias") String alias, @QueryParam("roles") String roles,
-            @QueryParam("realms") String realms, @QueryParam("credential") String credential, @Context UriInfo uri,
-            @Context HttpHeaders headers) {
+            @QueryParam("realms") String realms, @QueryParam("credential") String credential,
+            @QueryParam("kcadm") String kcadm, @Context UriInfo uri, @Context HttpHeaders headers) {
         return adoption.clientSetup(alias, AdminResource.publicBase(config.hostname(), uri, headers), roles,
-                AdminResource.splitList(realms), credential);
+                AdminResource.splitList(realms), credential, kcadm);
     }
 
     @GET

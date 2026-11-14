@@ -39,9 +39,12 @@ public class SigningKeyEntity extends PanacheEntityBase {
     @Column(name = "key_type", nullable = false, length = 16)
     public String keyType;
 
-    /** Base64 PKCS#8, encrypted when {@code kc-mcp.storage.secret-key} is set. */
+    /**
+     * Base64 PKCS#8, encrypted when {@code kc-mcp.storage.secret-key} is set;
+     * {@code null} once the key was retired longer than the grace period ago.
+     */
     @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
-    @Column(name = "private_key", nullable = false)
+    @Column(name = "private_key")
     public String privateKey;
 
     /** Base64 X.509 SubjectPublicKeyInfo. */

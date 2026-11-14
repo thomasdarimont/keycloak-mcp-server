@@ -94,7 +94,7 @@ and the same `kc-mcp.storage.secret-key` on every instance.
 |---|---|
 | a system registered, changed or removed | within `cache-seconds` |
 | a secret stored | on their next tool call |
-| a signing key rotated | on their next token request; every JWKS publishes the current key plus keys retired within `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` (3600), so Keycloak accepts a lagging instance |
+| a signing key rotated | on their next token request; every JWKS publishes the current key plus keys retired within `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` (3600), so Keycloak accepts a lagging instance; after that the retired key's private key is deleted (with the next rotation, else by the hourly purge), its row stays as history |
 | an audit retention purge | runs on every instance; deletes are idempotent |
 
 Two instances creating a first signing key at the same time both succeed: both keys are published, the newest signs.

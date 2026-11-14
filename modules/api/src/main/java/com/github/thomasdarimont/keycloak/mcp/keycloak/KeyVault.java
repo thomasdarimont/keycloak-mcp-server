@@ -1,5 +1,7 @@
 package com.github.thomasdarimont.keycloak.mcp.keycloak;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,6 +48,31 @@ public interface KeyVault extends Extension {
      */
     default List<SigningKey> publishedSigningKeys(String system) {
         return findSigningKey(system).map(List::of).orElse(List.of());
+    }
+
+    /**
+     * How long {@link #publishedSigningKeys} keeps a retired key; empty for a vault that
+     * publishes the current key alone.
+     */
+    default Optional<Duration> retiredKeyGrace() {
+        return Optional.empty();
+    }
+
+    /**
+     * When the current signing key of a system was created; empty when none exists or the
+     * vault does not know (keys provisioned outside the server).
+     */
+    default Optional<Instant> signingKeyCreatedAt(String system) {
+        return Optional.empty();
+    }
+
+    /**
+     * Ends the grace period of a system's retired keys at once, after a leak: they leave
+     * the JWKS now and their private keys are deleted. The number dropped; {@code 0} for
+     * a vault that keeps no retired keys.
+     */
+    default int dropRetiredSigningKeys(String system) {
+        return 0;
     }
 
     /**

@@ -20,5 +20,6 @@
     <include file="db/kc-mcp/0.7.0-changelog.xml"/>
     <include file="db/kc-mcp/0.8.0-changelog.xml"/>
     <include file="db/kc-mcp/0.9.0-changelog.xml"/>
+    <include file="db/kc-mcp/0.10.0-changelog.xml"/>
 
 </databaseChangeLog>

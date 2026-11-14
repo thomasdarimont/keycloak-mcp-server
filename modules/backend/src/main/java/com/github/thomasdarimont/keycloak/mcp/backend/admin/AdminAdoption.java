@@ -543,7 +543,17 @@ public class AdminAdoption {
      */
     public Map<String, Object> clientSetup(String alias, String publicBase, String roles, List<String> realms,
             String credential) {
+        return clientSetup(alias, publicBase, roles, realms, credential, null);
+    }
+
+    /**
+     * @param kcadm where the scripts run kcadm from: {@code installed} (default) or
+     * {@code docker} (the Keycloak image of the system's version)
+     */
+    public Map<String, Object> clientSetup(String alias, String publicBase, String roles, List<String> realms,
+            String credential, String kcadm) {
         KeycloakSystem system = admin.known(alias);
+        Optional<String> image = kcadmImage(system, kcadm);
         String mode = roles == null || roles.isBlank() ? "admin" : roles.trim().toLowerCase(Locale.ROOT);
         if (!List.of("admin", "read", "manage").contains(mode)) {
             throw new AdminException(400, "invalid_roles", "roles must be admin, read or manage.");
@@ -669,19 +679,57 @@ public class AdminAdoption {
         out.put("credential", system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT ? keyMode : "client-secret");
         out.put("client", client);
         out.put("roles", rolesOut);
-        out.put("script", script(system, clientId, client, grants));
+        out.put("kcadm", image.isPresent() ? "docker" : "installed");
+        image.ifPresent(i -> out.put("kcadmImage", i));
+        out.put("script", script(system, clientId, client, grants, image));
+        out.put("powershellScript", powershellScript(system, clientId, client, grants, image));
         out.put("notes", notes);
         return out;
     }
 
     /**
-     * A {@code kcadm.sh} script: the client, the roles of its service account and the
-     * same roles in the client's role scope (full scope is off). No {@code jq}: it runs
-     * in the Keycloak container too.
+     * Where kcadm runs from, the image of the Keycloak's version for
+     * {@code kcadm=docker}.
      */
+    static Optional<String> kcadmImage(KeycloakSystem system, String kcadm) {
+        String mode = kcadm == null || kcadm.isBlank() ? "installed" : kcadm.trim().toLowerCase(Locale.ROOT);
+        return switch (mode) {
+            case "installed" -> Optional.empty();
+            case "docker" ->
+                Optional.of(KEYCLOAK_IMAGE + ":" + system.version().filter(v -> !v.isBlank()).orElse("latest"));
+            default -> throw new AdminException(400, "invalid_kcadm", "kcadm must be installed or docker.");
+        };
+    }
+
+    static final String KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak";
+
+    /**
+     * Where kcadm of the image keeps the login of a system, under the home directory: one
+     * directory per system, apart from {@code ~/.keycloak}, so neither an existing kcadm
+     * setup nor another system's login is touched.
+     */
+    static String kcadmConfigDir(KeycloakSystem system) {
+        return ".kc-mcp/kcadm/" + system.name().replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
     static String script(KeycloakSystem system, String clientId, Map<String, Object> client,
             Map<String, List<String>> grants) {
+        return script(system, clientId, client, grants, Optional.empty());
+    }
+
+    /**
+     * A bash script for Linux and macOS: the client, the roles of its service account and
+     * the same roles in the client's role scope (full scope is off). kcadm.sh comes from
+     * a Keycloak installation, or from the Keycloak image ({@code image}, or
+     * {@code KCADM_IMAGE}) through docker. No {@code jq}: it runs in the Keycloak
+     * container too.
+     */
+    static String script(KeycloakSystem system, String clientId, Map<String, Object> client,
+            Map<String, List<String>> grants, Optional<String> image) {
         String realm = system.authRealm();
+        String dockerRun = "docker run --rm -i --net=\"${KCADM_DOCKER_NETWORK:-host}\" --user \"$(id -u):$(id -g)\""
+                + " -e HOME=/opt/keycloak -v \"$KCADM_CONFIG_DIR:/opt/keycloak/.keycloak:z\""
+                + " --entrypoint /opt/keycloak/bin/kcadm.sh";
         StringBuilder s = new StringBuilder();
         s.append("#!/usr/bin/env bash\n");
         s.append("# The client ")
@@ -692,17 +740,40 @@ public class AdminAdoption {
             .append(system.url())
             .append(",\n");
         s.append("# for the system '").append(system.name()).append("' of keycloak-mcp-server. Log in first:\n");
-        s.append("#   kcadm.sh config credentials --server ")
-            .append(system.url())
-            .append(" --realm master --user admin\n");
+        String login = "config credentials --server " + system.url() + " --realm master --user admin";
+        if (image.isPresent()) {
+            s.append("#   mkdir -p ~/")
+                .append(kcadmConfigDir(system))
+                .append(" && docker run --rm -it --net=host --user \"$(id -u):$(id -g)\" \\\n");
+            s.append("#     -e HOME=/opt/keycloak -v \"$HOME/" + kcadmConfigDir(system)
+                    + ":/opt/keycloak/.keycloak:z\" --entrypoint /opt/keycloak/bin/kcadm.sh \\\n");
+            s.append("#     ").append(image.get()).append(' ').append(login).append('\n');
+        }
+        else {
+            s.append("#   kcadm.sh ").append(login).append('\n');
+        }
+        s.append("# kcadm.sh of a Keycloak installation (KCADM, default kcadm.sh on the PATH), or the one in the\n");
+        s.append("# Keycloak image when KCADM_IMAGE is set: docker, the login kept in KCADM_CONFIG_DIR (default\n");
+        s.append("# ~/").append(kcadmConfigDir(system)).append(", apart from an existing ~/.keycloak),\n");
+        s.append("# --net=${KCADM_DOCKER_NETWORK:-host} (a Keycloak at localhost: Linux, or Docker Desktop's host\n");
+        s.append("# networking).\n");
         s.append("set -euo pipefail\n");
-        s.append("KCADM=\"${KCADM:-kcadm.sh}\"\n");
+        s.append("KCADM_IMAGE=\"${KCADM_IMAGE-").append(image.orElse("")).append("}\"\n");
+        s.append("KCADM_CONFIG_DIR=\"${KCADM_CONFIG_DIR:-$HOME/").append(kcadmConfigDir(system)).append("}\"\n");
+        s.append("kcadm() {\n");
+        s.append("  if [ -n \"$KCADM_IMAGE\" ]; then\n");
+        s.append("    mkdir -p \"$KCADM_CONFIG_DIR\"\n");
+        s.append("    ").append(dockerRun).append(" \"$KCADM_IMAGE\" \"$@\"\n");
+        s.append("  else\n");
+        s.append("    \"${KCADM:-kcadm.sh}\" \"$@\"\n");
+        s.append("  fi\n");
+        s.append("}\n");
         s.append("REALM=").append(shell(realm)).append('\n');
         s.append("CLIENT=").append(shell(clientId)).append('\n');
         s.append("SA=").append(shell("service-account-" + clientId.toLowerCase(Locale.ROOT))).append("\n\n");
-        s.append("\"$KCADM\" create clients -r \"$REALM\" -f - <<'JSON'\n");
+        s.append("kcadm create clients -r \"$REALM\" -f - <<'JSON'\n");
         s.append(new JsonObject(client).encodePrettily()).append("\nJSON\n");
-        s.append("CID=$(\"$KCADM\" get clients -r \"$REALM\" -q clientId=\"$CLIENT\" --fields id --format csv"
+        s.append("CID=$(kcadm get clients -r \"$REALM\" -q clientId=\"$CLIENT\" --fields id --format csv"
                 + " --noquotes | head -1)\n");
         s.append("# kcadm prints one object over several lines: [ and ] around it make the list the scope API takes\n");
         s.append("as_list() { sed 's/^{/[{/; s/}$/}]/'; }\n\n");
@@ -710,26 +781,142 @@ public class AdminAdoption {
             String roles = String.join(" ", g.getValue());
             if (g.getKey() == null) {
                 s.append("for ROLE in ").append(roles).append("; do\n");
-                s.append("  \"$KCADM\" add-roles -r \"$REALM\" --uusername \"$SA\" --rolename \"$ROLE\"\n");
-                s.append("  \"$KCADM\" get \"roles/$ROLE\" -r \"$REALM\" --fields id,name | as_list \\\n");
-                s.append("    | \"$KCADM\" create \"clients/$CID/scope-mappings/realm\" -r \"$REALM\" -f -\n");
+                s.append("  kcadm add-roles -r \"$REALM\" --uusername \"$SA\" --rolename \"$ROLE\"\n");
+                s.append("  kcadm get \"roles/$ROLE\" -r \"$REALM\" --fields id,name | as_list \\\n");
+                s.append("    | kcadm create \"clients/$CID/scope-mappings/realm\" -r \"$REALM\" -f -\n");
                 s.append("done\n");
             }
             else {
-                s.append("RCID=$(\"$KCADM\" get clients -r \"$REALM\" -q clientId=")
+                s.append("RCID=$(kcadm get clients -r \"$REALM\" -q clientId=")
                     .append(shell(g.getKey()))
                     .append(" --fields id --format csv --noquotes | head -1)\n");
                 s.append("for ROLE in ").append(roles).append("; do\n");
-                s.append("  \"$KCADM\" add-roles -r \"$REALM\" --uusername \"$SA\" --cclientid ")
+                s.append("  kcadm add-roles -r \"$REALM\" --uusername \"$SA\" --cclientid ")
                     .append(shell(g.getKey()))
                     .append(" --rolename \"$ROLE\"\n");
-                s.append(
-                        "  \"$KCADM\" get \"clients/$RCID/roles/$ROLE\" -r \"$REALM\" --fields id,name | as_list \\\n");
-                s.append("    | \"$KCADM\" create \"clients/$CID/scope-mappings/clients/$RCID\" -r \"$REALM\" -f -\n");
+                s.append("  kcadm get \"clients/$RCID/roles/$ROLE\" -r \"$REALM\" --fields id,name | as_list \\\n");
+                s.append("    | kcadm create \"clients/$CID/scope-mappings/clients/$RCID\" -r \"$REALM\" -f -\n");
                 s.append("done\n");
             }
         }
         return s.toString();
+    }
+
+    static String powershellScript(KeycloakSystem system, String clientId, Map<String, Object> client,
+            Map<String, List<String>> grants) {
+        return powershellScript(system, clientId, client, grants, Optional.empty());
+    }
+
+    /**
+     * The same steps as {@link #script} for Windows: PowerShell (5.1 and 7) calling
+     * {@code kcadm.bat}, or kcadm.sh of the Keycloak image through docker. JSON goes to
+     * kcadm on stdin as UTF-8 ({@code $OutputEncoding}; Windows PowerShell 5.1 would send
+     * ASCII). Every kcadm call is checked, since PowerShell does not stop on a native
+     * command's exit code.
+     */
+    static String powershellScript(KeycloakSystem system, String clientId, Map<String, Object> client,
+            Map<String, List<String>> grants, Optional<String> image) {
+        String realm = system.authRealm();
+        StringBuilder s = new StringBuilder();
+        s.append("# The client ")
+            .append(clientId)
+            .append(" in the realm ")
+            .append(realm)
+            .append(" of ")
+            .append(system.url())
+            .append(",\n");
+        s.append("# for the system '").append(system.name()).append("' of keycloak-mcp-server. Log in first:\n");
+        String login = "config credentials --server " + system.url() + " --realm master --user admin";
+        if (image.isPresent()) {
+            s.append("#   New-Item -ItemType Directory -Force \"$HOME/")
+                .append(kcadmConfigDir(system))
+                .append("\" | Out-Null\n");
+            s.append("#   docker run --rm -it --net=host -e HOME=/opt/keycloak -v \"$HOME/" + kcadmConfigDir(system)
+                    + ":/opt/keycloak/.keycloak\" `\n");
+            s.append("#     --entrypoint /opt/keycloak/bin/kcadm.sh ")
+                .append(image.get())
+                .append(' ')
+                .append(login)
+                .append('\n');
+        }
+        else {
+            s.append("#   kcadm.bat ").append(login).append('\n');
+        }
+        s.append("# kcadm.bat of a Keycloak installation ($env:KCADM, default kcadm.bat on the PATH; it is in\n");
+        s.append("# Keycloak's bin folder), or kcadm.sh of the Keycloak image when $env:KCADM_IMAGE is set: docker,\n");
+        s.append("# the login kept in $env:KCADM_CONFIG_DIR (default ~/")
+            .append(kcadmConfigDir(system))
+            .append(", apart from an existing\n");
+        s.append("# ~/.keycloak), --net=$env:KCADM_DOCKER_NETWORK (default host). Run with\n");
+        s.append("#   powershell -ExecutionPolicy Bypass -File <this file>.ps1\n");
+        s.append("$ErrorActionPreference = 'Stop'\n");
+        s.append("$OutputEncoding = New-Object System.Text.UTF8Encoding $false\n");
+        s.append("$KcadmImage = if ($null -ne $env:KCADM_IMAGE) { $env:KCADM_IMAGE } else { ")
+            .append(powershell(image.orElse("")))
+            .append(" }\n");
+        s.append("$Kcadm = if ($env:KCADM) { $env:KCADM } else { 'kcadm.bat' }\n");
+        s.append("$KcadmConfig = if ($env:KCADM_CONFIG_DIR) { $env:KCADM_CONFIG_DIR } else { Join-Path $HOME ")
+            .append(powershell(kcadmConfigDir(system)))
+            .append(" }\n");
+        s.append("$Realm = ").append(powershell(realm)).append('\n');
+        s.append("$Client = ").append(powershell(clientId)).append('\n');
+        s.append("$SA = ").append(powershell("service-account-" + clientId.toLowerCase(Locale.ROOT))).append("\n\n");
+        s.append("# kcadm with these arguments, what is piped in on its stdin\n");
+        s.append("function Invoke-Kcadm {\n");
+        s.append("    if ($KcadmImage) {\n");
+        s.append("        New-Item -ItemType Directory -Force $KcadmConfig | Out-Null\n");
+        s.append("        $network = if ($env:KCADM_DOCKER_NETWORK) { $env:KCADM_DOCKER_NETWORK } else { 'host' }\n");
+        s.append(
+                "        $out = $input | docker run --rm -i \"--net=$network\" -e HOME=/opt/keycloak -v \"${KcadmConfig}:/opt/keycloak/.keycloak\""
+                        + " --entrypoint /opt/keycloak/bin/kcadm.sh $KcadmImage @args\n");
+        s.append("    }\n");
+        s.append("    else {\n");
+        s.append("        $out = $input | & $Kcadm @args\n");
+        s.append("    }\n");
+        s.append(
+                "    if ($LASTEXITCODE -ne 0) { throw \"kcadm $($args -join ' ') failed with exit code $LASTEXITCODE\" }\n");
+        s.append("    $out\n");
+        s.append("}\n");
+        s.append("# a role as the one-element list the scope API takes\n");
+        s.append("function Get-RoleList([string] $Path) {\n");
+        s.append("    $role = (Invoke-Kcadm get $Path -r $Realm --fields 'id,name') -join \"`n\" | ConvertFrom-Json\n");
+        s.append("    ConvertTo-Json -InputObject @($role) -Compress\n");
+        s.append("}\n");
+        s.append("function Add-RoleScope([string] $RolePath, [string] $ScopePath) {\n");
+        s.append("    Get-RoleList $RolePath | Invoke-Kcadm create $ScopePath -r $Realm -f -\n");
+        s.append("}\n\n");
+        // a literal here-string: nothing in the JSON is expanded
+        s.append("$clientJson = @'\n").append(new JsonObject(client).encodePrettily()).append("\n'@\n");
+        s.append("$clientJson | Invoke-Kcadm create clients -r $Realm -f -\n");
+        s.append("$Cid = Invoke-Kcadm get clients -r $Realm -q \"clientId=$Client\" --fields id --format csv --noquotes"
+                + " | Select-Object -First 1\n\n");
+        for (Map.Entry<String, List<String>> g : grants.entrySet()) {
+            String roles = String.join(", ", g.getValue().stream().map(AdminAdoption::powershell).toList());
+            if (g.getKey() == null) {
+                s.append("foreach ($Role in @(").append(roles).append(")) {\n");
+                s.append("    Invoke-Kcadm add-roles -r $Realm --uusername $SA --rolename $Role\n");
+                s.append("    Add-RoleScope \"roles/$Role\" \"clients/$Cid/scope-mappings/realm\"\n");
+                s.append("}\n");
+            }
+            else {
+                s.append("$Rcid = Invoke-Kcadm get clients -r $Realm -q ")
+                    .append(powershell("clientId=" + g.getKey()))
+                    .append(" --fields id --format csv --noquotes | Select-Object -First 1\n");
+                s.append("foreach ($Role in @(").append(roles).append(")) {\n");
+                s.append("    Invoke-Kcadm add-roles -r $Realm --uusername $SA --cclientid ")
+                    .append(powershell(g.getKey()))
+                    .append(" --rolename $Role\n");
+                s.append(
+                        "    Add-RoleScope \"clients/$Rcid/roles/$Role\" \"clients/$Cid/scope-mappings/clients/$Rcid\"\n");
+                s.append("}\n");
+            }
+        }
+        return s.toString();
+    }
+
+    /** Single-quoted for PowerShell: nothing inside is expanded, a quote is doubled. */
+    static String powershell(String value) {
+        return "'" + value.replace("'", "''") + "'";
     }
 
     /** Single-quoted for the shell. */

@@ -24,7 +24,7 @@ loop.
 | `/ui/systems/{alias}` | system Settings (default tab): connection, allowlist, trusted issuers, delete |
 | `/ui/systems/{alias}/realms` | Realms: allowlist + stored settings, MCP entries, add settings |
 | `/ui/systems/{alias}/realms/{realm}` | realm labels, realm id, preset; delete settings |
-| `/ui/systems/{alias}/adopt` | adopt realms: the Keycloak client (JSON, `kcadm.sh`), the realms its service account sees, adopt a selection or every realm ([Adopting](systems.md#adopting-a-keycloaks-realms)) |
+| `/ui/systems/{alias}/adopt` | adopt realms: the Keycloak client (JSON and a kcadm script for Linux/macOS or Windows, from an installation or the Keycloak image; copy or download), the realms its service account sees, adopt a selection or every realm ([Adopting](systems.md#adopting-a-keycloaks-realms)) |
 | `/ui/systems/{alias}/keys` | signing key details; rotate (operator, mutable / writable vault) |
 | `/ui/audit` | the audit trail, newest first: filters for caller, system, realm and tool (completed from the recorded values), level, outcome and time (the last N minutes, hours, days or weeks, or between two moments), and signed-in or anonymous callers, applied as they are chosen and listed as removable chips; When, Caller and Took sort the table; an entry opens to its details (message, subject, client, connection, the OpenTelemetry trace and span, linked through `kc-mcp.ui.trace-url`), and its arguments are fetched only on *Show arguments*; the address bar carries them (`?system=&realm=&tool=&level=&outcome=&anonymous=&last=2w` or `from=&to=`, `sort=&order=`, `size=`), so a view can be bookmarked or shared, without the caller: names stay out of URLs; 25, 50, 100 or 250 per page (25 by default), paged with the total |
 | `/ui/secrets`, `/ui/storage` | stubs |
@@ -108,6 +108,10 @@ which provider and subject it belongs to.
   suspend), a browser (`Accept: text/html`) is sent to `/ui/?signin=failed`, which says so and offers to sign in
   again; other clients get 401 `sign_in_failed`. The server logs the reason without the token's claims. The login is
   not restarted on its own: while the cause lasts that would loop.
+- **Server errors.** An unexpected error under `/ui` or `/bff` gets the UI's own answer instead of Quarkus' error
+  page: a browser a small page with the error id and *Try again*, the BFF's callers `{"error": "server_error",
+  "message", "errorId"}`; the server logs the error under that id. Dev mode's *Error restarting Quarkus* page (the
+  application failed to reload, e.g. a compile error) comes from Quarkus itself and stays.
 - **Several instances.** Set `QUARKUS_OIDC_KC_MCP_UI_<ALIAS>_AUTHENTICATION_STATE_SECRET` so any instance can finish a
   login another one started; the session rows are shared through the database.
 

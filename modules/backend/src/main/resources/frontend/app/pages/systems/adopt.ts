@@ -103,6 +103,60 @@ export class SystemAdopt extends LitElement {
       padding: 0.15rem 0.45rem;
       font-size: 0.75rem;
     }
+    .block {
+      border: 1px solid var(--border, #d2d2d2);
+      border-radius: var(--radius, 6px);
+      margin: 0 0 0.6rem;
+    }
+    .block-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.5rem;
+    }
+    .block-head .spacer {
+      flex: 1;
+    }
+    .block pre {
+      margin: 0;
+      border: none;
+      border-top: 1px solid var(--border, #d2d2d2);
+      border-radius: 0 0 var(--radius, 6px) var(--radius, 6px);
+    }
+    button.expand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.2rem 0.5rem;
+      border: none;
+      background: none;
+      color: var(--fg, inherit);
+      font-weight: 600;
+    }
+    button.expand .chevron {
+      display: inline-block;
+      transition: transform 0.15s;
+    }
+    button.expand[aria-expanded='true'] .chevron {
+      transform: rotate(90deg);
+    }
+    button.icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.55rem;
+      font-size: 0.75rem;
+    }
+    button.icon svg {
+      width: 0.95rem;
+      height: 0.95rem;
+    }
+    .os {
+      display: inline-flex;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+    }
     pre {
       margin: 0.35rem 0 0.75rem;
       padding: 0.6rem 0.75rem;
@@ -185,6 +239,14 @@ export class SystemAdopt extends LitElement {
   @state() private roleRealms = '';
   @state() private credential: Credential = 'jwks-url';
   @state() private setup: ClientSetup | null = null;
+  /** Which of the setup's blocks are open; both start closed. */
+  @state() private openBlocks = new Set<'client' | 'script'>();
+  /** Which script: bash for Linux and macOS, PowerShell for Windows; the browser's OS first. */
+  @state() private scriptOs: 'unix' | 'windows' = /Windows/i.test(navigator.userAgent) ? 'windows' : 'unix';
+  /** Where the scripts run kcadm from: a Keycloak installation, or the Keycloak image through docker. */
+  @state() private kcadm: 'installed' | 'docker' = 'installed';
+  /** The block whose text was just copied, for a moment's feedback. */
+  @state() private copied: string | null = null;
   @state() private setupError: string | null = null;
 
   @state() private listing: KeycloakRealms | null = null;
@@ -251,6 +313,7 @@ export class SystemAdopt extends LitElement {
         roles: this.roles,
         realms: this.roles === 'admin' ? [] : realms,
         credential: this.system.clientAuth === 'private_key_jwt' ? this.credential : undefined,
+        kcadm: this.kcadm,
       });
     } catch (e) {
       this.setup = null;
@@ -361,12 +424,84 @@ export class SystemAdopt extends LitElement {
     </div>`;
   }
 
-  private async copy(text: string): Promise<void> {
+  private async copy(text: string, what = 'text'): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
+      this.copied = what;
+      setTimeout(() => {
+        if (this.copied === what) {
+          this.copied = null;
+        }
+      }, 1500);
     } catch {
       // ignore clipboard failures
     }
+  }
+
+  private download(text: string, filename: string, type: string): void {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  private toggleBlock(block: 'client' | 'script'): void {
+    const next = new Set(this.openBlocks);
+    if (!next.delete(block)) {
+      next.add(block);
+    }
+    this.openBlocks = next;
+  }
+
+  /** A collapsed block of the setup: title, extra controls, copy and download. */
+  private renderBlock(
+    block: 'client' | 'script',
+    title: string,
+    text: string,
+    filename: string,
+    type: string,
+    extra: unknown = nothing,
+  ) {
+    const open = this.openBlocks.has(block);
+    return html`<div class="block">
+      <div class="block-head">
+        <button class="expand" type="button" aria-expanded=${open ? 'true' : 'false'} @click=${() => this.toggleBlock(block)}>
+          <span class="chevron" aria-hidden="true">▸</span>${title}
+        </button>
+        ${extra}
+        <span class="spacer"></span>
+        <button
+          class="secondary icon"
+          type="button"
+          title=${`Copy ${title}`}
+          aria-label=${`Copy ${title}`}
+          @click=${() => this.copy(text, block)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+            <path d="M5 15V5a2 2 0 0 1 2-2h10"></path>
+          </svg>
+          ${this.copied === block ? 'Copied' : 'Copy'}
+        </button>
+        <button
+          class="secondary icon"
+          type="button"
+          title=${`Download ${filename}`}
+          aria-label=${`Download ${title} as ${filename}`}
+          @click=${() => this.download(text, filename, type)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 4v11"></path>
+            <path d="M7 10l5 5 5-5"></path>
+            <path d="M5 20h14"></path>
+          </svg>
+          Download
+        </button>
+      </div>
+      ${open ? html`<pre>${text}</pre>` : nothing}
+    </div>`;
   }
 
   private toggle(name: string, on: boolean): void {
@@ -395,7 +530,8 @@ export class SystemAdopt extends LitElement {
         <p class="lead">
           This server creates nothing in Keycloak. Create the client <code>${s.clientId ?? 'keycloak-mcp-server'}</code>
           in the realm <code>${s.authRealm}</code> of <code>${s.url}</code> from the JSON below, or run the
-          <code>kcadm.sh</code> script, which also gives its service account the roles.
+          kcadm script (<code>kcadm.sh</code>, or <code>kcadm.bat</code> on Windows), which also gives its service
+          account the roles.
         </p>
         <div class="row">
           <label
@@ -458,24 +594,54 @@ export class SystemAdopt extends LitElement {
               <ul class="notes">
                 ${this.setup.notes.map((n) => html`<li>${n}</li>`)}
               </ul>
-              <div class="row">
-                <strong>Client JSON</strong>
-                <button
-                  class="secondary copy"
-                  type="button"
-                  @click=${() => this.copy(JSON.stringify(this.setup?.client, null, 2))}
-                >
-                  Copy
-                </button>
-              </div>
-              <pre>${JSON.stringify(this.setup.client, null, 2)}</pre>
-              <div class="row">
-                <strong>kcadm.sh script</strong>
-                <button class="secondary copy" type="button" @click=${() => this.copy(this.setup?.script ?? '')}>
-                  Copy
-                </button>
-              </div>
-              <pre>${this.setup.script}</pre>
+              ${this.renderBlock(
+                'client',
+                'Client JSON',
+                JSON.stringify(this.setup.client, null, 2) + '\n',
+                `${this.setup.clientId}.json`,
+                'application/json',
+              )}
+              ${this.renderBlock(
+                'script',
+                'kcadm script',
+                this.scriptOs === 'windows' ? this.setup.powershellScript : this.setup.script,
+                this.scriptOs === 'windows' ? `kc-mcp-setup-${s.alias}.ps1` : `kc-mcp-setup-${s.alias}.sh`,
+                'text/plain',
+                html`<span class="os" role="radiogroup" aria-label="Script for">
+                  <label>
+                    <input
+                      type="radio"
+                      name="script-os"
+                      .checked=${this.scriptOs === 'unix'}
+                      @change=${() => (this.scriptOs = 'unix')}
+                    />
+                    Linux / macOS (bash)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="script-os"
+                      .checked=${this.scriptOs === 'windows'}
+                      @change=${() => (this.scriptOs = 'windows')}
+                    />
+                    Windows (PowerShell)
+                  </label>
+                </span>
+                <label class="os">
+                  kcadm from
+                  <select
+                    .value=${this.kcadm}
+                    ?disabled=${this.busy}
+                    @change=${(e: Event) => {
+                      this.kcadm = (e.target as HTMLSelectElement).value as 'installed' | 'docker';
+                      void this.loadSetup();
+                    }}
+                  >
+                    <option value="installed">a Keycloak installation</option>
+                    <option value="docker">the Keycloak image (Docker${this.setup?.kcadmImage ? `, ${this.setup.kcadmImage}` : ''})</option>
+                  </select>
+                </label>`,
+              )}
             `
           : nothing}
       </section>

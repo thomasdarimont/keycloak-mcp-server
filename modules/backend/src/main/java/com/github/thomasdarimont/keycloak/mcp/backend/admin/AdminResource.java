@@ -34,7 +34,7 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
  * GET    /admin/systems                      every known system with its source repository
  * GET    /admin/systems/{alias}
  * DELETE /admin/systems/{alias}              remove from the mutable repository, its keys from the vault
- * POST   /admin/systems/{alias}/signing-key  rotate the key
+ * POST   /admin/systems/{alias}/signing-key  rotate the key (?dropPrevious=true: the old one leaves the JWKS now)
  * GET    /admin/secrets                      the names in the vault and the systems using them, never a value
  * GET    /admin/secrets/{name}
  * PUT    /admin/secrets/{name}               store or replace (body: {"value": "..."}); referenced as vault:{name}
@@ -127,9 +127,9 @@ public class AdminResource {
 
     @POST
     @Path("systems/{alias}/signing-key")
-    public Map<String, Object> rotate(@PathParam("alias") String alias, @Context UriInfo uri,
-            @Context HttpHeaders headers) {
-        return admin.rotate(alias, publicBase(config.hostname(), uri, headers));
+    public Map<String, Object> rotate(@PathParam("alias") String alias,
+            @QueryParam("dropPrevious") boolean dropPrevious, @Context UriInfo uri, @Context HttpHeaders headers) {
+        return admin.rotate(alias, publicBase(config.hostname(), uri, headers), dropPrevious);
     }
 
     @GET
@@ -162,10 +162,10 @@ public class AdminResource {
     @GET
     @Path("systems/{alias}/client-setup")
     public Map<String, Object> clientSetup(@PathParam("alias") String alias, @QueryParam("roles") String roles,
-            @QueryParam("realms") String realms, @QueryParam("credential") String credential, @Context UriInfo uri,
-            @Context HttpHeaders headers) {
+            @QueryParam("realms") String realms, @QueryParam("credential") String credential,
+            @QueryParam("kcadm") String kcadm, @Context UriInfo uri, @Context HttpHeaders headers) {
         return adoption.clientSetup(alias, publicBase(config.hostname(), uri, headers), roles, splitList(realms),
-                credential);
+                credential, kcadm);
     }
 
     @GET
