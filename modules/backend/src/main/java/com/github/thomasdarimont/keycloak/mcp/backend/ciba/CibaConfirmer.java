@@ -37,6 +37,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.Sensitive;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmationRequest;
 import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
+import com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmerSpi;
 import com.github.thomasdarimont.keycloak.mcp.confirm.Decision;
 import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApproval;
 import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApprovalStore;
@@ -177,7 +178,8 @@ public class CibaConfirmer implements Confirmer {
             KeycloakSystems all = systems.get();
             this.severalSystems = all::multiple;
         }
-        apply(CibaSettings.from(new ProviderConfig(Confirmer.SPI, CibaSettings.ID, Map.of()), defaultTimeout), null);
+        apply(CibaSettings.from(new ProviderConfig(ConfirmerSpi.NAME, CibaSettings.ID, Map.of()), defaultTimeout),
+                null);
     }
 
     /**

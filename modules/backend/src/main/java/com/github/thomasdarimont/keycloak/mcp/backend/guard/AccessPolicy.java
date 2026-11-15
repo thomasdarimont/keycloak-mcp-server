@@ -13,6 +13,7 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.access.Delegation;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.backend.catalog.ToolCatalog;
@@ -113,7 +114,8 @@ public class AccessPolicy {
                 config.allowedCategories().orElse(List.of()), roles, collectChecks(registry),
                 name -> systems.find(name).map(a -> a.system().allowedRealms()).orElse(Set.of()), capabilities,
                 config.explanations(), systems, config.delegation());
-        this.plan = new AccessCheckChain(globalChecks, id -> ProviderConfig.forExtension(AccessCheck.SPI, id, config));
+        this.plan = new AccessCheckChain(globalChecks,
+                id -> ProviderConfig.forExtension(AccessCheckSpi.NAME, id, config));
         this.serverConfig = config;
         this.unlisted = UnlistedTools.effective(config.unlistedTools(), List.copyOf(this.allowedTools));
         confirmation(config.confirmTools().orElse(List.of()), config.confirmWrites());

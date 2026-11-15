@@ -10,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessCheckChain;
 import com.github.thomasdarimont.keycloak.mcp.backend.spi.DefaultExtensionRegistry;
 import com.github.thomasdarimont.keycloak.mcp.backend.spi.Extensions;
@@ -75,7 +76,7 @@ public class AdminExtensions {
         String prefix = ConfigMessageKeys.prefix(spi, k.status().id());
 
         Map<String, Object> out = summary(k, locale);
-        out.put("helpText", messages.helpText(locale, e).orElse(null));
+        out.put("helpText", messages.helpText(locale, spi, e).orElse(null));
         out.put("helpTextKey", ConfigMessageKeys.helpText(prefix));
         out.put("keyPrefix", settings.providerPrefix());
         out.put("envPrefix", settings.envPrefix());
@@ -161,9 +162,9 @@ public class AdminExtensions {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("spi", k.status().spi());
         m.put("id", k.status().id());
-        m.put("displayName", messages.displayName(locale, k.extension()));
+        m.put("displayName", messages.displayName(locale, k.status().spi(), k.extension()));
         m.put("displayNameKey", ConfigMessageKeys.displayName(prefix));
-        m.put("description", messages.description(locale, k.extension()).orElse(""));
+        m.put("description", messages.description(locale, k.status().spi(), k.extension()).orElse(""));
         m.put("descriptionKey", ConfigMessageKeys.description(prefix));
         m.put("status", k.status().status());
         m.put("origin", k.status().origin());
@@ -183,7 +184,7 @@ public class AdminExtensions {
             out.putIfAbsent(s.spi() + "." + s.id(), new Known(e, s));
         }
         for (AccessCheck c : registry.accessChecks()) {
-            Extensions.ProviderStatus s = new Extensions.ProviderStatus(AccessCheck.SPI,
+            Extensions.ProviderStatus s = new Extensions.ProviderStatus(AccessCheckSpi.NAME,
                     ProviderConfig.configId(c.id()), "active", "built-in", c.getClass().getName());
             out.putIfAbsent(s.spi() + "." + s.id(), new Known(c, s));
         }

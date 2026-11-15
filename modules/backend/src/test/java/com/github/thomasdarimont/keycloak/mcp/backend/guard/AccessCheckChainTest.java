@@ -6,6 +6,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.AccessSettings;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystem;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.RealmSettings;
@@ -48,7 +49,7 @@ class AccessCheckChainTest {
 
     static AccessCheckChain plan(Map<String, Map<String, String>> server) {
         return new AccessCheckChain(CHECKS,
-                id -> new ProviderConfig(AccessCheck.SPI, id, server.getOrDefault(id, Map.of())));
+                id -> new ProviderConfig(AccessCheckSpi.NAME, id, server.getOrDefault(id, Map.of())));
     }
 
     static AccessSettings access(String json) {
@@ -231,7 +232,7 @@ class AccessCheckChainTest {
     void malformedServerSettingsOfADeclaringCheckStopTheStart() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> new AccessCheckChain(List.of(declaring("ticket")),
-                        id -> new ProviderConfig(AccessCheck.SPI, id, Map.of("mode", "maybe"))));
+                        id -> new ProviderConfig(AccessCheckSpi.NAME, id, Map.of("mode", "maybe"))));
         assertTrue(e.getMessage().contains("kc-mcp.spi.access-check.ticket.mode must be one of reject, confirm"),
                 e.getMessage());
     }
@@ -239,7 +240,7 @@ class AccessCheckChainTest {
     @Test
     void placeholdersAndTheServersOwnKeysPass() {
         AccessCheckChain p = new AccessCheckChain(List.of(declaring("ticket")), id -> new ProviderConfig(
-                AccessCheck.SPI, id,
+                AccessCheckSpi.NAME, id,
                 Map.of("endpoint", "https://tickets/{realm}/check", "default", "on", "order", "5", "locked", "false")));
         assertEquals("https://tickets/demo/check",
                 p.plan(system("{}"), "demo").steps().getFirst().settings().get("endpoint").orElseThrow());
@@ -248,7 +249,7 @@ class AccessCheckChainTest {
     @Test
     void aBlockWithAMalformedValueIsRefusedNamingWhereItIsWritten() {
         AccessCheckChain p = new AccessCheckChain(List.of(declaring("ticket")),
-                id -> new ProviderConfig(AccessCheck.SPI, id, Map.of()));
+                id -> new ProviderConfig(AccessCheckSpi.NAME, id, Map.of()));
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> p.validate(access("{\"ticket\": {\"mode\": \"maybe\"}}"), "kc-mcp.systems.prod.access."));
         assertTrue(e.getMessage().startsWith("kc-mcp.systems.prod.access.ticket.mode must be one of"), e.getMessage());

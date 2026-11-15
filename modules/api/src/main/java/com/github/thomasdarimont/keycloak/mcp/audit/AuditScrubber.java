@@ -19,17 +19,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 public interface AuditScrubber extends Extension {
 
     /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.audit-scrubber.<id>.*}.
-     */
-    String SPI = "audit-scrubber";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
-    /**
      * @param event the event as built by the server, or as left by the previous scrubber
      * @param target the listener about to receive it
      * @return the event to hand on, or {@code null} to skip the event for this listener

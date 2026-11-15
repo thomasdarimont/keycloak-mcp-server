@@ -14,31 +14,18 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
-import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
-import com.github.thomasdarimont.keycloak.mcp.access.CallerIssuerPolicy;
-import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
-import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenRequestCustomizer;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
-import com.github.thomasdarimont.keycloak.mcp.config.ProfileCheck;
 import com.github.thomasdarimont.keycloak.mcp.config.ValidationRun;
-import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
-import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApprovalStore;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVault;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystemRepository;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystems;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.SigningKeyGenerator;
-import com.github.thomasdarimont.keycloak.mcp.prompts.PromptProvider;
 import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.ExtensionRegistry;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
-import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
+import com.github.thomasdarimont.keycloak.mcp.spi.Spi;
+import com.github.thomasdarimont.keycloak.mcp.spi.Spis;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProviderContext;
-import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
 
 import io.quarkus.runtime.StartupEvent;
 
@@ -88,7 +75,7 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
         List<ToolSpec> all = new ArrayList<>();
         List<AccessCheck> checks = new ArrayList<>();
         for (ToolProvider p : extensions(ToolProvider.class)) {
-            ToolProviderContext ctx = context(p.spiName(), p.id());
+            ToolProviderContext ctx = context(Spis.of(p).name(), p.id());
             p.init(ctx);
             List<ToolSpec> tools = p.tools(ctx);
             LOG.infof("Tool provider '%s' (%s): %d tools", p.id(), p.displayName(), tools.size());
@@ -129,7 +116,12 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
             }
             byId.put(e.id(), e);
         }
-        String selectedSpi = SELECTED.get(type);
+        // an extension point that one extension serves: the one the configuration names
+        String selectedSpi = spis().stream()
+            .filter(spi -> spi.extensionType() == type && spi.singleProvider())
+            .map(Spi::name)
+            .findFirst()
+            .orElse(null);
         if (discovery != null && selectedSpi != null) {
             return discovery
                 .select(List.copyOf(byId.values()), List.of(), selectedSpi, type.getSimpleName(), serverConfig)
@@ -170,25 +162,10 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
         return accessChecks;
     }
 
-    /**
-     * The extension points the registry hands out that exactly one extension serves, with
-     * their name in {@code kc-mcp.spi.<spi>.provider}.
-     */
-    private static final Map<Class<? extends Extension>, String> SELECTED = Map.of(PendingApprovalStore.class,
-            PendingApprovalStore.SPI, RateLimitStore.class, RateLimitStore.SPI, StateStore.class, StateStore.SPI);
-
-    /** The extension points the registry hands out, resolved at startup. */
-    static final List<Class<? extends Extension>> STARTUP_TYPES = List.of(PromptProvider.class, AccessCheck.class,
-            AuthorizationEngine.class, AuthZenRequestCustomizer.class, Confirmer.class, AuditListener.class,
-            AuditScrubber.class, ProfileCheck.class, PendingApprovalStore.class, RateLimitStore.class,
-            StateStore.class);
-
-    /**
-     * Extension points picked outside the registry; discovered here too, so that their
-     * ids count as present.
-     */
-    static final List<Class<? extends Extension>> OTHER_TYPES = List.of(KeycloakSystemRepository.class, KeyVault.class,
-            CallerIssuerPolicy.class, SigningKeyGenerator.class, UserSessionStore.class);
+    /** The extension points: those found with the extensions, else the class path's. */
+    private List<Spi> spis() {
+        return discovery != null ? discovery.spis() : Spis.onClassPath();
+    }
 
     /**
      * Resolves every extension point at startup instead of on first use, so that a
@@ -200,21 +177,28 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
     }
 
     private void runStartupChecks() {
-        List<String> misplaced = Extensions.misplacedProviders(serverConfig, System.getenv());
+        List<Spi> spis = spis();
+        List<String> misplaced = Extensions.misplacedProviders(serverConfig, System.getenv(), spis);
         if (!misplaced.isEmpty()) {
             throw new IllegalStateException(misplaced + " select nothing: every extension of these extension points"
                     + " runs; switch one off with kc-mcp.spi.<spi>.<id>.enabled=false");
         }
-        for (Class<? extends Extension> type : STARTUP_TYPES) {
-            extensions(type);
+        // the extension points the registry hands out are resolved now
+        for (Spi spi : spis) {
+            if (spi.resolvedByRegistry()) {
+                extensions(spi.extensionType());
+            }
         }
         if (discovery == null) {
             return;
         }
-        for (Class<? extends Extension> type : OTHER_TYPES) {
-            discovery.discover(type);
+        // those picked elsewhere are discovered, so that their ids count as installed
+        for (Spi spi : spis) {
+            if (!spi.resolvedByRegistry()) {
+                discovery.discover(spi.extensionType());
+            }
         }
-        List<String> missing = Extensions.missingRequired(serverConfig, discovery.seen());
+        List<String> missing = Extensions.missingRequired(serverConfig, discovery.seen(), System.getenv(), spis);
         if (!missing.isEmpty()) {
             throw new IllegalStateException("Required extensions are not installed: " + missing
                     + " (kc-mcp.spi.<spi>.<id>.required=true; is the jar in the providers directory?)");

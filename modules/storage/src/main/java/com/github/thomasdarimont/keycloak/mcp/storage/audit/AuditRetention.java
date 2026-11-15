@@ -8,7 +8,7 @@ import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
+import com.github.thomasdarimont.keycloak.mcp.audit.AuditListenerSpi;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.config.ValidationRun;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
@@ -56,7 +56,7 @@ public class AuditRetention {
     public int retentionDays() {
         return Math.max(0,
                 ProviderConfig
-                    .forExtension(AuditListener.SPI, DatabaseAuditListener.ID, DatabaseAuditListener.CONFIG_SPEC,
+                    .forExtension(AuditListenerSpi.NAME, DatabaseAuditListener.ID, DatabaseAuditListener.CONFIG_SPEC,
                             serverConfig)
                     .readInt(DatabaseAuditListener.RETENTION_DAYS));
     }

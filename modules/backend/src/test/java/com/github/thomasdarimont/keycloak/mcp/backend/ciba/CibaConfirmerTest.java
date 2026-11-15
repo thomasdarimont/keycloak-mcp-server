@@ -41,7 +41,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.metrics.KcMcpMetrics;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmationRequest;
-import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
+import com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmerSpi;
 import com.github.thomasdarimont.keycloak.mcp.confirm.Decision;
 import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApproval;
 import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApprovalStore;
@@ -364,7 +364,8 @@ class CibaConfirmerTest {
         CibaConfirmer withCallers = new CibaConfirmer(off, issuer, null, null, null, true);
         Map<String, String> unknownTls = new HashMap<>(on);
         unknownTls.put("tls-configuration-name", "corp-ca");
-        List<ConfigProblem> tls = withCallers.validate(new ProviderConfig(Confirmer.SPI, CibaSettings.ID, unknownTls));
+        List<ConfigProblem> tls = withCallers
+            .validate(new ProviderConfig(ConfirmerSpi.NAME, CibaSettings.ID, unknownTls));
         assertEquals(List.of("tls-configuration-name"), tls.getFirst().properties());
         assertTrue(tls.getFirst().message().startsWith("kc-mcp.spi.confirmer.ciba.tls-configuration-name=corp-ca"),
                 tls.getFirst().message());

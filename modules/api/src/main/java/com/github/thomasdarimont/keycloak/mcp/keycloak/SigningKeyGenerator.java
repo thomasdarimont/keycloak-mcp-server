@@ -11,17 +11,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface SigningKeyGenerator extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.key-generator.<id>.*}.
-     */
-    String SPI = "key-generator";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /** Whether keys for this JWS algorithm can be generated. */
     boolean supports(String algorithm);
 

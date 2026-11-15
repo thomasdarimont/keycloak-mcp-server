@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck.Decision;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
@@ -57,7 +58,7 @@ class RateLimitCheckTest {
         for (int i = 0; i < pairs.length; i += 2) {
             values.put(pairs[i], pairs[i + 1]);
         }
-        return new ProviderConfig(AccessCheck.SPI, RateLimitCheck.ID, values, RateLimitCheck.CONFIG_SPEC);
+        return new ProviderConfig(AccessCheckSpi.NAME, RateLimitCheck.ID, values, RateLimitCheck.CONFIG_SPEC);
     }
 
     Decision call(ToolSpec tool, Caller caller, String system, ProviderConfig settings) {
@@ -199,7 +200,7 @@ class RateLimitCheckTest {
     @Test
     void runsOnlyWhereASystemAsksForIt() {
         AccessCheckChain chain = new AccessCheckChain(List.of(check),
-                id -> new ProviderConfig(AccessCheck.SPI, id, Map.of("max", "5"), RateLimitCheck.CONFIG_SPEC));
+                id -> new ProviderConfig(AccessCheckSpi.NAME, id, Map.of("max", "5"), RateLimitCheck.CONFIG_SPEC));
         KeycloakSystem prod = KeycloakSystem.builder("prod", "https://sso")
             .access(AccessSettings.fromJson(new JsonObject("{\"rate-limit\": {\"enabled\": true, \"max\": 1}}"),
                     "access."))

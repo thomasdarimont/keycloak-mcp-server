@@ -1414,7 +1414,7 @@ components:
             count: { type: integer }
         extensionPoints:
           type: object
-          description: The extension points that have extensions, by their name in the configuration keys
+          description: Every declared extension point (`Spi`), by its name in the configuration keys
           additionalProperties:
             type: object
             required: [displayName, displayNameKey, descriptionKey]
@@ -1429,9 +1429,16 @@ components:
                 nullable: true
                 description: What the extension point is for, translated like the name; `null` when no bundle says
               descriptionKey: { type: string, example: access-check.description }
+              extensionType:
+                type: string
+                description: The interface the extensions of this extension point implement
+                example: com.github.thomasdarimont.keycloak.mcp.access.AccessCheck
+              singleProvider:
+                type: boolean
+                description: Whether one extension serves it (`kc-mcp.spi.<spi>.provider`) instead of all that are usable
         providers:
           type: object
-          description: The extensions by extension point, then order and id
+          description: The extensions by extension point, then order and id; an empty list for one without extensions
           additionalProperties:
             type: array
             items: { $ref: "#/components/schemas/ServerInfoProvider" }

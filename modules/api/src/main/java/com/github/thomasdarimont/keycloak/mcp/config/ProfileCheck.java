@@ -20,17 +20,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface ProfileCheck extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.profile-check.<id>.*}.
-     */
-    String SPI = "profile-check";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /** What prevents a safe start; empty when nothing does. */
     List<String> problems(ProfileCheckContext context);
 

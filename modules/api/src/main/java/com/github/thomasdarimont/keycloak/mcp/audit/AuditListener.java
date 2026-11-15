@@ -24,17 +24,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 @FunctionalInterface
 public interface AuditListener extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.audit-listener.<id>.*}.
-     */
-    String SPI = "audit-listener";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     void onToolCall(AuditEvent event);
 
     /**

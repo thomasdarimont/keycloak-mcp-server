@@ -13,17 +13,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface Confirmer extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.confirmer.<id>.*}.
-     */
-    String SPI = "confirmer";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     Decision confirm(ConfirmationRequest request);
 
     /**

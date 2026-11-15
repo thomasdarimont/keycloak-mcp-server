@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.util.List;
 
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
-import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
+import com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmerSpi;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigHint;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProblem;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProperty;
@@ -141,13 +141,13 @@ public record CibaSettings(boolean enabled, String issuer, String tokenIssuer, S
                 ConfigHint.when(POLL_WAIT_SECONDS.name()).is(FLOW.name(), "two-step"));
 
     public static CibaSettings from(McpServerConfig server) {
-        return from(ProviderConfig.forExtension(Confirmer.SPI, ID, CONFIG_SPEC, server),
+        return from(ProviderConfig.forExtension(ConfirmerSpi.NAME, ID, CONFIG_SPEC, server),
                 server.confirmTimeoutSeconds());
     }
 
     public static CibaSettings from(ProviderConfig settings, int defaultTimeout) {
         ProviderConfig config = settings.withSpec(CONFIG_SPEC)
-            .describedAs(ProviderConfig.PREFIX + Confirmer.SPI + "." + ID + ".");
+            .describedAs(ProviderConfig.PREFIX + ConfirmerSpi.NAME + "." + ID + ".");
         List<ConfigProblem> errors = ConfigProblem.errors(config.problems());
         if (!errors.isEmpty()) {
             boolean client = errors.stream()

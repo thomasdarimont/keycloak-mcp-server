@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -23,6 +24,7 @@ import com.github.thomasdarimont.keycloak.mcp.spi.ConfigMessages;
 import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfo;
 import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfoContributor;
+import com.github.thomasdarimont.keycloak.mcp.spi.Spi;
 
 /**
  * The server info of the admin API ({@link AdminResource} is the HTTP face): the server
@@ -51,6 +53,9 @@ public class AdminServerInfo {
     @Inject
     ConfigMessages messages;
 
+    @Inject
+    Extensions discovery;
+
     /** The texts of the extensions in this locale. */
     public Map<String, Object> info(Locale locale) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -58,14 +63,18 @@ public class AdminServerInfo {
         out.put("runtime", runtime());
         out.put("systems", Map.of("count", systems.repository().names().size()));
 
-        Map<String, List<Map<String, Object>>> providers = new LinkedHashMap<>();
+        // every extension point that is declared, also one without an extension
+        Map<String, Spi> declared = new TreeMap<>();
+        discovery.spis().forEach(spi -> declared.put(spi.name(), spi));
+        Map<String, List<Map<String, Object>>> providers = new TreeMap<>();
+        declared.keySet().forEach(spi -> providers.put(spi, new ArrayList<>()));
         List<Map<String, Object>> warnings = new ArrayList<>();
         for (AdminExtensions.Known k : extensions.known().values()) {
             Extension e = k.extension();
             ServerInfo said = contribution(e, k.status());
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", k.status().id());
-            m.put("displayName", messages.displayName(locale, e));
+            m.put("displayName", messages.displayName(locale, k.status().spi(), e));
             m.put("status", k.status().status());
             m.put("origin", k.status().origin());
             m.put("info", said.values());
@@ -82,6 +91,11 @@ public class AdminServerInfo {
             point.put("displayNameKey", ConfigMessageKeys.extensionPoint(spi));
             point.put("description", messages.extensionPointDescription(locale, spi).orElse(null));
             point.put("descriptionKey", ConfigMessageKeys.extensionPointDescription(spi));
+            Spi descriptor = declared.get(spi);
+            if (descriptor != null) {
+                point.put("extensionType", descriptor.extensionType().getName());
+                point.put("singleProvider", descriptor.singleProvider());
+            }
             points.put(spi, point);
         }
         out.put("extensionPoints", points);

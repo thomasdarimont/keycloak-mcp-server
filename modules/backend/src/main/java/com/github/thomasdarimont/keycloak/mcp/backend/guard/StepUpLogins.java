@@ -28,7 +28,7 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
-import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.backend.config.PublicHostname;
 import com.github.thomasdarimont.keycloak.mcp.backend.http.HttpPaths;
 import com.github.thomasdarimont.keycloak.mcp.backend.http.OutboundClients;
@@ -331,7 +331,7 @@ public class StepUpLogins {
                 // looked up on first use: the registry lists the step-up check among the
                 // others
                 () -> registry.get().extensions(StateStore.class).stream().findFirst().orElseThrow(),
-                () -> ProviderConfig.forExtension(AccessCheck.SPI, StepUpCheck.ID, StepUpCheck.CONFIG_SPEC, config)
+                () -> ProviderConfig.forExtension(AccessCheckSpi.NAME, StepUpCheck.ID, StepUpCheck.CONFIG_SPEC, config)
                     .readString(StepUpCheck.LOGIN_CLIENT_SECRET));
     }
 

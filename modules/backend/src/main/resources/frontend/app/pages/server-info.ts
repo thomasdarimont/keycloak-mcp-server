@@ -233,16 +233,25 @@ export class ServerInfoPage extends LitElement {
 
   /** The heading row of an extension point, then its extensions. */
   private renderGroup(spi: string, name: string, list: ServerInfoProvider[]) {
-    const description = this.info?.extensionPoints?.[spi]?.description;
+    const point = this.info?.extensionPoints?.[spi];
+    const description = point?.description;
     return html`
       <tr class="group">
         <th colspan="4" scope="colgroup">
           ${name} <code>${spi}</code>
-          <span class="muted count">${list.length === 1 ? '1 extension' : `${list.length} extensions`}</span>
+          <span class="muted count"
+            >${list.length === 1 ? '1 extension' : `${list.length} extensions`}${point?.singleProvider
+              ? ', one serves'
+              : nothing}</span
+          >
           ${description ? html`<div class="muted about">${description}</div>` : nothing}
         </th>
       </tr>
-      ${list.map((p) => this.renderProvider(spi, p))}
+      ${list.length
+        ? list.map((p) => this.renderProvider(spi, p))
+        : html`<tr>
+            <td class="extension muted" colspan="4">No extension installed.</td>
+          </tr>`}
     `;
   }
 
@@ -386,7 +395,7 @@ export class ServerInfoPage extends LitElement {
           ? [spi, list]
           : [spi, list.filter((p) => has(p.id) || has(p.displayName))],
       )
-      .filter(([, list]) => list.length > 0);
+      .filter(([spi, list]) => list.length > 0 || has(spi) || has(info.extensionPoints?.[spi]?.displayName));
   }
 
   private renderExtensions(info: ServerInfo) {

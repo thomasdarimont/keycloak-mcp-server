@@ -22,17 +22,6 @@ import com.github.thomasdarimont.keycloak.mcp.tools.ToolProviderContext;
 @FunctionalInterface
 public interface AccessCheck extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.access-check.<id>.*}.
-     */
-    String SPI = "access-check";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     Decision check(Context context);
 
     /**
@@ -66,7 +55,7 @@ public interface AccessCheck extends Extension {
             Caller caller, KeycloakAdmin keycloak, Map<String, Object> attributes, ProviderConfig settings) {
 
         public Context {
-            settings = settings == null ? new ProviderConfig(SPI, "", Map.of()) : settings;
+            settings = settings == null ? new ProviderConfig(AccessCheckSpi.NAME, "", Map.of()) : settings;
         }
 
         public Context(ToolSpec tool, String system, String realm, Map<String, Object> args, GrantedRoles roles,

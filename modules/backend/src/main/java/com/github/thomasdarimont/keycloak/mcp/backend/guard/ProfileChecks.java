@@ -17,6 +17,7 @@ import com.github.thomasdarimont.keycloak.mcp.config.InstanceRole;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.config.ProfileCheck;
 import com.github.thomasdarimont.keycloak.mcp.config.ProfileCheckContext;
+import com.github.thomasdarimont.keycloak.mcp.config.ProfileCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.config.SecurityProfile;
 import com.github.thomasdarimont.keycloak.mcp.config.ValidationRun;
 import com.github.thomasdarimont.keycloak.mcp.spi.ExtensionRegistry;
@@ -67,7 +68,7 @@ public class ProfileChecks {
         }
         Findings findings = run(s, checks,
                 id -> new ProfileCheckContext(config.securityProfile(), callers.required(), config,
-                        ProviderConfig.forExtension(ProfileCheck.SPI, id, config),
+                        ProviderConfig.forExtension(ProfileCheckSpi.NAME, id, config),
                         name -> ConfigProvider.getConfig().getOptionalValue(name, String.class)));
         List<String> conflicts = roleConflicts(s);
         if (!conflicts.isEmpty()) {

@@ -17,14 +17,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 @FunctionalInterface
 public interface AuthZenRequestCustomizer extends Extension {
 
-    /** This extension point's name in configuration keys. */
-    String SPI = "authzen-customizer";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /**
      * @param evaluation what is about to be sent
      * @param request the call, its system and the effective {@code authzen} settings (a

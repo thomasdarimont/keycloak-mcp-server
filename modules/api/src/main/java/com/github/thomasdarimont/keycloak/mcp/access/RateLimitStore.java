@@ -12,19 +12,8 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface RateLimitStore extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.rate-limit-store.<id>.*}.
-     */
-    String SPI = "rate-limit-store";
-
     /** The longest window a limit may have, and how long a store must remember a call. */
     long MAX_WINDOW_MILLIS = 24 * 60 * 60 * 1000L;
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
 
     /**
      * Counts a call under the key if fewer than {@code max} calls were counted under it

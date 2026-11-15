@@ -14,6 +14,7 @@ import java.util.function.Function;
 import org.jboss.logging.Logger;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.AccessSettings;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.CheckSettings;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystem;
@@ -86,7 +87,7 @@ public final class AccessCheckChain {
             if (known.containsKey(id)) {
                 continue;
             }
-            ProviderConfig cfg = serverConfig == null ? new ProviderConfig(AccessCheck.SPI, id, Map.of())
+            ProviderConfig cfg = serverConfig == null ? new ProviderConfig(AccessCheckSpi.NAME, id, Map.of())
                     : serverConfig.apply(id);
             if (!cfg.getBoolean("enabled", true)) {
                 // removed from the server, whoever contributed it
@@ -147,7 +148,7 @@ public final class AccessCheckChain {
     }
 
     private static CheckSettings server(AccessCheck c, ProviderConfig cfg) {
-        String where = ProviderConfig.PREFIX + AccessCheck.SPI + "." + ProviderConfig.configId(c.id()) + ".";
+        String where = ProviderConfig.PREFIX + AccessCheckSpi.NAME + "." + ProviderConfig.configId(c.id()) + ".";
         String mode = cfg.get("default", c.enabledByDefault() ? "on" : "off").trim().toLowerCase(Locale.ROOT);
         boolean on = switch (mode) {
             case "on", "true" -> true;
@@ -216,7 +217,7 @@ public final class AccessCheckChain {
                 error = Optional.of("access." + e.getKey() + ": " + ex.getMessage());
             }
             steps.add(new Step(k.check(),
-                    new ProviderConfig(AccessCheck.SPI, e.getKey(), settings, k.check().configSpec()),
+                    new ProviderConfig(AccessCheckSpi.NAME, e.getKey(), settings, k.check().configSpec()),
                     effective.order().orElse(k.check().order()), error));
         }
         steps.sort(Comparator.comparingInt(Step::order).thenComparing(s -> ProviderConfig.configId(s.check().id())));
@@ -246,14 +247,14 @@ public final class AccessCheckChain {
             }
             else if (known.get(e.getKey()).locked()) {
                 throw new IllegalArgumentException(where + e.getKey() + ": the access check '" + e.getKey()
-                        + "' is locked by the server (" + ProviderConfig.PREFIX + AccessCheck.SPI + "." + e.getKey()
+                        + "' is locked by the server (" + ProviderConfig.PREFIX + AccessCheckSpi.NAME + "." + e.getKey()
                         + ".locked=true); systems and realms cannot change it");
             }
             else {
                 Known k = known.get(e.getKey());
                 // the block over the server's settings: a value may need another to make
                 // sense, and the block names only what differs
-                ProviderConfig effective = new ProviderConfig(AccessCheck.SPI, e.getKey(),
+                ProviderConfig effective = new ProviderConfig(AccessCheckSpi.NAME, e.getKey(),
                         k.server().overlay(e.getValue()).settings(), k.check().configSpec())
                     .describedAs(where + e.getKey() + ".");
                 List<ConfigProblem> errors = report(k.check(), effective, e.getValue().settings().keySet());

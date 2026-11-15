@@ -6,6 +6,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AccessCheckChain;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -32,7 +33,7 @@ class PolicyAccessChecksTest {
 
     AccessCheckChain chain(Map<String, Map<String, String>> server) {
         return new AccessCheckChain(checks,
-                id -> new ProviderConfig(AccessCheck.SPI, id, server.getOrDefault(id, Map.of())));
+                id -> new ProviderConfig(AccessCheckSpi.NAME, id, server.getOrDefault(id, Map.of())));
     }
 
     static KeycloakSystem demo(String access, RealmSettings... realms) {

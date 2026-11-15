@@ -21,6 +21,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -31,11 +32,13 @@ import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
-import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProblem;
 import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
+import com.github.thomasdarimont.keycloak.mcp.spi.Spi;
+import com.github.thomasdarimont.keycloak.mcp.spi.Spis;
 
 import io.quarkus.runtime.ShutdownEvent;
 
@@ -71,6 +74,10 @@ public class Extensions {
     private final ClassLoader loader;
     private final URLClassLoader owned;
     private final Instance<Object> cdi;
+    /**
+     * The extension points the class path and the providers directory declare, by name.
+     */
+    private final List<Spi> spis;
 
     @Inject
     public Extensions(McpServerConfig config, @Any Instance<Object> cdi) {
@@ -98,6 +105,19 @@ public class Extensions {
             this.loader = owned;
             LOG.infof("Extensions directory %s: %s", dir, jars.stream().map(p -> p.getFileName().toString()).toList());
         }
+        this.spis = Spis.load(loader);
+    }
+
+    /** Every extension point, the server's own and those of extension jars, by name. */
+    public List<Spi> spis() {
+        return spis;
+    }
+
+    /**
+     * The extension point whose extensions implement this interface, if one is declared.
+     */
+    public Optional<Spi> spi(Class<?> extensionType) {
+        return spis.stream().filter(s -> s.extensionType() == extensionType).findFirst();
     }
 
     /** Class path only, no providers directory and no CDI: tests and embedding. */
@@ -134,7 +154,8 @@ public class Extensions {
         }
         for (T t : byClass.values()) {
             if (t instanceof Extension e) {
-                seen.add(key(e.spiName(), e.id()));
+                // also the check that the class serves this extension point and no other
+                seen.add(key(Spis.of(e.getClass(), spis).name(), e.id()));
             }
         }
         return List.copyOf(byClass.values());
@@ -163,13 +184,22 @@ public class Extensions {
      * property (the command line) overrides both
      */
     public static List<String> missingRequired(McpServerConfig config, Set<String> seen, Map<String, String> env) {
+        return missingRequired(config, seen, env, Spis.onClassPath());
+    }
+
+    /**
+     * @param spis the extension points, to tell extension point and id apart in a
+     * variable's name
+     */
+    public static List<String> missingRequired(McpServerConfig config, Set<String> seen, Map<String, String> env,
+            List<Spi> spis) {
         Map<String, Boolean> required = new TreeMap<>();
         config.spi().forEach((spi, spiSettings) -> spiSettings.extensions().forEach((id, settings) -> {
             if (settings.containsKey(REQUIRED)) {
                 required.put(key(spi, id), Boolean.parseBoolean(settings.get(REQUIRED).trim()));
             }
         }));
-        env.forEach((name, value) -> requiredVariable(name)
+        env.forEach((name, value) -> requiredVariable(name, spis)
             .ifPresent(extension -> required.put(extension, Boolean.parseBoolean(value.trim()))));
         System.getProperties()
             .stringPropertyNames()
@@ -199,14 +229,14 @@ public class Extensions {
      * unknown extension point the whole remainder is the id: it cannot be installed, and
      * a required control must not be skipped because of a typo.
      */
-    private static Optional<String> requiredVariable(String name) {
+    private static Optional<String> requiredVariable(String name, List<Spi> spis) {
         String suffix = "_REQUIRED";
         String root = "KC_MCP_SPI_";
         if (!name.startsWith(root) || !name.endsWith(suffix) || name.length() <= root.length() + suffix.length()) {
             return Optional.empty();
         }
         String path = name.substring(root.length(), name.length() - suffix.length());
-        for (String spi : ProviderConfig.SPIS) {
+        for (String spi : spis.stream().map(Spi::name).toList()) {
             String prefix = spi.toUpperCase(Locale.ROOT).replace('-', '_') + "_";
             if (path.startsWith(prefix) && path.length() > prefix.length()) {
                 return Optional.of(key(spi, path.substring(prefix.length()).replace('_', '-')));
@@ -274,7 +304,7 @@ public class Extensions {
         candidates.sort(Comparator.comparingInt(Extension::order).thenComparing(Extension::id));
         candidates.addAll(builtIns);
         builtIns.forEach(b -> {
-            seen.add(key(b.spiName(), b.id()));
+            seen.add(key(spi, b.id()));
             madeByServer.add(b);
         });
         Optional<String> wanted = ProviderConfig.selectedProvider(spi, config, System.getenv());
@@ -319,10 +349,10 @@ public class Extensions {
         Stream.concat(discovered.values().stream().flatMap(List::stream), madeByServer.stream())
             .filter(Extension.class::isInstance)
             .map(Extension.class::cast)
-            .forEach(e -> all.putIfAbsent(key(e.spiName(), e.id()), e));
+            .forEach(e -> all.putIfAbsent(key(Spis.of(e).name(), e.id()), e));
         return all.values()
             .stream()
-            .sorted(Comparator.comparing(Extension::spiName)
+            .sorted(Comparator.comparing((Extension e) -> Spis.of(e).name())
                 .thenComparingInt(Extension::order)
                 .thenComparing(Extension::id))
             .toList();
@@ -335,7 +365,7 @@ public class Extensions {
 
     /** One extension as the {@code providers} command shows it. */
     public ProviderStatus describe(Extension e, McpServerConfig config) {
-        return new ProviderStatus(e.spiName(), ProviderConfig.configId(e.id()), status(e, config), origin(e),
+        return new ProviderStatus(Spis.of(e).name(), ProviderConfig.configId(e.id()), status(e, config), origin(e),
                 e.getClass().getName());
     }
 
@@ -344,8 +374,9 @@ public class Extensions {
             return "disabled";
         }
         Boolean decided = admitted.get(e);
-        if (ProviderConfig.SINGLE_PROVIDER_SPIS.contains(e.spiName())) {
-            Extension chosen = selected.get(e.spiName());
+        Spi spi = Spis.of(e.getClass(), spis);
+        if (spi.singleProvider()) {
+            Extension chosen = selected.get(spi.name());
             if (chosen == e) {
                 return "selected";
             }
@@ -374,12 +405,17 @@ public class Extensions {
      * point where every extension runs, or on one that does not exist.
      */
     public static List<String> misplacedProviders(McpServerConfig config, Map<String, String> env) {
+        return misplacedProviders(config, env, Spis.onClassPath());
+    }
+
+    /** @param spis the extension points that exist */
+    public static List<String> misplacedProviders(McpServerConfig config, Map<String, String> env, List<Spi> spis) {
         List<String> misplaced = new ArrayList<>();
-        Set<String> spis = new TreeSet<>(ProviderConfig.SPIS);
-        spis.addAll(config.spi().keySet());
-        for (String spi : spis) {
-            if (!ProviderConfig.SINGLE_PROVIDER_SPIS.contains(spi)
-                    && ProviderConfig.selectedProvider(spi, config, env).isPresent()) {
+        Set<String> single = spis.stream().filter(Spi::singleProvider).map(Spi::name).collect(Collectors.toSet());
+        Set<String> names = new TreeSet<>(spis.stream().map(Spi::name).toList());
+        names.addAll(config.spi().keySet());
+        for (String spi : names) {
+            if (!single.contains(spi) && ProviderConfig.selectedProvider(spi, config, env).isPresent()) {
                 misplaced.add(ProviderConfig.PREFIX + spi + ".provider");
             }
         }
@@ -509,7 +545,7 @@ public class Extensions {
         }
         // an access check's settings may hold placeholders and are merged with the
         // systems' and realms': the access check chain checks them
-        if (!AccessCheck.SPI.equals(e.spiName())) {
+        if (!AccessCheckSpi.NAME.equals(Spis.of(e).name())) {
             List<ConfigProblem> problems = settings.problems(e);
             problems.stream()
                 .filter(p -> !p.isError())

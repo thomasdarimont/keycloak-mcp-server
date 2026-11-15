@@ -1,0 +1,17 @@
+com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi
+com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngineSpi
+com.github.thomasdarimont.keycloak.mcp.access.CallerIssuerPolicySpi
+com.github.thomasdarimont.keycloak.mcp.access.RateLimitStoreSpi
+com.github.thomasdarimont.keycloak.mcp.audit.AuditListenerSpi
+com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubberSpi
+com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenRequestCustomizerSpi
+com.github.thomasdarimont.keycloak.mcp.config.ProfileCheckSpi
+com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmerSpi
+com.github.thomasdarimont.keycloak.mcp.confirm.PendingApprovalStoreSpi
+com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVaultSpi
+com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystemRepositorySpi
+com.github.thomasdarimont.keycloak.mcp.keycloak.SigningKeyGeneratorSpi
+com.github.thomasdarimont.keycloak.mcp.prompts.PromptProviderSpi
+com.github.thomasdarimont.keycloak.mcp.state.StateStoreSpi
+com.github.thomasdarimont.keycloak.mcp.tools.ToolProviderSpi
+com.github.thomasdarimont.keycloak.mcp.web.UserSessionStoreSpi

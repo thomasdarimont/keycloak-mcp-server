@@ -35,7 +35,7 @@ public final class ConfigMessageKeys {
     }
 
     public static String prefix(Extension extension) {
-        return prefix(extension.spiName(), extension.id());
+        return prefix(Spis.of(extension).name(), extension.id());
     }
 
     /** The shared form of a key: {@code config.} instead of the extension's prefix. */

@@ -29,17 +29,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 public interface AuthorizationEngine extends Extension {
 
     /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.authorization-engine.<id>.*}.
-     */
-    String SPI = "authorization-engine";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
-    /**
      * Whether calls of systems whose block has no switch are evaluated by this engine.
      * Default: no; governance is switched on per system or realm.
      */

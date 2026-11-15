@@ -51,9 +51,18 @@ class AdminServerInfoTest {
             .body("runtime.javaVersion", equalTo(System.getProperty("java.version")))
             .body("runtime.memoryMaxBytes", greaterThan(0L))
             .body("systems.count", notNullValue())
-            // every built-in extension point has its English texts
-            .body("extensionPoints.findAll { it.value.displayName == it.key }.collect { it.key }", empty())
-            .body("extensionPoints.findAll { it.value.description == null }.collect { it.key }", empty())
+            // every built-in extension point has its English texts; the one the tests
+            // declare has none and goes by its name, and it is listed without an
+            // extension
+            .body("extensionPoints.findAll { it.value.displayName == it.key }.collect { it.key }",
+                    equalTo(List.of("test-point")))
+            .body("extensionPoints.findAll { it.value.description == null }.collect { it.key }",
+                    equalTo(List.of("test-point")))
+            .body("providers.'test-point'", empty())
+            .body("extensionPoints.'test-point'.singleProvider", equalTo(true))
+            .body("extensionPoints.'state-store'.extensionType",
+                    equalTo("com.github.thomasdarimont.keycloak.mcp.state.StateStore"))
+            .body("extensionPoints.'access-check'.singleProvider", equalTo(false))
             .body("providers", hasKey("access-check"))
             // the database state store is the selected one and says how it keeps its
             // values; the profile sets a key
@@ -86,7 +95,8 @@ class AdminServerInfoTest {
         assertTrue(failed.values().isEmpty(), "nothing half reported");
         assertEquals(List.of("This extension could not report on itself: database away"), failed.warnings());
 
-        Extension plain = () -> "tools";
+        Extension plain = new Extension() {
+        };
         assertTrue(AdminServerInfo.contribution(plain, status("active")).values().isEmpty());
     }
 
@@ -96,11 +106,6 @@ class AdminServerInfoTest {
 
     private record Reporting(
             java.util.function.Consumer<ServerInfo> report) implements Extension, ServerInfoContributor {
-
-        @Override
-        public String spiName() {
-            return "tools";
-        }
 
         @Override
         public void contributeServerInfo(ServerInfo info) {

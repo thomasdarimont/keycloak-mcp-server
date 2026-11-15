@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck.Decision;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.StepUpLogins.StepUpLoginException;
@@ -181,7 +182,7 @@ class StepUpLoginsTest {
         for (int i = 0; i < more.length; i += 2) {
             values.put(more[i], more[i + 1]);
         }
-        return new ProviderConfig(AccessCheck.SPI, StepUpCheck.ID, values, StepUpCheck.CONFIG_SPEC);
+        return new ProviderConfig(AccessCheckSpi.NAME, StepUpCheck.ID, values, StepUpCheck.CONFIG_SPEC);
     }
 
     /** Alice with a password login of an hour ago. */
@@ -662,7 +663,9 @@ class StepUpLoginsTest {
         // login=browser needs its client
         Map<String, String> noClient = Map.of("acr", "passkey", "login", "browser");
         assertEquals(1,
-                check.validate(new ProviderConfig(AccessCheck.SPI, StepUpCheck.ID, noClient, StepUpCheck.CONFIG_SPEC))
+                check
+                    .validate(
+                            new ProviderConfig(AccessCheckSpi.NAME, StepUpCheck.ID, noClient, StepUpCheck.CONFIG_SPEC))
                     .size());
     }
 

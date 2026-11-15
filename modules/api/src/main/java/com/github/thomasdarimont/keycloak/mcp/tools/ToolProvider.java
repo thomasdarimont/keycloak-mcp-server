@@ -26,16 +26,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface ToolProvider extends Extension {
 
-    /**
-     * This extension point's name in configuration keys: {@code kc-mcp.spi.tools.<id>.*}.
-     */
-    String SPI = "tools";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /** Unique, stable id such as {@code users} or {@code acme-custom}. */
     @Override
     String id();

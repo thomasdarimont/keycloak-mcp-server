@@ -64,6 +64,16 @@ public class AcmeToolProvider implements ToolProvider {
   extension point, so the same id under two extension points has separate settings. `<spi>` is `tools`, `prompts`,
   `access-check`, `authorization-engine`, `authzen-customizer`, `confirmer`, `issuer-policy`, `profile-check`, `audit-listener`, `audit-scrubber`, `approval-store`, `rate-limit-store`, `state-store`,
   `system-repository`, `key-vault`, `key-generator` or `session-store`.
+- Extension points are declared, as in Keycloak: each has a `Spi` descriptor (`AccessCheckSpi`, `StateStoreSpi`, ...)
+  with its `name()` (the `<spi>` above, also the constant `AccessCheckSpi.NAME`), the interface its extensions
+  implement (`extensionType()`), whether one extension serves it (`singleProvider()`) and whether the registry
+  resolves it at startup (`resolvedByRegistry()`). An extension does not name its extension point: it follows from the
+  interface the class implements (`Spis.of(extension)`). So a class implements the interface of one extension point;
+  one that implements two, or none, stops the start with a message that names them. A jar that brings an extension
+  point of its own declares it the same way: an interface that extends `Extension`, a `Spi` for it registered with
+  `@AutoService(Spi.class)`, and its texts `<spi>.display-name` and `<spi>.description` in the jar's message bundle;
+  the extensions are then read with `registry.extensions(AcmeThing.class)`. The server info lists every declared
+  extension point, also one without an extension.
 - Choosing a provider: `key-vault`, `key-generator`, `session-store`, `approval-store`, `rate-limit-store` and `state-store` are served by exactly one
   extension, the others run all of theirs. `kc-mcp.spi.key-vault.provider=db`
   (`KC_MCP_SPI_KEY_VAULT_PROVIDER`) names it; if that one is missing, switched off or unsupported the server does not

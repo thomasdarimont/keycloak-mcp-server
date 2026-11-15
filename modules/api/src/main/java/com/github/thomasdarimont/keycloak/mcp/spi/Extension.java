@@ -20,14 +20,13 @@ import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
  * thread-safe. At startup, once: {@link #configure}, then {@link #isSupported}. At
  * shutdown, once and only if it took part: {@link #close}. Settings kept in fields by
  * {@code configure} are safe to read on request threads afterwards.
+ * <p>
+ * Which extension point an extension belongs to follows from the interface it implements:
+ * each extension point declares its interface in a {@link Spi}, and
+ * {@link Spis#of(Extension)} finds it. A class implements the interface of one extension
+ * point only.
  */
 public interface Extension {
-
-    /**
-     * The extension point's name in configuration keys, set by each extension point:
-     * {@code confirmer} in {@code kc-mcp.spi.confirmer.<id>.*}.
-     */
-    String spiName();
 
     /**
      * Unique, stable id such as {@code users} or {@code acme-tickets}. Configuration keys

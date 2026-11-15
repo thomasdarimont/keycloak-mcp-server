@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditEvent;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
+import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubberSpi;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolLevel;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProblem;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
@@ -149,7 +149,7 @@ class PiiAuditScrubberTest {
 
     @Test
     void declaresItsSettings() {
-        ProviderConfig config = new ProviderConfig(AuditScrubber.SPI, PiiAuditScrubber.ID,
+        ProviderConfig config = new ProviderConfig(AuditScrubberSpi.NAME, PiiAuditScrubber.ID,
                 Map.of("mdoe", "drop", "pseudonym-key", "k", "mode", "drop"), PiiAuditScrubber.CONFIG_SPEC);
         assertEquals(Set.of("mdoe"), config.unknownKeys());
         assertEquals("******", config.display().get("pseudonym-key"));

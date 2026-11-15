@@ -21,6 +21,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.spi.Extensions;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.web.UserSession;
 import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
+import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStoreSpi;
 
 import io.quarkus.oidc.AuthorizationCodeTokens;
 import io.quarkus.oidc.OidcRequestContext;
@@ -253,7 +254,8 @@ public class UserSessionTokenStateManager implements TokenStateManager {
 
     /** The store the server would use, empty when none is registered and enabled. */
     public Optional<UserSessionStore> resolve() {
-        return extensions.select(UserSessionStore.class, UserSessionStore.SPI, "UserSessionStore", config, List.of());
+        return extensions.select(UserSessionStore.class, UserSessionStoreSpi.NAME, "UserSessionStore", config,
+                List.of());
     }
 
     private String newId() {

@@ -15,24 +15,8 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
-import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
-import com.github.thomasdarimont.keycloak.mcp.access.CallerIssuerPolicy;
-import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
-import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenRequestCustomizer;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
-import com.github.thomasdarimont.keycloak.mcp.config.ProfileCheck;
-import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
-import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApprovalStore;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVault;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystemRepository;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.SigningKeyGenerator;
-import com.github.thomasdarimont.keycloak.mcp.prompts.PromptProvider;
-import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
-import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
-import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
 
 /**
  * Read-only view on {@code kc-mcp.spi.<spi>.<id>.*}. Keys are relative and
@@ -58,12 +42,6 @@ public final class ProviderConfig {
     private static final Pattern ACRONYM = Pattern.compile("([A-Z]+)([A-Z][a-z])");
     private static final Pattern SEPARATORS = Pattern.compile("[^a-z0-9]+");
 
-    /** The names of the extension points, the first segment after {@link #PREFIX}. */
-    public static final Set<String> SPIS = Set.of(ToolProvider.SPI, PromptProvider.SPI, Confirmer.SPI, AccessCheck.SPI,
-            AuthorizationEngine.SPI, AuthZenRequestCustomizer.SPI, CallerIssuerPolicy.SPI, AuditListener.SPI,
-            AuditScrubber.SPI, ProfileCheck.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI, StateStore.SPI,
-            KeycloakSystemRepository.SPI, KeyVault.SPI, SigningKeyGenerator.SPI, UserSessionStore.SPI);
-
     /**
      * Settings every extension has, handled by the server: {@code enabled} and
      * {@code required}.
@@ -75,10 +53,6 @@ public final class ProviderConfig {
      * {@code default}, {@code order}, {@code locked}.
      */
     public static final Set<String> ACCESS_CHECK_KEYS = Set.of("default", "order", "locked");
-
-    /** The extension points served by exactly one extension. */
-    public static final Set<String> SINGLE_PROVIDER_SPIS = Set.of(KeyVault.SPI, SigningKeyGenerator.SPI,
-            UserSessionStore.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI, StateStore.SPI);
 
     private final String spi;
     private final String providerId;
@@ -135,7 +109,7 @@ public final class ProviderConfig {
 
     /** The settings of an extension. */
     public static ProviderConfig forExtension(Extension extension, McpServerConfig config) {
-        return forExtension(extension.spiName(), extension.id(), extension.configSpec(), config);
+        return forExtension(Spis.of(extension).name(), extension.id(), extension.configSpec(), config);
     }
 
     /** The settings of an extension, with the process environment. */
@@ -514,7 +488,7 @@ public final class ProviderConfig {
      * {@link #ACCESS_CHECK_KEYS} under {@code access-check}.
      */
     public boolean reserved(String key) {
-        return RESERVED_KEYS.contains(key) || (AccessCheck.SPI.equals(spi) && ACCESS_CHECK_KEYS.contains(key));
+        return RESERVED_KEYS.contains(key) || (AccessCheckSpi.NAME.equals(spi) && ACCESS_CHECK_KEYS.contains(key));
     }
 
     /** These settings with other values, the same declaration. */

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck.Decision;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.GrantedRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
@@ -32,7 +33,7 @@ class StepUpCheckTest {
         for (int i = 0; i < pairs.length; i += 2) {
             values.put(pairs[i], pairs[i + 1]);
         }
-        return new ProviderConfig(AccessCheck.SPI, StepUpCheck.ID, values, StepUpCheck.CONFIG_SPEC);
+        return new ProviderConfig(AccessCheckSpi.NAME, StepUpCheck.ID, values, StepUpCheck.CONFIG_SPEC);
     }
 
     /** Alice with a token of the given acr, signed in so many seconds ago. */

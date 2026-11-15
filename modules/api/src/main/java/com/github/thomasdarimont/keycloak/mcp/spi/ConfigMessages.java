@@ -80,7 +80,7 @@ public final class ConfigMessages {
 
     /**
      * An extension point's name for people: the bundles' text, else its name in the
-     * configuration keys ({@link Extension#spiName()}), which is no fault.
+     * configuration keys ({@link Spi#name()}), which is no fault.
      */
     public String extensionPoint(Locale locale, String spi) {
         return find(locale, ConfigMessageKeys.extensionPoint(spi)).orElse(spi);
@@ -97,7 +97,15 @@ public final class ConfigMessages {
      * and a bundle without them is no fault: the extension's own text is the English one.
      */
     public String displayName(Locale locale, Extension extension) {
-        return own(locale, ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(extension)), extension.displayName())
+        return displayName(locale, Spis.of(extension).name(), extension);
+    }
+
+    /**
+     * {@link #displayName(Locale, Extension)} for an extension of this extension point.
+     */
+    public String displayName(Locale locale, String spi, Extension extension) {
+        return own(locale, ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(spi, extension.id())),
+                extension.displayName())
             .orElseGet(extension::id);
     }
 
@@ -105,12 +113,22 @@ public final class ConfigMessages {
      * An extension's description, like {@link #displayName}; empty when there is none.
      */
     public Optional<String> description(Locale locale, Extension extension) {
-        return own(locale, ConfigMessageKeys.description(ConfigMessageKeys.prefix(extension)), extension.description());
+        return description(locale, Spis.of(extension).name(), extension);
+    }
+
+    public Optional<String> description(Locale locale, String spi, Extension extension) {
+        return own(locale, ConfigMessageKeys.description(ConfigMessageKeys.prefix(spi, extension.id())),
+                extension.description());
     }
 
     /** An extension's help, like {@link #displayName}; empty when there is none. */
     public Optional<String> helpText(Locale locale, Extension extension) {
-        return own(locale, ConfigMessageKeys.helpText(ConfigMessageKeys.prefix(extension)), extension.helpText());
+        return helpText(locale, Spis.of(extension).name(), extension);
+    }
+
+    public Optional<String> helpText(Locale locale, String spi, Extension extension) {
+        return own(locale, ConfigMessageKeys.helpText(ConfigMessageKeys.prefix(spi, extension.id())),
+                extension.helpText());
     }
 
     private Optional<String> own(Locale locale, String key, String fromExtension) {

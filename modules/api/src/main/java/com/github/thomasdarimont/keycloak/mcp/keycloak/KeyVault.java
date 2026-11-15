@@ -24,17 +24,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface KeyVault extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.key-vault.<id>.*}.
-     */
-    String SPI = "key-vault";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /** The signing key pair of a system when one exists. */
     Optional<SigningKey> findSigningKey(String system);
 

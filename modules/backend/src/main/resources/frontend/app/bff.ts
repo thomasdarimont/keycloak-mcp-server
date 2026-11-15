@@ -274,7 +274,16 @@ export interface ServerInfo {
   /** Names of the extension points for people; the extension point's own name where no bundle has a text. */
   extensionPoints: Record<
     string,
-    { displayName: string; displayNameKey: string; description?: string | null; descriptionKey: string }
+    {
+      displayName: string;
+      displayNameKey: string;
+      description?: string | null;
+      descriptionKey: string;
+      /** The interface its extensions implement. */
+      extensionType?: string;
+      /** One extension serves it, the others are not selected. */
+      singleProvider?: boolean;
+    }
   >;
   /** By extension point. */
   providers: Record<string, ServerInfoProvider[]>;

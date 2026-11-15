@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
-import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
+import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngineSpi;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenAnswer;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenEvaluation;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.AuthorizationAccessCheck;
@@ -150,7 +150,7 @@ class AuthZenEngineTest {
         for (KeycloakSystem k : systems) {
             byName.put(k.name(), k);
         }
-        AuthZenEngine engine = new AuthZenEngine(new ProviderConfig(AuthorizationEngine.SPI, AuthZenSettings.ID, s),
+        AuthZenEngine engine = new AuthZenEngine(new ProviderConfig(AuthorizationEngineSpi.NAME, AuthZenSettings.ID, s),
                 http, Clock.fixed(Instant.parse("2026-11-10T10:00:00Z"), ZoneOffset.UTC),
                 ClientAuthenticators.fromClassPath(), systemSigners, byName);
         return new Under(engine, new AuthorizationAccessCheck(() -> List.of(engine),
@@ -349,7 +349,7 @@ class AuthZenEngineTest {
 
     Under liveCheck(Map<String, String> settings, Map<String, KeycloakSystem> systems) {
         AuthZenEngine engine = new AuthZenEngine(
-                new ProviderConfig(AuthorizationEngine.SPI, AuthZenSettings.ID, settings), http, Clock.systemUTC(),
+                new ProviderConfig(AuthorizationEngineSpi.NAME, AuthZenSettings.ID, settings), http, Clock.systemUTC(),
                 ClientAuthenticators.fromClassPath(), systemSigners, Map.of());
         return new Under(engine, new AuthorizationAccessCheck(() -> List.of(engine),
                 name -> Optional.ofNullable(name == null ? null : systems.get(name)), List::of));
@@ -395,13 +395,13 @@ class AuthZenEngineTest {
     void startupChecksTheConfiguredSystems() {
         var broken = system("prod", "{\"enabled\": true, \"url\": \"" + base + "/e\", \"auth\": \"header\"}");
         var c = new AuthZenEngine(
-                new ProviderConfig(AuthorizationEngine.SPI, AuthZenSettings.ID, Map.of("enabled", "true")), http,
+                new ProviderConfig(AuthorizationEngineSpi.NAME, AuthZenSettings.ID, Map.of("enabled", "true")), http,
                 Clock.systemUTC(), ClientAuthenticators.fromClassPath(), systemSigners, Map.of("prod", broken));
 
         IllegalStateException e = assertThrows(IllegalStateException.class, c::runStartupChecks);
         assertTrue(e.getMessage().contains("kc-mcp.systems.prod.authorization.authzen.header-value"), e.getMessage());
 
-        var off = new AuthZenEngine(new ProviderConfig(AuthorizationEngine.SPI, AuthZenSettings.ID, Map.of()), http,
+        var off = new AuthZenEngine(new ProviderConfig(AuthorizationEngineSpi.NAME, AuthZenSettings.ID, Map.of()), http,
                 Clock.systemUTC(), ClientAuthenticators.fromClassPath(), systemSigners, Map.of("prod", broken));
         off.runStartupChecks(); // the check is off: nothing to check
     }
@@ -657,8 +657,8 @@ class AuthZenEngineTest {
         answer.set(new Object[] { 200, """
                 {"decision": true, "context": {"reason_user": "ok"},
                  "obligations": [{"id": "log", "level": "audit"}], "policy": {"version": "7"}, "ttl": 60}""" });
-        AuthZenSettings settings = AuthZenSettings.from(new ProviderConfig(AuthorizationEngine.SPI, AuthZenSettings.ID,
-                Map.of("enabled", "true", "url", base + "/e")), null);
+        AuthZenSettings settings = AuthZenSettings.from(new ProviderConfig(AuthorizationEngineSpi.NAME,
+                AuthZenSettings.ID, Map.of("enabled", "true", "url", base + "/e")), null);
 
         AuthZenAnswer a = new AuthZenClient(http, settings, null).evaluate(new JsonObject(), "prod", "acme").answer();
 

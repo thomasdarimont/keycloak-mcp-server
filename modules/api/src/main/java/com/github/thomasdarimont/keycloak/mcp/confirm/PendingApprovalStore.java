@@ -18,17 +18,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 public interface PendingApprovalStore extends Extension {
 
     /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.approval-store.<id>.*}.
-     */
-    String SPI = "approval-store";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
-    /**
      * Claims the key for a request about to be filed, atomically across instances: the
      * new generation when nobody holds the key or the holder has expired, so that exactly
      * one caller files the request; empty when a live reservation or approval exists.

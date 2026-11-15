@@ -24,6 +24,6 @@ public interface ExtensionRegistry {
 
     /** The context of this extension. */
     default ExtensionContext context(Extension extension) {
-        return context(extension.spiName(), extension.id());
+        return context(Spis.of(extension).name(), extension.id());
     }
 }

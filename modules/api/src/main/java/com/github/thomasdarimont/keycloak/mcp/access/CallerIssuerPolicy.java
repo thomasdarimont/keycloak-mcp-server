@@ -26,17 +26,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface CallerIssuerPolicy extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.issuer-policy.<id>.*}.
-     */
-    String SPI = "issuer-policy";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     enum Decision {
         ALLOW, DENY, ABSTAIN
     }

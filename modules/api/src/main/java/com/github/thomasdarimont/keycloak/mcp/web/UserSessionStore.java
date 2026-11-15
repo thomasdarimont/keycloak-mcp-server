@@ -15,17 +15,6 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface UserSessionStore extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.session-store.<id>.*}.
-     */
-    String SPI = "session-store";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /** Stores a new session or replaces the one with the same id. */
     void save(UserSession session);
 

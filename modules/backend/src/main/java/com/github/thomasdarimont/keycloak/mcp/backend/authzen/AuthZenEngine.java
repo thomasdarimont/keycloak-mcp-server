@@ -21,6 +21,7 @@ import org.jboss.logging.Logger;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
+import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngineSpi;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenAnswer;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenEvaluation;
 import com.github.thomasdarimont.keycloak.mcp.authzen.AuthZenRequestCustomizer;
@@ -114,7 +115,7 @@ public class AuthZenEngine implements AuthorizationEngine {
     public AuthZenEngine(McpServerConfig server, Instance<TlsConfigurationRegistry> tls, Extensions extensions,
             Instance<SigningKeys> signingKeys, Instance<KeycloakSystems> systems,
             Instance<DefaultExtensionRegistry> registry) {
-        this(new ProviderConfig(AuthorizationEngine.SPI, AuthZenSettings.ID, Map.of()),
+        this(new ProviderConfig(AuthorizationEngineSpi.NAME, AuthZenSettings.ID, Map.of()),
                 tls.isResolvable() ? tls.get() : null, OutboundClients.Timeouts.of(server), staticSystems(server),
                 Clock.systemUTC(), new ClientAuthenticators(extensions.discover(ClientAuthenticatorFactory.class)),
                 systemSigners(signingKeys, systems));
@@ -461,7 +462,7 @@ public class AuthZenEngine implements AuthorizationEngine {
         };
         var authenticator = authenticators.create(method,
                 new ClientAuthenticatorFactory.Context(system.clientId().get(), tokenEndpoint,
-                        new ProviderConfig(AuthorizationEngine.SPI, ID, client),
+                        new ProviderConfig(AuthorizationEngineSpi.NAME, ID, client),
                         AuthZenSettings.systemPrefix(system.name()), signer));
         return new ClientCredentialsTokens(http, tokenEndpoint, authenticator, settings.scope(), clock);
     }

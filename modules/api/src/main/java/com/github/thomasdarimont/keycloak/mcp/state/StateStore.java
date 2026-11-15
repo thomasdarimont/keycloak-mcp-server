@@ -25,19 +25,8 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
  */
 public interface StateStore extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.state-store.<id>.*}.
-     */
-    String SPI = "state-store";
-
     /** The longest a namespace or a key may be; longer keys are the caller's to hash. */
     int MAX_NAME_LENGTH = 512;
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
 
     /**
      * Stores the value, replacing what the key held, its scope included.

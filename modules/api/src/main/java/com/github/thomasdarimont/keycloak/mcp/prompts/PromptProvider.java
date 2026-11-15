@@ -16,17 +16,6 @@ import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
  */
 public interface PromptProvider extends Extension {
 
-    /**
-     * This extension point's name in configuration keys:
-     * {@code kc-mcp.spi.prompts.<id>.*}.
-     */
-    String SPI = "prompts";
-
-    @Override
-    default String spiName() {
-        return SPI;
-    }
-
     /** Unique, stable id such as {@code prompts} or {@code acme-recipes}. */
     @Override
     String id();

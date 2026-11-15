@@ -149,7 +149,7 @@ instances on the same database ([Several instances](storage.md#several-instances
   `Accept-Language`, English where no bundle has it, each with its message key ([Extending](extending.md),
   `configSpec()`).
 - `GET /admin/server-info`: the server at a glance. `server` (version, start, uptime, instance role, security profile, dev mode, tool exposure),
-  `runtime` (Java, operating system, processors, memory), `systems.count`, `extensionPoints` (their names and descriptions for people) and `providers`: every extension by
+  `runtime` (Java, operating system, processors, memory), `systems.count`, `extensionPoints` (every declared one with its name and description for people, the interface of its extensions and whether one extension serves it) and `providers`: every extension by
   extension point with its name, status, origin and what it reports about itself, `info` (names and values, such as
   `encryption: on` of the database stores) and `warnings` (such as values stored unencrypted); the warnings of all
   extensions are repeated in `warnings`. Only extensions that take part are asked; extensions report through

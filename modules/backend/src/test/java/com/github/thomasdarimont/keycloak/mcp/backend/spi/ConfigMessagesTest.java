@@ -8,19 +8,19 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
-import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngine;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
-import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubber;
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
+import com.github.thomasdarimont.keycloak.mcp.access.AuthorizationEngineSpi;
+import com.github.thomasdarimont.keycloak.mcp.audit.AuditListenerSpi;
+import com.github.thomasdarimont.keycloak.mcp.audit.AuditScrubberSpi;
 import com.github.thomasdarimont.keycloak.mcp.backend.authzen.AuthZenSettings;
 import com.github.thomasdarimont.keycloak.mcp.backend.ciba.CibaSettings;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.RateLimitCheck;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.StepUpCheck;
 import com.github.thomasdarimont.keycloak.mcp.backend.oauth.ClientAuthenticators;
 import com.github.thomasdarimont.keycloak.mcp.backend.policies.PolicySettings;
-import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVault;
-import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystemRepository;
+import com.github.thomasdarimont.keycloak.mcp.confirm.ConfirmerSpi;
+import com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVaultSpi;
+import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystemRepositorySpi;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigHint;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigMessageKeys;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigMessages;
@@ -45,19 +45,19 @@ class ConfigMessagesTest {
     /** Every built-in spec by its message prefix. */
     static Map<String, ConfigSpec> builtInSpecs() {
         Map<String, ConfigSpec> specs = new java.util.LinkedHashMap<>();
-        specs.put(ConfigMessageKeys.prefix(AuthorizationEngine.SPI, AuthZenSettings.ID),
+        specs.put(ConfigMessageKeys.prefix(AuthorizationEngineSpi.NAME, AuthZenSettings.ID),
                 AuthZenSettings.CONFIG_SPEC.plus(ClientAuthenticators.fromClassPath().configSpec()));
-        specs.put(ConfigMessageKeys.prefix(Confirmer.SPI, CibaSettings.ID), CibaSettings.CONFIG_SPEC);
+        specs.put(ConfigMessageKeys.prefix(ConfirmerSpi.NAME, CibaSettings.ID), CibaSettings.CONFIG_SPEC);
         for (String check : List.of("group-scope", "no-escalation", "self-protection")) {
-            specs.put(ConfigMessageKeys.prefix(AccessCheck.SPI, check), PolicySettings.spec(check));
+            specs.put(ConfigMessageKeys.prefix(AccessCheckSpi.NAME, check), PolicySettings.spec(check));
         }
-        specs.put(ConfigMessageKeys.prefix(AccessCheck.SPI, RateLimitCheck.ID), RateLimitCheck.CONFIG_SPEC);
-        specs.put(ConfigMessageKeys.prefix(AccessCheck.SPI, StepUpCheck.ID), StepUpCheck.CONFIG_SPEC);
-        specs.put(ConfigMessageKeys.prefix(AuditScrubber.SPI, PiiAuditScrubber.ID), PiiAuditScrubber.CONFIG_SPEC);
-        specs.put(ConfigMessageKeys.prefix(AuditListener.SPI, DatabaseAuditListener.ID),
+        specs.put(ConfigMessageKeys.prefix(AccessCheckSpi.NAME, RateLimitCheck.ID), RateLimitCheck.CONFIG_SPEC);
+        specs.put(ConfigMessageKeys.prefix(AccessCheckSpi.NAME, StepUpCheck.ID), StepUpCheck.CONFIG_SPEC);
+        specs.put(ConfigMessageKeys.prefix(AuditScrubberSpi.NAME, PiiAuditScrubber.ID), PiiAuditScrubber.CONFIG_SPEC);
+        specs.put(ConfigMessageKeys.prefix(AuditListenerSpi.NAME, DatabaseAuditListener.ID),
                 DatabaseAuditListener.CONFIG_SPEC);
-        specs.put(ConfigMessageKeys.prefix(KeyVault.SPI, DatabaseKeyVault.ID), DatabaseKeyVault.CONFIG_SPEC);
-        specs.put(ConfigMessageKeys.prefix(KeycloakSystemRepository.SPI, DatabaseKeycloakSystemRepository.ID),
+        specs.put(ConfigMessageKeys.prefix(KeyVaultSpi.NAME, DatabaseKeyVault.ID), DatabaseKeyVault.CONFIG_SPEC);
+        specs.put(ConfigMessageKeys.prefix(KeycloakSystemRepositorySpi.NAME, DatabaseKeycloakSystemRepository.ID),
                 DatabaseKeycloakSystemRepository.CONFIG_SPEC);
         return specs;
     }
@@ -114,31 +114,26 @@ class ConfigMessagesTest {
 
     @Test
     void anExtensionsHelpComesFromTheBundleElseFromTheExtensionAndMayBeMissing() {
-        assertTrue(messages.helpText(Locale.GERMANY, help(AccessCheck.SPI, "step-up", "from the class"))
+        assertTrue(messages.helpText(Locale.GERMANY, AccessCheckSpi.NAME, help("step-up", "from the class"))
             .orElseThrow()
             .startsWith("Use it when a login of hours ago"), "the bundle's text comes first");
         assertEquals(Optional.of("from the class"),
-                messages.helpText(Locale.ROOT, help("tools", "acme", "from the class")));
-        assertEquals(Optional.empty(), messages.helpText(Locale.ROOT, help("tools", "acme", "")));
+                messages.helpText(Locale.ROOT, "tools", help("acme", "from the class")));
+        assertEquals(Optional.empty(), messages.helpText(Locale.ROOT, "tools", help("acme", "")));
         // name and description by the same rule; no bundle has them here, and without a
         // name of its own an extension goes by its id
-        assertEquals("acme", messages.displayName(Locale.GERMANY, help("tools", "acme", "")));
-        assertEquals(Optional.empty(), messages.description(Locale.GERMANY, help("tools", "acme", "")));
-        assertEquals("Access checks", messages.extensionPoint(Locale.GERMANY, AccessCheck.SPI));
+        assertEquals("acme", messages.displayName(Locale.GERMANY, "tools", help("acme", "")));
+        assertEquals(Optional.empty(), messages.description(Locale.GERMANY, "tools", help("acme", "")));
+        assertEquals("Access checks", messages.extensionPoint(Locale.GERMANY, AccessCheckSpi.NAME));
         assertEquals("acme-things", messages.extensionPoint(Locale.ROOT, "acme-things"), "no text: its name");
-        assertTrue(messages.extensionPointDescription(Locale.GERMANY, AccessCheck.SPI).isPresent());
+        assertTrue(messages.extensionPointDescription(Locale.GERMANY, AccessCheckSpi.NAME).isPresent());
         assertEquals(Optional.empty(), messages.extensionPointDescription(Locale.ROOT, "acme-things"));
         assertEquals("access-check.step-up.display-name",
-                ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(AccessCheck.SPI, "step-up")));
+                ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(AccessCheckSpi.NAME, "step-up")));
     }
 
-    private static Extension help(String spi, String id, String helpText) {
+    private static Extension help(String id, String helpText) {
         return new Extension() {
-            @Override
-            public String spiName() {
-                return spi;
-            }
-
             @Override
             public String id() {
                 return id;
@@ -153,7 +148,7 @@ class ConfigMessagesTest {
 
     @Test
     void problemsAreFormattedWithTheirArguments() {
-        ConfigProblem p = new ProviderConfig(Confirmer.SPI, CibaSettings.ID, Map.of("enabled", "true"),
+        ConfigProblem p = new ProviderConfig(ConfirmerSpi.NAME, CibaSettings.ID, Map.of("enabled", "true"),
                 CibaSettings.CONFIG_SPEC)
             .problems()
             .getFirst();
