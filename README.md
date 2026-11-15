@@ -2,10 +2,15 @@
 
 [![CI](https://github.com/thomasdarimont/keycloak-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/thomasdarimont/keycloak-mcp-server/actions/workflows/ci.yml)
 
-An [MCP](https://modelcontextprotocol.io) server that lets an AI assistant administer Keycloak: users, groups, roles,
-clients, identity providers, organizations, authentication flows, events and realm settings. A comprehensive set of tools over the Admin
-REST API (after [mcp-keycloak-admin](https://github.com/edewit/mcp-keycloak-admin)), built with Quarkus for Keycloak 26.8,
-reached over streamable HTTP, and shaped so that small local models can use them too.
+An extensible [MCP](https://modelcontextprotocol.io) server for administering Keycloak with an AI assistant. Like
+Keycloak itself it is built around extension points: the tools, prompts, access checks, confirmations, audit sinks and
+system registries it ships are extensions, and your own come as a jar next to them
+([Extending](docs/extending.md)).
+
+Out of the box it covers users, groups, roles, clients, identity providers, organizations, authentication flows,
+events and realm settings: a comprehensive set of tools over the Admin REST API (after
+[mcp-keycloak-admin](https://github.com/edewit/mcp-keycloak-admin)), built with Quarkus for Keycloak 26.8, reached
+over streamable HTTP, and shaped so that small local models can use them too.
 
 The intended setup is **one shared MCP server per environment**: one for dev, one for test, one for QA, one for
 production, each in front of the Keycloak systems of that environment (several installations, tenants, clusters) and
@@ -32,8 +37,9 @@ The same server also runs locally for a single administrator, which is where the
 - **Small models cope.** By default the model sees three tools: `whoami`, `search_tools` and `execute_tool`. It searches
   for what it needs ("kick a user" finds the logout tool), identifiers are forgiving (user by id or username, group by
   path), errors are structured and results compact.
-- **Extensible.** An SPI for your own tools, prompts, access checks, confirmers, audit sinks and system registries,
-  loaded from a jar.
+- **Extensible.** An SPI for your own tools, prompts, access checks, confirmers, audit sinks, system registries
+  and stores, loaded from a jar; every extension is configured, ordered and switched off the same way, per server
+  and, for access checks, per system and realm.
 
 ## Two ways to run it
 
