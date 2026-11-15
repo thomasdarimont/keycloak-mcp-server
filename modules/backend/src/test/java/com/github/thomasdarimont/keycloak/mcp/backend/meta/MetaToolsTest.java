@@ -437,4 +437,26 @@ class MetaToolsTest {
             .orElseThrow();
         assertTrue(String.valueOf(again.get("confirmation")).contains("not your job"), again.toString());
     }
+
+    @Test
+    void signInReportsHowWhenAndForWhichOrganizationTheCallerSignedIn() {
+        Map<String, Object> claims = new java.util.LinkedHashMap<>();
+        claims.put("acr", "passkey");
+        claims.put("amr", java.util.List.of("hwk", "user"));
+        claims.put("auth_time", 1_800_000_000L);
+        claims.put("organization", Map.of("acme", Map.of("id", "42")));
+        com.github.thomasdarimont.keycloak.mcp.access.Caller alice = com.github.thomasdarimont.keycloak.mcp.access.Caller
+            .of("id-alice", "alice", "demo", java.util.Set.of())
+            .withToken("raw", claims);
+        assertEquals(Map.of("acr", "passkey", "amr", java.util.List.of("hwk", "user"), "authenticatedAt",
+                "2027-01-15T08:00:00Z", "organizations", java.util.List.of("acme")), MetaTools.signIn(alice));
+
+        // the organization claim as a list of aliases, the default of Keycloak's mapper;
+        // nothing else known
+        claims.clear();
+        claims.put("organization", java.util.List.of("acme", "globex"));
+        assertEquals(Map.of("organizations", java.util.List.of("acme", "globex")),
+                MetaTools.signIn(alice.withToken("raw", claims)));
+        assertEquals(Map.of(), MetaTools.signIn(alice.withToken("raw", Map.of())));
+    }
 }

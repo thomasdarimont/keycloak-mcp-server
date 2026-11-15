@@ -30,6 +30,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
+        <quarkus-mcp-server.version>2.0.4</quarkus-mcp-server.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.6.1</surefire-plugin.version>
         <spotless-maven-plugin.version>3.11.0</spotless-maven-plugin.version>
@@ -64,9 +65,10 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>${quarkus.platform.group-id}</groupId>
+                <!-- the extension's own BOM, ahead of the version the Quarkus platform manages (2.0.1 in 3.40.1.1) -->
+                <groupId>io.quarkiverse.mcp</groupId>
                 <artifactId>quarkus-mcp-server-bom</artifactId>
-                <version>${quarkus.platform.version}</version>
+                <version>${quarkus-mcp-server.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

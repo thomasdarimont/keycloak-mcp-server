@@ -328,6 +328,49 @@ The denial is `rate_limited` and says when the next call is possible. What to kn
 - The instances compare their own clocks, so keep them in sync (NTP); a skew shifts the window by as much.
 - Without authenticated callers ([Callers](#callers)) all calls on a system share one count.
 
+### Step-up authentication
+
+Some tools should run only for someone who has just proved who they are, with more than a password: the `step-up`
+[access check](access-checks.md) looks at how and when the caller signed in (RFC 9470). It reads two claims of the
+token the caller presented to this server: `acr`, the authentication level, and `auth_time`, the moment of the login.
+It is off until the server, a system or a realm asks for it, and is configured like every access check.
+
+| `kc-mcp.spi.access-check.step-up.` | default | meaning |
+|---|---|---|
+| `default` | `off` | `on` runs the check everywhere; a system's or realm's `access.step-up.enabled: true` only there |
+| `acr` | | the `acr` values that satisfy the check, any of them; empty: only the age of the login matters |
+| `max-age` | | how long ago the caller may have signed in, e.g. `5m`; empty: only the `acr` matters |
+| `levels` | `destructive` | the tool levels that need the step-up: `read`, `write`, `destructive` |
+| `tools` | | tools that need it instead of the levels, by name, e.g. `client_secret_get` |
+| `on-missing` | `deny` | `confirm` lets a call without the step-up through only after the human confirmed it themselves, by elicitation or a confirmer that asks them such as [CIBA](ciba-confirmation.md), never by the model's `confirm: true` |
+
+```properties
+# prod: destructive tools and reading client secrets need a passkey login that is at most five minutes old
+kc-mcp.systems.prod.access.step-up.enabled=true
+kc-mcp.systems.prod.access.step-up.acr=passkey
+kc-mcp.systems.prod.access.step-up.max-age=5m
+kc-mcp.systems.prod.realms.demo.access.step-up.tools=user_delete,client_secret_get
+```
+
+The denial is `insufficient_user_authentication`; it names what the tool requires, what the token has, and the
+`acr_values` and `max_age` to sign in again with. What to know:
+
+- What an `acr` value stands for is the realm's business. In Keycloak, the realm maps names to levels (*Realm settings
+  › ACR to LoA mapping*) and the browser flow asks for a passkey or a second factor under *Conditional - Level of
+  Authentication*; a login with `acr_values=<name>` then runs that part of the flow and the token carries the name.
+  Keycloak's `acr` client scope puts `acr` into the access token, its `basic` scope `auth_time`.
+- The MCP client has to be able to send the user through that login: `acr_values` (and `max_age`) on the
+  authorization request. A client that cannot sends the user to an ordinary login, and their token never satisfies
+  the check; `on-missing=confirm` is the way through for those.
+- The check reads the caller's own token, before any token exchange: Keycloak does not carry the `acr` into the
+  exchanged token. A call without a caller token ([Callers](#callers)) cannot pass.
+- It needs `acr`, `max-age` or both. Switched on without either, it refuses the tools it concerns
+  (`access_check_failed`) instead of letting them run.
+- `max-age` compares `auth_time` with this server's clock. A login is as old as the browser session it came from: a
+  token refreshed since keeps its `auth_time`.
+- It runs after the checks that say whether the caller may do this at all and before the rate limit, so a call
+  refused here is not counted. `whoami` shows what the caller's token says about their login: `acr`, `amr`, `authenticatedAt` and `organizations`.
+
 ## Callers
 
 `CallerProvider` reads the Quarkus `SecurityIdentity`: subject, username, issuing realm, roles. The OIDC tenant is off

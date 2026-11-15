@@ -62,6 +62,26 @@ class McpEndpointTest {
             .then()
             .header("Access-Control-Allow-Origin", "http://localhost:5173")
             .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-session-id"));
+        // a stateless (2026-07-28) client names the method and the tool in headers on
+        // every request, and a browser
+        // client reads the bearer challenge of a 401 to find the protected resource
+        // metadata
+        RestAssured.given()
+            .header("Origin", "http://localhost:5173")
+            .header("Access-Control-Request-Method", "POST")
+            .header("Access-Control-Request-Headers", "content-type,mcp-protocol-version,mcp-method,mcp-name")
+            .options("/mcp")
+            .then()
+            .header("Access-Control-Allow-Origin", "http://localhost:5173")
+            .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-method"))
+            .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-name"));
+        RestAssured.given()
+            .header("Origin", "http://localhost:5173")
+            .header("Content-Type", "application/json")
+            .body("{}")
+            .post("/mcp")
+            .then()
+            .header("Access-Control-Expose-Headers", Matchers.containsStringIgnoringCase("www-authenticate"));
         // management UI PUT (system save) + X-Requested-With CSRF header
         RestAssured.given()
             .header("Origin", "https://localhost:8443")

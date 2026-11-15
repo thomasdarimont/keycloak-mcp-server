@@ -2,6 +2,7 @@ package com.github.thomasdarimont.keycloak.mcp.backend.meta;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,6 +139,43 @@ public class MetaTools {
             return ctx.withCaller(ctx.caller().asDelegated());
         }
         return ctx;
+    }
+
+    /**
+     * How the caller signed in, as far as their token says: the authentication level
+     * ({@code acr}), the methods used ({@code amr}, RFC 8176), the moment
+     * ({@code auth_time}) and the organizations the login was for (Keycloak's
+     * {@code organization} claim, a list of aliases or an object keyed by them). What the
+     * step-up check judges, so that a refused caller sees what they have.
+     */
+    static Map<String, Object> signIn(Caller caller) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (caller.claim("acr") != null) {
+            out.put("acr", String.valueOf(caller.claim("acr")));
+        }
+        List<String> amr = names(caller.claim("amr"));
+        if (!amr.isEmpty()) {
+            out.put("amr", amr);
+        }
+        if (caller.claim("auth_time") instanceof Number authTime) {
+            out.put("authenticatedAt", java.time.Instant.ofEpochSecond(authTime.longValue()).toString());
+        }
+        List<String> organizations = names(caller.claim("organization"));
+        if (!organizations.isEmpty()) {
+            out.put("organizations", organizations);
+        }
+        return out;
+    }
+
+    /** A claim that is one name, a list of names or an object keyed by names. */
+    private static List<String> names(Object claim) {
+        if (claim instanceof Map<?, ?> byName) {
+            return byName.keySet().stream().map(String::valueOf).toList();
+        }
+        if (claim instanceof Collection<?> several) {
+            return several.stream().map(String::valueOf).toList();
+        }
+        return claim == null || String.valueOf(claim).isBlank() ? List.of() : List.of(String.valueOf(claim));
     }
 
     /**
@@ -394,6 +432,7 @@ public class MetaTools {
             if (caller.realm() != null) {
                 who.put("realm", caller.realm());
             }
+            who.putAll(signIn(caller));
             out.put("caller", who);
         }
         boolean delegated = caller.delegated() && ctx.callerToken() != null;

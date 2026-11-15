@@ -1,14 +1,10 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.guard;
 
 import java.time.Duration;
-import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -20,7 +16,6 @@ import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStore;
 import com.github.thomasdarimont.keycloak.mcp.access.RateLimitStoreMisconfiguredException;
 import com.github.thomasdarimont.keycloak.mcp.backend.spi.DefaultExtensionRegistry;
-import com.github.thomasdarimont.keycloak.mcp.catalog.ToolLevel;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProblem;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProperty;
@@ -242,60 +237,32 @@ public class RateLimitCheck implements AccessCheck {
     }
 
     /**
-     * @param tools the tools that count, by full or short name; when empty the
-     * {@code levels} decide
+     * @param scope the tools that count
      * @param confirm over the limit the human is asked instead of the call being refused
      */
-    record Limit(int max, Duration window, Set<ToolLevel> levels, Set<String> tools, boolean confirm) {
+    record Limit(int max, Duration window, ToolScope scope, boolean confirm) {
 
         static Limit from(ProviderConfig config) {
             int max = config.readInt(MAX);
             if (max < 1) {
-                throw invalid(config, MAX, String.valueOf(max), "a whole number from 1");
+                throw ToolScope.invalid(config, MAX, String.valueOf(max), "a whole number from 1");
             }
             Duration window = config.readDuration(WINDOW);
             if (window.isZero() || window.isNegative() || window.toMillis() > RateLimitStore.MAX_WINDOW_MILLIS) {
-                throw invalid(config, WINDOW, config.raw(WINDOW).orElse(String.valueOf(window)),
+                throw ToolScope.invalid(config, WINDOW, config.raw(WINDOW).orElse(String.valueOf(window)),
                         "a duration of at most 24h, such as 10m or 1h");
             }
-            Set<ToolLevel> levels = EnumSet.noneOf(ToolLevel.class);
-            for (String level : config.readList(LEVELS)) {
-                try {
-                    levels.add(ToolLevel.valueOf(level.trim().toUpperCase(Locale.ROOT)));
-                }
-                catch (IllegalArgumentException e) {
-                    throw invalid(config, LEVELS, level, "read, write or destructive, comma separated");
-                }
-            }
-            Set<String> tools = config.readList(TOOLS)
-                .stream()
-                .map(AccessPolicy::shortName)
-                .collect(Collectors.toUnmodifiableSet());
-            return new Limit(max, window, levels, tools, "confirm".equals(config.readChoice(ON_LIMIT)));
+            return new Limit(max, window, ToolScope.from(config, LEVELS, TOOLS),
+                    "confirm".equals(config.readChoice(ON_LIMIT)));
         }
 
         boolean counts(ToolSpec tool) {
-            return tools.isEmpty() ? levels.contains(tool.level())
-                    : tools.contains(AccessPolicy.shortName(tool.name()));
+            return scope.contains(tool);
         }
 
         /** What is counted, for the message: "write or destructive", "listed". */
         String what() {
-            return !tools.isEmpty() ? "listed"
-                    : levels.stream().map(l -> l.name().toLowerCase(Locale.ROOT)).collect(Collectors.joining(" or "));
-        }
-
-        private static ConfigValueException invalid(ProviderConfig config, ConfigProperty property, String value,
-                String expected) {
-            String key = config.key(property.name());
-            return new ConfigValueException(ConfigProblem
-                .error(ConfigProblem.INVALID_VALUE, key + " must be " + expected + ", not '" + value + "'",
-                        property.name())
-                .withArg("key", key)
-                .withArg("name", property.name())
-                .withArg("type", property.type().name())
-                .withArg("expected", expected)
-                .withArg("value", value));
+            return scope.describe();
         }
     }
 }
