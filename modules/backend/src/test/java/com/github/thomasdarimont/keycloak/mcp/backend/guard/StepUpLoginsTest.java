@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,6 +78,14 @@ class StepUpLoginsTest {
     private final List<Map<String, String>> deviceRequests = new CopyOnWriteArrayList<>();
     /** What the provider answers a device poll with while the user has not signed in. */
     private final AtomicReference<String> deviceError = new AtomicReference<>("authorization_pending");
+    /**
+     * Holds the provider's answer to the next device authorization request until it is
+     * released.
+     */
+    private final AtomicReference<CountDownLatch> deviceHold = new AtomicReference<>();
+    private final CountDownLatch deviceArrived = new CountDownLatch(1);
+    /** How long the provider takes to answer a poll. */
+    private final AtomicLong tokenDelayMillis = new AtomicLong();
     private final InMemoryStateStore store = new InMemoryStateStore();
     /** The session alice's token belongs to. */
     private String session = "session-1";
@@ -109,6 +118,12 @@ class StepUpLoginsTest {
         server.createContext("/realms/demo/protocol/openid-connect/auth/device", x -> {
             deviceRequests.add(params(new String(x.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
             int n = deviceRequests.size();
+            // a provider that takes its time over one request, when a test says so
+            CountDownLatch hold = deviceHold.getAndSet(null);
+            if (hold != null) {
+                deviceArrived.countDown();
+                await(hold);
+            }
             json(x, 200,
                     new JsonObject().put("device_code", "device-code-" + n)
                         .put("user_code", "ABCD-" + n)
@@ -122,6 +137,7 @@ class StepUpLoginsTest {
             Map<String, String> form = params(new String(x.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             tokenRequests.add(form);
             if ("urn:ietf:params:oauth:grant-type:device_code".equals(form.get("grant_type"))) {
+                sleep(tokenDelayMillis.get());
                 // until the user signed in the provider says so; a redeemed code is gone
                 String pending = deviceError.get();
                 JsonObject signedIn = pending == null ? nextIdToken.getAndSet(null) : null;
@@ -438,6 +454,70 @@ class StepUpLoginsTest {
     }
 
     @Test
+    void parallelCallsPollTheProviderOnce() {
+        ProviderConfig device = passkey("login", "device");
+        call(device);
+        later();
+        // slow enough for the calls to overlap
+        tokenDelayMillis.set(200);
+        List<Decision> decisions = new CopyOnWriteArrayList<>();
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            for (int i = 0; i < 16; i++) {
+                executor.submit(() -> decisions.add(call(device)));
+            }
+        }
+        assertEquals(16, decisions.size());
+        assertEquals(1, tokenRequests.size(), "one poll per interval, whoever comes");
+        assertTrue(decisions.stream().allMatch(d -> d.message().contains("user_code=ABCD-1")), decisions.toString());
+    }
+
+    @Test
+    void aSlowAuthorizationKeepsItsRequestAndALateOneDoesNotOverwriteAnother() throws Exception {
+        ProviderConfig device = passkey("login", "device");
+        CountDownLatch release = new CountDownLatch(1);
+        deviceHold.set(release);
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var slow = executor.submit(() -> call(device));
+            assertTrue(deviceArrived.await(5, java.util.concurrent.TimeUnit.SECONDS));
+
+            // 31 s later the provider still has not answered (it may take 70 s): the
+            // request is still the first call's
+            now.addAndGet(31_000);
+            Decision meanwhile = call(device);
+            assertTrue(meanwhile.message().contains("Another call is starting the sign-in"), meanwhile.message());
+            assertEquals(1, deviceRequests.size());
+
+            // far beyond any timeout the reservation is over: another call starts its own
+            // authorization
+            now.addAndGet(60_000);
+            Decision second = call(device);
+            assertTrue(second.message().contains("user_code=ABCD-2"), second.message());
+
+            // the first answer arrives after all: it must not replace the authorization
+            // that is polled now
+            release.countDown();
+            Decision late = slow.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            assertFalse(late.allowed());
+            assertFalse(late.message().contains("user_code=ABCD-1"), late.message());
+        }
+        assertTrue(call(device).message().contains("user_code=ABCD-2"));
+        later();
+        assertTrue(call(device).message().contains("user_code=ABCD-2"));
+        assertEquals("device-code-2", tokenRequests.get(tokenRequests.size() - 1).get("device_code"));
+    }
+
+    @Test
+    void aFailedAuthorizationFreesTheRequestForTheNextCall() {
+        ProviderConfig device = passkey("login", "device");
+        server.removeContext("/realms/demo/protocol/openid-connect/auth/device");
+        server.createContext("/realms/demo/protocol/openid-connect/auth/device",
+                x -> json(x, 400, new JsonObject().put("error", "invalid_client")));
+        assertEquals("access_check_failed", call(device).code());
+        // not held by the failed attempt: the next call asks the provider again
+        assertEquals("access_check_failed", call(device).code());
+    }
+
+    @Test
     void aLoginCountsForTheSessionItWasAskedInOnly() {
         StepUpLogins.Redirect redirect = logins.begin(ticket(call(passkey())), CALLBACK);
         Map<String, String> authorization = params(URI.create(redirect.location()).getRawQuery());
@@ -572,6 +652,26 @@ class StepUpLoginsTest {
         }
         catch (Exception e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static void sleep(long millis) {
+        if (millis > 0) {
+            try {
+                Thread.sleep(millis);
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

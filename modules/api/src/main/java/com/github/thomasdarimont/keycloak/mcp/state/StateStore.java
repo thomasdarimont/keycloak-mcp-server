@@ -56,6 +56,24 @@ public interface StateStore extends Extension {
      */
     boolean putIfAbsent(StateScope scope, String namespace, String key, String value, long expiresAt, long now);
 
+    /**
+     * Replaces the value only if the key still holds {@code expected}, atomically across
+     * everyone using the store: for a holder that wrote a value earlier and must not
+     * overwrite what somebody else stored meanwhile.
+     *
+     * @return whether the key held {@code expected} and now holds {@code value}
+     */
+    boolean replace(StateScope scope, String namespace, String key, String expected, String value, long expiresAt,
+            long now);
+
+    /**
+     * Removes the entry only if the key still holds {@code expected}, atomically across
+     * everyone using the store.
+     *
+     * @return whether the entry was this one and is gone
+     */
+    boolean remove(String namespace, String key, String expected, long now);
+
     /** The value under the key, unless there is none or it expired. */
     Optional<String> get(String namespace, String key, long now);
 

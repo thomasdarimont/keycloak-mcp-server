@@ -74,6 +74,34 @@ public class InMemoryStateStore implements StateStore {
     }
 
     @Override
+    public boolean replace(StateScope scope, String namespace, String key, String expected, String value,
+            long expiresAt, long now) {
+        Objects.requireNonNull(scope);
+        boolean[] replaced = { false };
+        entries.computeIfPresent(id(namespace, key), (k, held) -> {
+            if (held.expiresAt() <= now || !held.value().equals(expected)) {
+                return held;
+            }
+            replaced[0] = true;
+            return new Entry(value, expiresAt, scope);
+        });
+        return replaced[0];
+    }
+
+    @Override
+    public boolean remove(String namespace, String key, String expected, long now) {
+        boolean[] removed = { false };
+        entries.computeIfPresent(id(namespace, key), (k, held) -> {
+            if (held.expiresAt() <= now || !held.value().equals(expected)) {
+                return held;
+            }
+            removed[0] = true;
+            return null;
+        });
+        return removed[0];
+    }
+
+    @Override
     public Optional<String> get(String namespace, String key, long now) {
         Entry held = entries.get(id(namespace, key));
         return held == null || held.expiresAt() <= now ? Optional.empty() : Optional.of(held.value());

@@ -993,6 +993,17 @@ class DatabaseStorageIT {
         store.remove(ns, "a");
         assertEquals(Optional.empty(), store.get(ns, "a", now + 60_000));
 
+        // replaced or removed only by who still holds the value
+        store.put(scope, ns, "held", "mine", now + 60_000);
+        assertFalse(store.replace(scope, ns, "held", "someone-else's", "new", now + 60_000, now));
+        assertFalse(store.remove(ns, "held", "someone-else's", now));
+        assertTrue(store.replace(scope, ns, "held", "mine", "new", now + 60_000, now));
+        assertFalse(store.replace(scope, ns, "held", "mine", "newer", now + 60_000, now), "the value moved on");
+        assertEquals(Optional.of("new"), store.get(ns, "held", now));
+        assertFalse(store.replace(scope, ns, "held", "new", "newer", now + 60_000, now + 60_000), "expired");
+        assertTrue(store.remove(ns, "held", "new", now));
+        assertEquals(Optional.empty(), store.get(ns, "held", now));
+
         // entries go with the realm or the system they belong to
         var system = com.github.thomasdarimont.keycloak.mcp.state.StateScope.of(scope.system());
         var other = com.github.thomasdarimont.keycloak.mcp.state.StateScope.of(scope.system(), "other");
@@ -1041,7 +1052,9 @@ class DatabaseStorageIT {
             store.put(scope, ns, "k", "v", now + 60_000);
             store.put(scope, ns, "k", "w", now + 60_000);
             assertTrue(store.putIfAbsent(scope, ns, "k2", "v", now + 60_000, now));
-            assertEquals(Optional.of("w"), store.take(ns, "k", now));
+            assertTrue(store.replace(scope, ns, "k", "w", "x", now + 60_000, now));
+            assertEquals(Optional.of("x"), store.take(ns, "k", now));
+            assertTrue(store.remove(ns, "k2", "v", now));
             store.remove(ns, "k2");
             store.deleteExpired(now);
         });

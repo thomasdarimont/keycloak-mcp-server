@@ -110,6 +110,33 @@ public class DatabaseStateStore implements StateStore {
         return find(rowId(namespace, key), now);
     }
 
+    /**
+     * Under the row lock: the stored value is encrypted with a fresh nonce, so it is
+     * compared revealed.
+     */
+    @Override
+    @Transactional
+    public boolean replace(StateScope scope, String namespace, String key, String expected, String value,
+            long expiresAt, long now) {
+        StateEntity row = StateEntity.findById(rowId(namespace, key), LockModeType.PESSIMISTIC_WRITE);
+        if (row == null || row.expiresAt <= now || !crypto.reveal(row.value).equals(expected)) {
+            return false;
+        }
+        write(row, scope, value, expiresAt);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean remove(String namespace, String key, String expected, long now) {
+        StateEntity row = StateEntity.findById(rowId(namespace, key), LockModeType.PESSIMISTIC_WRITE);
+        if (row == null || row.expiresAt <= now || !crypto.reveal(row.value).equals(expected)) {
+            return false;
+        }
+        row.delete();
+        return true;
+    }
+
     @Override
     @Transactional
     public Optional<String> take(String namespace, String key, long now) {

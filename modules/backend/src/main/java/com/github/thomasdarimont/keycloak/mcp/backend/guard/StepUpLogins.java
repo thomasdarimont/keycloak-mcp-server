@@ -83,8 +83,13 @@ public class StepUpLogins {
     /** RFC 8628 3.5: what {@code slow_down} adds to the interval. */
     private static final int SLOW_DOWN_SECONDS = 5;
 
-    /** How long a call may take to get a device authorization before another may try. */
-    private static final long RESERVATION_MILLIS = 30_000;
+    /**
+     * What a reservation lasts beyond the longest its request to the provider can take.
+     */
+    private static final long RESERVATION_MARGIN_MILLIS = 10_000;
+
+    /** The value of a claimed poll slot; the claim is the entry itself. */
+    private static final String CLAIMED = "1";
 
     private static final String TICKETS = "step-up-ticket";
 
@@ -96,6 +101,12 @@ public class StepUpLogins {
     private static final String STARTED = "step-up-login";
 
     private static final String DEVICES = "step-up-device";
+
+    /**
+     * Who may ask the provider about a device authorization next, and from when: an entry
+     * says "not yet".
+     */
+    private static final String POLLS = "step-up-device-poll";
 
     private static final String GRANTS = "step-up-grant";
 
@@ -255,25 +266,19 @@ public class StepUpLogins {
      * A device authorization under way; the device code is this server's alone.
      *
      * @param deviceCode {@code null} while a call is still asking the provider for it:
-     * the entry then only reserves the request, so that parallel calls do not start an
-     * authorization each
+     * the entry then only reserves the request for that call, so that parallel calls do
+     * not start an authorization each
      * @param interval the seconds the provider wants between two polls (RFC 8628)
-     * @param nextPollAt epoch milliseconds before which the provider is not asked again
      */
     private record Device(String deviceCode, String verifier, String userCode, String link, long expiresAt,
-            int interval, long nextPollAt) {
-
-        static Device reservation(long expiresAt) {
-            return new Device(null, null, null, null, expiresAt, 0, 0);
-        }
+            int interval) {
 
         boolean reservation() {
             return deviceCode == null;
         }
 
-        Device polledAt(long now, int nextInterval) {
-            return new Device(deviceCode, verifier, userCode, link, expiresAt, nextInterval,
-                    now + nextInterval * 1000L);
+        Device slower(int seconds) {
+            return new Device(deviceCode, verifier, userCode, link, expiresAt, interval + seconds);
         }
 
         JsonObject json() {
@@ -282,14 +287,14 @@ public class StepUpLogins {
                 .put("userCode", userCode)
                 .put("link", link)
                 .put("expiresAt", expiresAt)
-                .put("interval", interval)
-                .put("nextPollAt", nextPollAt);
+                .put("interval", interval);
         }
 
+        /** A reservation reads as a device without a code. */
         static Device of(JsonObject json) {
             return new Device(json.getString("deviceCode"), json.getString("verifier"), json.getString("userCode"),
-                    json.getString("link"), json.getLong("expiresAt"), json.getInteger("interval", DEFAULT_INTERVAL),
-                    json.getLong("nextPollAt", 0L));
+                    json.getString("link"), json.getLong("expiresAt", 0L),
+                    json.getInteger("interval", DEFAULT_INTERVAL));
         }
     }
 
@@ -310,12 +315,18 @@ public class StepUpLogins {
     private final String base;
     private final Supplier<StateStore> selected;
     private final Supplier<String> clientSecret;
+
+    /**
+     * The longest a request to the provider can take: what a claim on it has to outlast.
+     */
+    private final long requestMillis;
     private volatile StateStore store;
 
     @Inject
     public StepUpLogins(McpServerConfig config, HttpPaths paths, Instance<DefaultExtensionRegistry> registry,
             @ConfigProperty(name = "quarkus.http.port", defaultValue = "8080") int port) {
         this(System::currentTimeMillis, OutboundClients.create(OutboundClients.Timeouts.of(config)),
+                OutboundClients.Timeouts.of(config).connect().plus(OutboundClients.Timeouts.of(config).read()),
                 PublicHostname.of(config.hostname()).orElse("http://localhost:" + port) + paths.httpRoot(),
                 // looked up on first use: the registry lists the step-up check among the
                 // others
@@ -330,11 +341,13 @@ public class StepUpLogins {
      * client).
      */
     StepUpLogins(LongSupplier clock, Client http, String base, StateStore store, String clientSecret) {
-        this(clock, http, base, () -> store, () -> clientSecret);
+        this(clock, http, OutboundClients.Timeouts.DEFAULT.connect().plus(OutboundClients.Timeouts.DEFAULT.read()),
+                base, () -> store, () -> clientSecret);
     }
 
-    private StepUpLogins(LongSupplier clock, Client http, String base, Supplier<StateStore> selected,
-            Supplier<String> clientSecret) {
+    private StepUpLogins(LongSupplier clock, Client http, Duration requestTimeout, String base,
+            Supplier<StateStore> selected, Supplier<String> clientSecret) {
+        this.requestMillis = requestTimeout.toMillis();
         this.clock = clock;
         this.http = http;
         this.base = base;
@@ -485,7 +498,8 @@ public class StepUpLogins {
      * One step of the device login of a request: starts a device authorization when none
      * is under way, else asks the provider how the one under way stands, no more often
      * than the provider allows. Called with every call the check refuses, which is as
-     * often as the model retries, possibly several at once and on several instances.
+     * often as the model retries, possibly several at once and on several instances: who
+     * may ask the provider, to start or to poll, is settled in the state store.
      *
      * @param sufficient whether a grant satisfies what the call asks for now; a grant
      * that is merely there does not count
@@ -501,16 +515,29 @@ public class StepUpLogins {
         if (pending.reservation()) {
             return starting();
         }
-        if (now < pending.nextPollAt()) {
-            // asked a moment ago, by this call's predecessor or a parallel one: the
+        // The poll is a slot one caller claims: until it expires nobody else asks the
+        // provider. It is claimed for
+        // the interval and the longest the request may take, and set to the interval once
+        // the answer is in.
+        if (!store().putIfAbsent(request.scope(), POLLS, key, CLAIMED, now + pending.interval() * 1000L + requestMillis,
+                now)) {
+            // asked a moment ago, or being asked right now by a parallel call: the
             // provider wants to be left alone
             return pending(pending);
         }
         Endpoints provider = endpoints(request.client().issuer());
-        Answer answer = post(provider.token(), "grant_type=" + enc(DEVICE_GRANT) + "&device_code="
-                + enc(pending.deviceCode()) + "&code_verifier=" + pending.verifier(), request.client());
+        Answer answer;
+        try {
+            answer = post(provider.token(), "grant_type=" + enc(DEVICE_GRANT) + "&device_code="
+                    + enc(pending.deviceCode()) + "&code_verifier=" + pending.verifier(), request.client());
+        }
+        catch (RuntimeException e) {
+            // not asked after all: the next call may, once the interval is over
+            waitFor(request, key, pending.interval());
+            throw e;
+        }
         if (answer.status() == 200) {
-            store().remove(DEVICES, key);
+            forget(key);
             try {
                 keep(request, verify(answer.body().getString("id_token"), provider, request.client()), now);
                 return new DeviceStep(DeviceStatus.GRANTED, null, null, null, 0);
@@ -521,31 +548,51 @@ public class StepUpLogins {
         }
         String error = answer.body().getString("error", "");
         return switch (error) {
-            case "authorization_pending", "slow_down" -> {
-                // RFC 8628 3.5: slow_down adds five seconds to the interval for this and
-                // every later poll
-                Device waiting = pending.polledAt(now,
-                        pending.interval() + ("slow_down".equals(error) ? SLOW_DOWN_SECONDS : 0));
-                store().put(request.scope(), DEVICES, key, waiting.json().encode(), waiting.expiresAt());
-                yield pending(waiting);
+            case "authorization_pending" -> {
+                waitFor(request, key, pending.interval());
+                yield pending(pending);
+            }
+            case "slow_down" -> {
+                // RFC 8628 3.5: five seconds more for this and every later poll; only the
+                // holder of the slot
+                // writes the device
+                Device slower = pending.slower(SLOW_DOWN_SECONDS);
+                store().put(request.scope(), DEVICES, key, slower.json().encode(), slower.expiresAt());
+                waitFor(request, key, slower.interval());
+                yield pending(slower);
             }
             case "access_denied" -> {
-                store().remove(DEVICES, key);
+                forget(key);
                 yield new DeviceStep(DeviceStatus.REFUSED, null, null,
                         "The sign-in was declined at the provider; nothing was granted.", 0);
             }
             case "expired_token", "invalid_grant" -> {
                 // run out, or redeemed by a parallel call: its grant counts if it
                 // satisfies this call, and only then
-                store().remove(DEVICES, key);
+                forget(key);
                 Grant kept = grant(request);
                 yield kept != null && sufficient.test(kept) ? new DeviceStep(DeviceStatus.GRANTED, null, null, null, 0)
                         : start(request, key, now);
             }
-            default -> throw new StepUpLoginException(
-                    "The provider " + request.client().issuer() + " answered the sign-in with HTTP " + answer.status()
-                            + " " + error + " " + answer.body().getString("error_description", ""));
+            default -> {
+                waitFor(request, key, pending.interval());
+                throw new StepUpLoginException("The provider " + request.client().issuer()
+                        + " answered the sign-in with HTTP " + answer.status() + " " + error + " "
+                        + answer.body().getString("error_description", ""));
+            }
         };
+    }
+
+    /** The provider is not asked about this request again before the interval is over. */
+    private void waitFor(Request request, String key, int intervalSeconds) {
+        long now = clock.getAsLong();
+        store().put(request.scope(), POLLS, key, CLAIMED, now + intervalSeconds * 1000L);
+    }
+
+    /** The authorization is over, one way or the other. */
+    private void forget(String key) {
+        store().remove(DEVICES, key);
+        store().remove(POLLS, key);
     }
 
     private static DeviceStep pending(Device device) {
@@ -570,9 +617,14 @@ public class StepUpLogins {
         // request, the others answer without a link. A second authorization would replace
         // the first one's code,
         // and a user following the first link would complete a login nobody asks the
-        // provider about.
-        if (!store().putIfAbsent(request.scope(), DEVICES, key,
-                Device.reservation(now + RESERVATION_MILLIS).json().encode(), now + RESERVATION_MILLIS, now)) {
+        // provider about. The
+        // reservation is this call's own (a random value) and lasts longer than its
+        // request to the provider can;
+        // whatever this call writes or removes afterwards, it does only while the
+        // reservation is still its own.
+        long reservedUntil = now + requestMillis + RESERVATION_MARGIN_MILLIS;
+        String reservation = new JsonObject().put("reservedBy", token()).put("expiresAt", reservedUntil).encode();
+        if (!store().putIfAbsent(request.scope(), DEVICES, key, reservation, reservedUntil, now)) {
             return starting();
         }
         try {
@@ -595,16 +647,27 @@ public class StepUpLogins {
                         + answer.status() + " " + answer.body().getString("error", "") + " "
                         + answer.body().getString("error_description", ""));
             }
+            long answered = clock.getAsLong();
             long lifetime = Math.min(client.timeout().toMillis(), answer.body().getInteger("expires_in", 300) * 1000L);
             int interval = Math.max(1, answer.body().getInteger("interval", DEFAULT_INTERVAL));
-            Device device = new Device(deviceCode, verifier, answer.body().getString("user_code"), link, now + lifetime,
-                    interval, now + interval * 1000L);
-            store().put(request.scope(), DEVICES, key, device.json().encode(), device.expiresAt());
+            Device device = new Device(deviceCode, verifier, answer.body().getString("user_code"), link,
+                    answered + lifetime, interval);
+            // the first poll waits for the interval too; set before the device is there
+            // to be polled
+            store().put(request.scope(), POLLS, key, CLAIMED, answered + interval * 1000L);
+            if (!store().replace(request.scope(), DEVICES, key, reservation, device.json().encode(), device.expiresAt(),
+                    answered)) {
+                // the reservation ran out and somebody else holds the request now: their
+                // authorization is the one
+                // that is polled, this one is abandoned and runs out at the provider
+                return starting();
+            }
             return new DeviceStep(DeviceStatus.STARTED, device.link(), device.userCode(), null, device.expiresAt());
         }
         catch (RuntimeException e) {
-            // nothing was started: let the next call try
-            store().remove(DEVICES, key);
+            // nothing was started: let the next call try, unless the request is somebody
+            // else's by now
+            store().remove(DEVICES, key, reservation, clock.getAsLong());
             throw e;
         }
     }

@@ -81,4 +81,24 @@ class InMemoryStateStoreTest {
         store.put(PROD, "a", "old", "v", 1_000);
         assertEquals(Optional.empty(), store.take("a", "old", 1_000), "an expired entry is not handed out");
     }
+
+    @Test
+    void aValueIsReplacedOrRemovedOnlyByWhoStillHoldsIt() {
+        store.put(PROD, "a", "k", "mine", 9_000);
+        assertFalse(store.replace(PROD, "a", "k", "someone-else's", "new", 9_000, 1_000));
+        assertFalse(store.remove("a", "k", "someone-else's", 1_000));
+        assertEquals(Optional.of("mine"), store.get("a", "k", 1_000));
+
+        assertTrue(store.replace(PROD, "a", "k", "mine", "new", 9_000, 1_000));
+        assertFalse(store.replace(PROD, "a", "k", "mine", "newer", 9_000, 1_000), "the value moved on");
+        assertEquals(Optional.of("new"), store.get("a", "k", 1_000));
+        assertTrue(store.remove("a", "k", "new", 1_000));
+        assertEquals(Optional.empty(), store.get("a", "k", 1_000));
+
+        // what expired is nobody's any more, and what is not there cannot be replaced
+        store.put(PROD, "a", "old", "mine", 1_000);
+        assertFalse(store.replace(PROD, "a", "old", "mine", "new", 9_000, 1_000));
+        assertFalse(store.remove("a", "old", "mine", 1_000));
+        assertFalse(store.replace(PROD, "a", "none", "mine", "new", 9_000, 1_000));
+    }
 }
