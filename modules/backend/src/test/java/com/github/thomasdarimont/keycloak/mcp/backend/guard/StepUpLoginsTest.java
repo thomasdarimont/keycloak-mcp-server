@@ -180,6 +180,11 @@ class StepUpLoginsTest {
             .forCheck(settings));
     }
 
+    /** The provider's polling interval passes. */
+    void later() {
+        now.addAndGet(5_000);
+    }
+
     /** The ticket of the link in a denial. */
     static String ticket(Decision refused) {
         assertFalse(refused.allowed());
@@ -288,6 +293,7 @@ class StepUpLoginsTest {
 
         // the model tries again before the user is through: the same link, no new
         // authorization
+        later();
         Decision again = call(device);
         assertTrue(again.message().contains("The user has not completed the sign-in yet."), again.message());
         assertTrue(again.message().contains("user_code=ABCD-1"), again.message());
@@ -298,6 +304,7 @@ class StepUpLoginsTest {
 
         // the user signed in with their passkey: the next call runs, and those after it
         // without asking again
+        later();
         deviceError.set(null);
         providerSignsIn(Map.of(), "id-alice", "passkey", now.get() / 1000);
         assertTrue(call(device).allowed());
@@ -310,6 +317,7 @@ class StepUpLoginsTest {
     void aDeviceLoginOfSomeoneElseOrDeclinedGrantsNothingAndTheNextCallStartsAfresh() {
         ProviderConfig device = passkey("login", "device");
         call(device);
+        later();
         deviceError.set(null);
         providerSignsIn(Map.of(), "id-mallory", "passkey", now.get() / 1000);
         Decision other = call(device);
@@ -321,6 +329,7 @@ class StepUpLoginsTest {
         // a new authorization; this time with the password only
         deviceError.set("authorization_pending");
         assertTrue(call(device).message().contains("user_code=ABCD-2"));
+        later();
         deviceError.set(null);
         providerSignsIn(Map.of(), "id-alice", "1", now.get() / 1000);
         assertTrue(call(device).message().contains("authentication level '1', not passkey"));
@@ -328,14 +337,104 @@ class StepUpLoginsTest {
         // declined on the provider's page
         deviceError.set("authorization_pending");
         assertTrue(call(device).message().contains("user_code=ABCD-3"));
+        later();
         deviceError.set("access_denied");
         assertTrue(call(device).message().contains("declined at the provider"));
 
         // run out at the provider: a new link right away
         deviceError.set("authorization_pending");
         assertTrue(call(device).message().contains("user_code=ABCD-4"));
+        later();
         deviceError.set("expired_token");
         assertTrue(call(device).message().contains("user_code=ABCD-5"));
+    }
+
+    @Test
+    void aGrantThatIsMerelyThereDoesNotLetACallThrough() {
+        ProviderConfig device = passkey("login", "device");
+        call(device);
+        later();
+        deviceError.set(null);
+        providerSignsIn(Map.of(), "id-alice", "passkey", now.get() / 1000);
+        assertTrue(call(device).allowed());
+
+        // six minutes on the login is too old; the grant is still kept (login-validity),
+        // the device code has run out
+        now.addAndGet(360_000);
+        deviceError.set("authorization_pending");
+        assertTrue(call(device).message().contains("user_code=ABCD-2"));
+        later();
+        deviceError.set("expired_token");
+        Decision old = call(device);
+        assertFalse(old.allowed(), "an old grant must not pass because the device code expired");
+        assertTrue(old.message().contains("user_code=ABCD-3"), old.message());
+
+        // another requirement: a passkey login does not stand in for a hardware key
+        ProviderConfig hardware = passkey("login", "device", "acr", "hardware-key", "max-age", "1h");
+        deviceError.set("authorization_pending");
+        assertTrue(call(hardware).message().contains("user_code=ABCD-4"));
+        later();
+        deviceError.set("invalid_grant");
+        Decision weaker = call(hardware);
+        assertFalse(weaker.allowed(), "a passkey grant must not satisfy a hardware-key requirement");
+        assertTrue(weaker.message().contains("user_code=ABCD-5"), weaker.message());
+    }
+
+    @Test
+    void theProviderIsAskedNoMoreOftenThanItAllows() {
+        ProviderConfig device = passkey("login", "device");
+        call(device);
+        // right away, and a second later: the same link, the provider is left alone (its
+        // interval is 5 s)
+        assertTrue(call(device).message().contains("user_code=ABCD-1"));
+        now.addAndGet(1_000);
+        assertTrue(call(device).message().contains("The user has not completed the sign-in yet."));
+        assertEquals(0, tokenRequests.size());
+
+        now.addAndGet(4_000);
+        deviceError.set("slow_down");
+        assertTrue(call(device).message().contains("user_code=ABCD-1"));
+        assertEquals(1, tokenRequests.size());
+
+        // slow_down adds five seconds: nothing after 5 s, again after 10 s
+        deviceError.set("authorization_pending");
+        now.addAndGet(5_000);
+        call(device);
+        assertEquals(1, tokenRequests.size());
+        now.addAndGet(5_000);
+        call(device);
+        assertEquals(2, tokenRequests.size());
+        // and the longer interval stays
+        now.addAndGet(9_000);
+        call(device);
+        assertEquals(2, tokenRequests.size());
+        now.addAndGet(1_000);
+        call(device);
+        assertEquals(3, tokenRequests.size());
+        assertEquals(1, deviceRequests.size());
+    }
+
+    @Test
+    void parallelCallsStartOneAuthorization() throws Exception {
+        ProviderConfig device = passkey("login", "device");
+        List<Decision> decisions = new CopyOnWriteArrayList<>();
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            for (int i = 0; i < 16; i++) {
+                executor.submit(() -> decisions.add(call(device)));
+            }
+        }
+        assertEquals(16, decisions.size());
+        assertEquals(1, deviceRequests.size(), "one device authorization for the request");
+        assertTrue(decisions.stream().noneMatch(Decision::allowed));
+        // whoever got a link got the one that is polled; the others were told to call
+        // again
+        assertTrue(decisions.stream()
+            .allMatch(d -> d.message().contains("user_code=ABCD-1")
+                    || d.message().contains("Another call is starting the sign-in")),
+                decisions.toString());
+        assertTrue(decisions.stream().anyMatch(d -> d.message().contains("user_code=ABCD-1")));
+        // the next call finds it
+        assertTrue(call(device).message().contains("user_code=ABCD-1"));
     }
 
     @Test

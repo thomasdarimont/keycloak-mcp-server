@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -75,6 +76,15 @@ public class StepUpLogins {
     public static final String PATH = "/step-up";
 
     private static final String DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+
+    /** RFC 8628: the seconds between two polls when the provider names none. */
+    private static final int DEFAULT_INTERVAL = 5;
+
+    /** RFC 8628 3.5: what {@code slow_down} adds to the interval. */
+    private static final int SLOW_DOWN_SECONDS = 5;
+
+    /** How long a call may take to get a device authorization before another may try. */
+    private static final long RESERVATION_MILLIS = 30_000;
 
     private static final String TICKETS = "step-up-ticket";
 
@@ -241,20 +251,45 @@ public class StepUpLogins {
         }
     }
 
-    /** A device authorization under way; the device code is this server's alone. */
-    private record Device(String deviceCode, String verifier, String userCode, String link, long expiresAt) {
+    /**
+     * A device authorization under way; the device code is this server's alone.
+     *
+     * @param deviceCode {@code null} while a call is still asking the provider for it:
+     * the entry then only reserves the request, so that parallel calls do not start an
+     * authorization each
+     * @param interval the seconds the provider wants between two polls (RFC 8628)
+     * @param nextPollAt epoch milliseconds before which the provider is not asked again
+     */
+    private record Device(String deviceCode, String verifier, String userCode, String link, long expiresAt,
+            int interval, long nextPollAt) {
+
+        static Device reservation(long expiresAt) {
+            return new Device(null, null, null, null, expiresAt, 0, 0);
+        }
+
+        boolean reservation() {
+            return deviceCode == null;
+        }
+
+        Device polledAt(long now, int nextInterval) {
+            return new Device(deviceCode, verifier, userCode, link, expiresAt, nextInterval,
+                    now + nextInterval * 1000L);
+        }
 
         JsonObject json() {
             return new JsonObject().put("deviceCode", deviceCode)
                 .put("verifier", verifier)
                 .put("userCode", userCode)
                 .put("link", link)
-                .put("expiresAt", expiresAt);
+                .put("expiresAt", expiresAt)
+                .put("interval", interval)
+                .put("nextPollAt", nextPollAt);
         }
 
         static Device of(JsonObject json) {
             return new Device(json.getString("deviceCode"), json.getString("verifier"), json.getString("userCode"),
-                    json.getString("link"), json.getLong("expiresAt"));
+                    json.getString("link"), json.getLong("expiresAt"), json.getInteger("interval", DEFAULT_INTERVAL),
+                    json.getLong("nextPollAt", 0L));
         }
     }
 
@@ -448,17 +483,28 @@ public class StepUpLogins {
 
     /**
      * One step of the device login of a request: starts a device authorization when none
-     * is under way, else asks the provider how the one under way stands. Called with
-     * every call the check refuses, which is as often as the model retries.
+     * is under way, else asks the provider how the one under way stands, no more often
+     * than the provider allows. Called with every call the check refuses, which is as
+     * often as the model retries, possibly several at once and on several instances.
      *
+     * @param sufficient whether a grant satisfies what the call asks for now; a grant
+     * that is merely there does not count
      * @throws StepUpLoginException when the provider cannot be asked
      */
-    public DeviceStep device(Request request) {
+    public DeviceStep device(Request request, Predicate<Grant> sufficient) {
         long now = clock.getAsLong();
         String key = request.key();
         Device pending = store().get(DEVICES, key, now).map(v -> Device.of(new JsonObject(v))).orElse(null);
         if (pending == null) {
             return start(request, key, now);
+        }
+        if (pending.reservation()) {
+            return starting();
+        }
+        if (now < pending.nextPollAt()) {
+            // asked a moment ago, by this call's predecessor or a parallel one: the
+            // provider wants to be left alone
+            return pending(pending);
         }
         Endpoints provider = endpoints(request.client().issuer());
         Answer answer = post(provider.token(), "grant_type=" + enc(DEVICE_GRANT) + "&device_code="
@@ -475,23 +521,41 @@ public class StepUpLogins {
         }
         String error = answer.body().getString("error", "");
         return switch (error) {
-            case "authorization_pending", "slow_down" ->
-                new DeviceStep(DeviceStatus.PENDING, pending.link(), pending.userCode(), null, pending.expiresAt());
+            case "authorization_pending", "slow_down" -> {
+                // RFC 8628 3.5: slow_down adds five seconds to the interval for this and
+                // every later poll
+                Device waiting = pending.polledAt(now,
+                        pending.interval() + ("slow_down".equals(error) ? SLOW_DOWN_SECONDS : 0));
+                store().put(request.scope(), DEVICES, key, waiting.json().encode(), waiting.expiresAt());
+                yield pending(waiting);
+            }
             case "access_denied" -> {
                 store().remove(DEVICES, key);
                 yield new DeviceStep(DeviceStatus.REFUSED, null, null,
                         "The sign-in was declined at the provider; nothing was granted.", 0);
             }
             case "expired_token", "invalid_grant" -> {
-                // run out, or redeemed by a parallel call, whose grant then counts
+                // run out, or redeemed by a parallel call: its grant counts if it
+                // satisfies this call, and only then
                 store().remove(DEVICES, key);
-                yield grant(request) != null ? new DeviceStep(DeviceStatus.GRANTED, null, null, null, 0)
+                Grant kept = grant(request);
+                yield kept != null && sufficient.test(kept) ? new DeviceStep(DeviceStatus.GRANTED, null, null, null, 0)
                         : start(request, key, now);
             }
             default -> throw new StepUpLoginException(
                     "The provider " + request.client().issuer() + " answered the sign-in with HTTP " + answer.status()
                             + " " + error + " " + answer.body().getString("error_description", ""));
         };
+    }
+
+    private static DeviceStep pending(Device device) {
+        return new DeviceStep(DeviceStatus.PENDING, device.link(), device.userCode(), null, device.expiresAt());
+    }
+
+    /** Another call holds the request while it asks the provider for the link. */
+    private static DeviceStep starting() {
+        return new DeviceStep(DeviceStatus.REFUSED, null, null,
+                "Another call is starting the sign-in for this request right now; nothing was granted.", 0);
     }
 
     private DeviceStep start(Request request, String key, long now) {
@@ -501,28 +565,48 @@ public class StepUpLogins {
             throw new StepUpLoginException(client.issuer() + " offers no device authorization"
                     + " (device_authorization_endpoint), so the device login cannot be used with it");
         }
-        // PKCE as in the code flow: Keycloak supports it for device authorizations and a
-        // client may demand it, a
-        // provider that does not know it ignores the parameters. Keycloak takes the level
-        // of a device login from
-        // the client's default ACR values, not from acr_values.
-        String verifier = token();
-        Answer answer = post(provider.device(),
-                "scope=" + enc(client.scope()) + "&code_challenge_method=S256&code_challenge=" + digest(verifier)
-                        + (request.acr().isEmpty() ? "" : "&acr_values=" + enc(String.join(" ", request.acr()))),
-                client);
-        String deviceCode = answer.body().getString("device_code");
-        String link = answer.body().getString("verification_uri_complete", answer.body().getString("verification_uri"));
-        if (answer.status() != 200 || deviceCode == null || link == null) {
-            throw new StepUpLoginException("The provider " + client.issuer()
-                    + " refused the device authorization of client " + client.clientId() + ": HTTP " + answer.status()
-                    + " " + answer.body().getString("error", "") + " "
-                    + answer.body().getString("error_description", ""));
+        // One authorization per request, across parallel calls and instances: the store
+        // lets one caller reserve the
+        // request, the others answer without a link. A second authorization would replace
+        // the first one's code,
+        // and a user following the first link would complete a login nobody asks the
+        // provider about.
+        if (!store().putIfAbsent(request.scope(), DEVICES, key,
+                Device.reservation(now + RESERVATION_MILLIS).json().encode(), now + RESERVATION_MILLIS, now)) {
+            return starting();
         }
-        long lifetime = Math.min(client.timeout().toMillis(), answer.body().getInteger("expires_in", 300) * 1000L);
-        Device device = new Device(deviceCode, verifier, answer.body().getString("user_code"), link, now + lifetime);
-        store().put(request.scope(), DEVICES, key, device.json().encode(), device.expiresAt());
-        return new DeviceStep(DeviceStatus.STARTED, device.link(), device.userCode(), null, device.expiresAt());
+        try {
+            // PKCE as in the code flow: Keycloak supports it for device authorizations
+            // and a client may demand it, a
+            // provider that does not know it ignores the parameters. Keycloak takes the
+            // level of a device login
+            // from the client's default ACR values, not from acr_values.
+            String verifier = token();
+            Answer answer = post(provider.device(),
+                    "scope=" + enc(client.scope()) + "&code_challenge_method=S256&code_challenge=" + digest(verifier)
+                            + (request.acr().isEmpty() ? "" : "&acr_values=" + enc(String.join(" ", request.acr()))),
+                    client);
+            String deviceCode = answer.body().getString("device_code");
+            String link = answer.body()
+                .getString("verification_uri_complete", answer.body().getString("verification_uri"));
+            if (answer.status() != 200 || deviceCode == null || link == null) {
+                throw new StepUpLoginException("The provider " + client.issuer()
+                        + " refused the device authorization of client " + client.clientId() + ": HTTP "
+                        + answer.status() + " " + answer.body().getString("error", "") + " "
+                        + answer.body().getString("error_description", ""));
+            }
+            long lifetime = Math.min(client.timeout().toMillis(), answer.body().getInteger("expires_in", 300) * 1000L);
+            int interval = Math.max(1, answer.body().getInteger("interval", DEFAULT_INTERVAL));
+            Device device = new Device(deviceCode, verifier, answer.body().getString("user_code"), link, now + lifetime,
+                    interval, now + interval * 1000L);
+            store().put(request.scope(), DEVICES, key, device.json().encode(), device.expiresAt());
+            return new DeviceStep(DeviceStatus.STARTED, device.link(), device.userCode(), null, device.expiresAt());
+        }
+        catch (RuntimeException e) {
+            // nothing was started: let the next call try
+            store().remove(DEVICES, key);
+            throw e;
+        }
     }
 
     /**

@@ -40,9 +40,10 @@ public class StepUpRoutes {
 
     void register(@Observes Router router) {
         String root = StepUpLogins.PATH;
-        // the provider calls are blocking
+        // all of them read the state store, which with the database storage blocks, as do
+        // the provider calls
         router.get(root + "/callback").blockingHandler(this::callback);
-        router.get(root + "/:ticket").handler(this::ask);
+        router.get(root + "/:ticket").blockingHandler(this::ask);
         router.get(root + "/:ticket/login").blockingHandler(this::login);
     }
 

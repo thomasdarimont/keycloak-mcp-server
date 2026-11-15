@@ -194,7 +194,7 @@ public class StepUpCheck implements AccessCheck {
                 if (grant != null && required.shortfall(grant.acr(), grant.authTime(), now) == null) {
                     return Decision.allow();
                 }
-                return required.login().device() ? device(request, why, now) : browser(request, why);
+                return required.login().device() ? device(request, required, why, now) : browser(request, why);
             }
             catch (RuntimeException e) {
                 // a login that cannot be started or whose state cannot be kept proves
@@ -219,10 +219,22 @@ public class StepUpCheck implements AccessCheck {
                         + RateLimitCheck.describe(request.client().timeout()) + "). " + AFTERWARDS);
     }
 
-    private Decision device(StepUpLogins.Request request, String why, long now) {
-        StepUpLogins.DeviceStep step = logins.device(request);
+    private Decision device(StepUpLogins.Request request, Requirement required, String why, long now) {
+        StepUpLogins.DeviceStep step = logins.device(request,
+                grant -> required.shortfall(grant.acr(), grant.authTime(), now) == null);
         return switch (step.status()) {
-            case GRANTED -> Decision.allow();
+            case GRANTED -> {
+                // what was granted is judged like the caller's own token, here too: never
+                // by its mere existence
+                StepUpLogins.Grant grant = logins.grant(request);
+                String shortfall = grant == null ? "the sign-in was not kept"
+                        : required.shortfall(grant.acr(), grant.authTime(), now);
+                yield shortfall == null ? Decision.allow()
+                        : Decision.deny(INSUFFICIENT,
+                                why + " The sign-in does not satisfy that either (" + shortfall
+                                        + "). Nothing was changed. Tell the user; calling again with the same arguments"
+                                        + " starts a new sign-in.");
+            }
             case STARTED, PENDING -> Decision.deny(INSUFFICIENT, why + " Nothing was changed. "
                     + (step.status() == StepUpLogins.DeviceStatus.PENDING
                             ? "The user has not completed the sign-in yet. Show them this link again"
