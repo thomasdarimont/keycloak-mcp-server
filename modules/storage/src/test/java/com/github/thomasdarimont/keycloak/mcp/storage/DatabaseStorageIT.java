@@ -915,6 +915,138 @@ class DatabaseStorageIT {
         RateLimitCallEntity.getEntityManager().createNativeQuery(statement).executeUpdate();
     }
 
+    @Inject
+    @Any
+    Instance<com.github.thomasdarimont.keycloak.mcp.state.StateStore> stateStores;
+
+    @Test
+    void stateIsSharedExpiresAndIsTakenOnce() throws Exception {
+        var store = stateStores.select(com.github.thomasdarimont.keycloak.mcp.storage.state.DatabaseStateStore.class)
+            .get();
+        assertEquals("db", store.id());
+        String ns = "it-" + UUID.randomUUID();
+        var scope = com.github.thomasdarimont.keycloak.mcp.state.StateScope.of("it-" + UUID.randomUUID(), "demo");
+        long now = System.currentTimeMillis();
+
+        store.put(scope, ns, "a", "first", now + 60_000);
+        assertEquals(Optional.of("first"), store.get(ns, "a", now));
+        store.put(scope, ns, "a", "second", now + 60_000);
+        assertEquals(Optional.of("second"), store.get(ns, "a", now), "put replaces");
+        assertEquals(Optional.empty(), store.get(ns, "b", now));
+        assertEquals(Optional.empty(), store.get(ns + "-other", "a", now), "namespaces do not see each other");
+        assertEquals(Optional.empty(), store.get(ns, "a", now + 60_000), "expired at expiresAt");
+
+        // the value is not readable in the table: the test storage has a key
+        String stored = (String) io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+            .call(() -> RateLimitCallEntity.getEntityManager()
+                .createNativeQuery("select state_value from kc_mcp_state where namespace = ?1")
+                .setParameter(1, ns)
+                .getSingleResult()
+                .toString());
+        assertFalse(stored.contains("second"), stored);
+
+        assertFalse(store.putIfAbsent(scope, ns, "a", "third", now + 60_000, now), "a live entry stays");
+        assertEquals(Optional.of("second"), store.get(ns, "a", now));
+        assertTrue(store.putIfAbsent(scope, ns, "a", "third", now + 120_000, now + 60_000),
+                "an expired one is replaced");
+        assertEquals(Optional.of("third"), store.get(ns, "a", now + 60_000));
+
+        // as many instances storing or taking at once: one of each succeeds
+        int callers = 16;
+        var stored1 = new java.util.concurrent.atomic.AtomicInteger();
+        var taken = new java.util.concurrent.atomic.AtomicInteger();
+        var failed = new java.util.concurrent.ConcurrentLinkedQueue<Throwable>();
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+            for (int i = 0; i < callers; i++) {
+                executor.submit(() -> {
+                    try {
+                        if (store.putIfAbsent(scope, ns, "once", "v", now + 60_000, now)) {
+                            stored1.incrementAndGet();
+                        }
+                    }
+                    catch (Throwable t) {
+                        failed.add(t);
+                    }
+                });
+            }
+        }
+        assertEquals(List.of(), List.copyOf(failed));
+        assertEquals(1, stored1.get());
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+            for (int i = 0; i < callers; i++) {
+                executor.submit(() -> {
+                    try {
+                        if (store.take(ns, "once", now).isPresent()) {
+                            taken.incrementAndGet();
+                        }
+                    }
+                    catch (Throwable t) {
+                        failed.add(t);
+                    }
+                });
+            }
+        }
+        assertEquals(List.of(), List.copyOf(failed));
+        assertEquals(1, taken.get());
+        assertEquals(Optional.empty(), store.get(ns, "once", now));
+
+        store.remove(ns, "a");
+        assertEquals(Optional.empty(), store.get(ns, "a", now + 60_000));
+
+        // entries go with the realm or the system they belong to
+        var system = com.github.thomasdarimont.keycloak.mcp.state.StateScope.of(scope.system());
+        var other = com.github.thomasdarimont.keycloak.mcp.state.StateScope.of(scope.system(), "other");
+        store.put(scope, ns, "realm", "v", now + 60_000);
+        store.put(other, ns, "other-realm", "v", now + 60_000);
+        store.put(system, ns, "system", "v", now + 60_000);
+        assertEquals(1, store.deleteScope(scope.system(), "demo"));
+        assertEquals(Optional.empty(), store.get(ns, "realm", now));
+        assertEquals(Optional.of("v"), store.get(ns, "other-realm", now));
+        assertEquals(2, store.deleteScope(scope.system(), null), "a system takes its realms' entries with it");
+        assertEquals(Optional.empty(), store.get(ns, "system", now));
+        store.put(scope, ns, "old", "v", now - 1);
+        assertEquals(Optional.empty(), store.take(ns, "old", now), "an expired entry is not handed out");
+        store.put(scope, ns, "old", "v", now - 1);
+        assertTrue(store.deleteExpired(now) >= 1, "the hourly purge removes what expired");
+    }
+
+    /**
+     * The split deployment's MCP role can use the state table with the example's grants.
+     */
+    @Test
+    void stateWorksWithTheSplitDeploymentGrants() throws Exception {
+        org.junit.jupiter.api.Assumptions
+            .assumeTrue("postgresql".equals(org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                .getValue("quarkus.datasource.db-kind", String.class)));
+        var store = stateStores.select(com.github.thomasdarimont.keycloak.mcp.storage.state.DatabaseStateStore.class)
+            .get();
+        String grants = java.nio.file.Files
+            .readString(java.nio.file.Path.of("../../examples/split-deployment/init/grants.sql"));
+        assertTrue(grants.contains("kc_mcp_state"), "the example grants name the state table");
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+            sql("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kcmcp_mcp') THEN CREATE ROLE"
+                    + " kcmcp_mcp; END IF; END $$");
+            sql("GRANT USAGE ON SCHEMA public TO kcmcp_mcp");
+            for (String statement : grants.replaceAll("(?m)^--.*$", "").split(";")) {
+                if (!statement.isBlank()) {
+                    sql(statement);
+                }
+            }
+        });
+        String ns = "it-" + UUID.randomUUID();
+        var scope = com.github.thomasdarimont.keycloak.mcp.state.StateScope.of("it-" + UUID.randomUUID(), "demo");
+        long now = System.currentTimeMillis();
+        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+            sql("SET LOCAL ROLE kcmcp_mcp");
+            store.put(scope, ns, "k", "v", now + 60_000);
+            store.put(scope, ns, "k", "w", now + 60_000);
+            assertTrue(store.putIfAbsent(scope, ns, "k2", "v", now + 60_000, now));
+            assertEquals(Optional.of("w"), store.take(ns, "k", now));
+            store.remove(ns, "k2");
+            store.deleteExpired(now);
+        });
+    }
+
     @jakarta.transaction.Transactional
     long countRateLimitCalls(String bucket) {
         return RateLimitCallEntity.count("bucket", bucket);

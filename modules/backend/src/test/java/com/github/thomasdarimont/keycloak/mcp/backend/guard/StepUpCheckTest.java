@@ -25,7 +25,7 @@ class StepUpCheckTest {
     static final ToolSpec UPDATE = RateLimitCheckTest.tool("keycloak_user_update").write().build();
     static final ToolSpec SECRET = RateLimitCheckTest.tool("keycloak_client_secret_get").read().build();
 
-    final StepUpCheck check = new StepUpCheck(() -> NOW_SECONDS * 1000);
+    final StepUpCheck check = new StepUpCheck(() -> NOW_SECONDS * 1000, null);
 
     static ProviderConfig settings(String... pairs) {
         Map<String, String> values = new LinkedHashMap<>();

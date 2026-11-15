@@ -2,6 +2,10 @@
   "realm": "demo",
   "displayName": "CIBA confirmation demo",
   "enabled": true,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
   "sslRequired": "none",
   "accessTokenLifespan": 1800,
   "attributes": {

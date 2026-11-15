@@ -26,6 +26,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.FileSystemKeycloa
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.Jwks;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.JwksEndpoint;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.SigningKeys;
+import com.github.thomasdarimont.keycloak.mcp.backend.spi.DefaultExtensionRegistry;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
 import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
@@ -41,6 +42,7 @@ import com.github.thomasdarimont.keycloak.mcp.keycloak.MutableKeycloakSystemRepo
 import com.github.thomasdarimont.keycloak.mcp.keycloak.RealmSettings;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.SigningKey;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.ToolSettings;
+import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
 
 import io.quarkus.runtime.StartupEvent;
 import io.vertx.core.json.JsonArray;
@@ -74,6 +76,8 @@ public class AdminSystems {
     SigningKeys keys;
     @Inject
     HttpPaths paths;
+    @Inject
+    DefaultExtensionRegistry registry;
     @Inject
     AuthorizationAccessCheck engines;
     @Inject
@@ -534,6 +538,7 @@ public class AdminSystems {
                     "System '" + alias + "' keeps no settings for a realm named '" + realm + "'.");
         }
         systems.forget(alias);
+        forgetState(alias, realm);
         LOG.infof("Admin API: realm '%s' of system '%s' removed", realm, alias);
     }
 
@@ -580,7 +585,30 @@ public class AdminSystems {
         systems.forget(alias);
         // its JWKS ends with it: Keycloak refuses assertions in its name from now on
         keys.removeKeys(gone);
+        forgetState(alias, null);
         LOG.infof("Admin API: system '%s' removed from '%s'", alias, mutable.id());
+    }
+
+    /**
+     * Removes the short-lived state kept for a system or one of its realms (logins under
+     * way, their grants): it must not outlive what it belongs to, nor meet a system
+     * registered under the same name later. The system is gone either way, so a store
+     * that fails is logged; its entries expire.
+     */
+    private void forgetState(String system, String realm) {
+        try {
+            for (StateStore store : registry.extensions(StateStore.class)) {
+                long removed = store.deleteScope(system, realm);
+                if (removed > 0) {
+                    LOG.infof("Admin API: %d state entries of system '%s'%s removed", removed, system,
+                            realm == null ? "" : " realm '" + realm + "'");
+                }
+            }
+        }
+        catch (RuntimeException e) {
+            LOG.warnf(e, "State of system '%s'%s could not be removed, it expires on its own: %s", system,
+                    realm == null ? "" : " realm '" + realm + "'", e.getMessage());
+        }
     }
 
     /** Creates a new key for the system; the previous one is retired. */

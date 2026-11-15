@@ -15,6 +15,7 @@ the stack of `run-modes`.
 | [xaa](xaa/) | Cross-App Access (MCP Enterprise-Managed Authorization): an enterprise IdP's ID-JAG becomes the user's token, no login page or consent (experimental in Keycloak) |
 | [troubleshooting](troubleshooting/) | read-only access for support: a realm with a redirect loop, a locked-out user and slow logins, and the prompts that find the causes |
 | [ciba-confirm](ciba-confirm/) | destructive tools approved on the user's device, with an approver app standing in for the phone |
+| [step-up-passkey](step-up-passkey/) | destructive tools only after a fresh passkey login, which the server asks the user for with a link |
 | [management-ui](management-ui/) | the management UI with one or two identity providers |
 | [extensions](extensions/) | an extension jar: tools, prompt, confirmer, access check, audit listener, scrubber, system repository |
 | [cimd-vscode](cimd-vscode/) | VS Code logs in without a pre-registered client, with a Client ID Metadata Document (experimental in Keycloak) |

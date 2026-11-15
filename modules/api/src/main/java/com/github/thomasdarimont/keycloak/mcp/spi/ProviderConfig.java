@@ -30,6 +30,7 @@ import com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVault;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystemRepository;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.SigningKeyGenerator;
 import com.github.thomasdarimont.keycloak.mcp.prompts.PromptProvider;
+import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
 import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
 
@@ -60,7 +61,7 @@ public final class ProviderConfig {
     /** The names of the extension points, the first segment after {@link #PREFIX}. */
     public static final Set<String> SPIS = Set.of(ToolProvider.SPI, PromptProvider.SPI, Confirmer.SPI, AccessCheck.SPI,
             AuthorizationEngine.SPI, AuthZenRequestCustomizer.SPI, CallerIssuerPolicy.SPI, AuditListener.SPI,
-            AuditScrubber.SPI, ProfileCheck.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI,
+            AuditScrubber.SPI, ProfileCheck.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI, StateStore.SPI,
             KeycloakSystemRepository.SPI, KeyVault.SPI, SigningKeyGenerator.SPI, UserSessionStore.SPI);
 
     /**
@@ -77,7 +78,7 @@ public final class ProviderConfig {
 
     /** The extension points served by exactly one extension. */
     public static final Set<String> SINGLE_PROVIDER_SPIS = Set.of(KeyVault.SPI, SigningKeyGenerator.SPI,
-            UserSessionStore.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI);
+            UserSessionStore.SPI, PendingApprovalStore.SPI, RateLimitStore.SPI, StateStore.SPI);
 
     private final String spi;
     private final String providerId;

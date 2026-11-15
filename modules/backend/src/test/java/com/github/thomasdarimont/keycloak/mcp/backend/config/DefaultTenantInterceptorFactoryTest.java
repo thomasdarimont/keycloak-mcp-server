@@ -68,4 +68,22 @@ class DefaultTenantInterceptorFactoryTest {
         assertEquals("http://explicit/realms/x", authServerUrl(Map.of("kc-mcp.systems.default.url", "http://d",
                 "quarkus.oidc.auth-server-url", "http://explicit/realms/x")));
     }
+
+    /**
+     * Dev mode with an example's env file: application.properties names the default
+     * system for the dev profile, the environment names it again with the example's
+     * address. One system named twice is still one system.
+     */
+    @Test
+    void aSystemNamedByTwoSourcesIsStillTheOnlyOne() {
+        String derived = new SmallRyeConfigBuilder().withInterceptorFactories(new DefaultTenantInterceptorFactory())
+            .withSources(
+                    new PropertiesConfigSource(Map.of("kc-mcp.systems.default.url", "http://localhost:8108",
+                            "kc-mcp.systems.default.auth-realm", "demo"), "environment", 300),
+                    new PropertiesConfigSource(Map.of("kc-mcp.systems.default.url", "http://localhost:8080"),
+                            "application.properties", 250))
+            .build()
+            .getRawValue(DefaultTenantInterceptorFactory.AUTH_SERVER_URL);
+        assertEquals("http://localhost:8108/realms/demo", derived);
+    }
 }

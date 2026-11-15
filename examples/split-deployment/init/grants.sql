@@ -21,4 +21,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON kc_mcp_pending_approval TO kcmcp_mcp;
 GRANT SELECT, INSERT, UPDATE, DELETE ON kc_mcp_rate_limit_bucket TO kcmcp_mcp;
 GRANT SELECT, INSERT, DELETE ON kc_mcp_rate_limit_call TO kcmcp_mcp;
 
+-- short-lived state shared by the instances (the state store), such as the tickets of the step-up check's own login:
+-- the instance that handles a call stores, replaces (SELECT ... FOR UPDATE, which needs UPDATE) and takes entries;
+-- DELETE is also for the hourly purge of expired ones. Without these grants what keeps its state there refuses.
+GRANT SELECT, INSERT, UPDATE, DELETE ON kc_mcp_state TO kcmcp_mcp;
+
 -- not listed, so not granted: kc_mcp_user_session (management UI logins) and Liquibase's own tables

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "keycloak-step-up": {
+      "url": "http://localhost:8109/mcp",
+      "auth": {
+        "CLIENT_ID": "mcp-consumer"
+      }
+    }
+  }
+}

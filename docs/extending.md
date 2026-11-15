@@ -62,9 +62,9 @@ public class AcmeToolProvider implements ToolProvider {
   use the same SPI; `kc-mcp.spi.<spi>.<id>.enabled=false` switches one off.
 - Settings: `kc-mcp.spi.<spi>.<id>.<key>`, environment `KC_MCP_SPI_<SPI>_<ID>_<KEY>`. An id is unique within its
   extension point, so the same id under two extension points has separate settings. `<spi>` is `tools`, `prompts`,
-  `access-check`, `authorization-engine`, `authzen-customizer`, `confirmer`, `issuer-policy`, `profile-check`, `audit-listener`, `audit-scrubber`, `approval-store`, `rate-limit-store`,
+  `access-check`, `authorization-engine`, `authzen-customizer`, `confirmer`, `issuer-policy`, `profile-check`, `audit-listener`, `audit-scrubber`, `approval-store`, `rate-limit-store`, `state-store`,
   `system-repository`, `key-vault`, `key-generator` or `session-store`.
-- Choosing a provider: `key-vault`, `key-generator`, `session-store`, `approval-store` and `rate-limit-store` are served by exactly one
+- Choosing a provider: `key-vault`, `key-generator`, `session-store`, `approval-store`, `rate-limit-store` and `state-store` are served by exactly one
   extension, the others run all of theirs. `kc-mcp.spi.key-vault.provider=db`
   (`KC_MCP_SPI_KEY_VAULT_PROVIDER`) names it; if that one is missing, switched off or unsupported the server does not
   start. Without it the usable extension with the lowest `order()` serves, then the built-in (key vault `file`,

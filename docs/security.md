@@ -334,6 +334,7 @@ Some tools should run only for someone who has just proved who they are, with mo
 [access check](access-checks.md) looks at how and when the caller signed in (RFC 9470). It reads two claims of the
 token the caller presented to this server: `acr`, the authentication level, and `auth_time`, the moment of the login.
 It is off until the server, a system or a realm asks for it, and is configured like every access check.
+`examples/step-up-passkey/` runs it with a passkey.
 
 | `kc-mcp.spi.access-check.step-up.` | default | meaning |
 |---|---|---|
@@ -360,8 +361,8 @@ The denial is `insufficient_user_authentication`; it names what the tool require
   Authentication*; a login with `acr_values=<name>` then runs that part of the flow and the token carries the name.
   Keycloak's `acr` client scope puts `acr` into the access token, its `basic` scope `auth_time`.
 - The MCP client has to be able to send the user through that login: `acr_values` (and `max_age`) on the
-  authorization request. A client that cannot sends the user to an ordinary login, and their token never satisfies
-  the check; `on-missing=confirm` is the way through for those.
+  authorization request. Most cannot; for those the server runs the login itself
+  ([below](#a-login-run-by-the-server)), or `on-missing=confirm` hands the call to the human.
 - The check reads the caller's own token, before any token exchange: Keycloak does not carry the `acr` into the
   exchanged token. A call without a caller token ([Callers](#callers)) cannot pass.
 - It needs `acr`, `max-age` or both. Switched on without either, it refuses the tools it concerns
@@ -370,6 +371,67 @@ The denial is `insufficient_user_authentication`; it names what the tool require
   token refreshed since keeps its `auth_time`.
 - It runs after the checks that say whether the caller may do this at all and before the rate limit, so a call
   refused here is not counted. `whoami` shows what the caller's token says about their login: `acr`, `amr`, `authenticatedAt` and `organizations`.
+
+#### A login run by the server
+
+Most MCP clients cannot send their user through a login with `acr_values`. With `login` set, the server runs that
+login itself: the refused call answers with a link, the user signs in there, and the next call runs. The verified ID
+token of that login then counts in place of the caller's token, for the caller's session and the system and realm
+of the refused call, until `max-age` or `login-validity` ends it.
+
+| `kc-mcp.spi.access-check.step-up.` | default | meaning |
+|---|---|---|
+| `login` | `off` | `device` or `browser`, see below |
+| `login-client-id` | | the client the server signs users in with; required with a login |
+| `login-client-secret` | | its secret, empty for a public client; read from the server's settings only, not from a system's or realm's |
+| `login-issuer` | `caller` | the URL the server reaches the OpenID provider at, when it differs from the issuer of the caller's token |
+| `login-scope` | `openid` | the scope of the login |
+| `login-timeout` | `5m` | how long a link works |
+| `login-validity` | `1h` | how long a completed login is kept at most |
+
+- **`device`**: the server starts a device authorization (RFC 8628, with PKCE) at the provider and hands out the
+  provider's own link and code. The next call asks the provider whether the user signed in. The user's browser only
+  has to reach the provider, not this server. Keycloak takes the level of a device login from the client's *Default
+  ACR Values*, not from the request, so the client needs the wanted level there and the device authorization grant.
+- **`browser`**: the link leads to a page of this server (`/step-up/<ticket>`) that says which tool asks and sends
+  the browser to the provider (authorization code flow with PKCE, a nonce and a state bound to the browser by a
+  cookie); the provider returns to `/step-up/callback`, the client's redirect URI. The user's browser has to reach
+  this server; set `kc-mcp.hostname` to the address it does so at.
+
+```properties
+kc-mcp.spi.access-check.step-up.default=on
+kc-mcp.spi.access-check.step-up.acr=passkey
+kc-mcp.spi.access-check.step-up.max-age=5m
+kc-mcp.spi.access-check.step-up.login=device
+kc-mcp.spi.access-check.step-up.login-client-id=mcp-step-up
+kc-mcp.spi.access-check.step-up.login-client-secret=${STEP_UP_SECRET}
+```
+
+What makes the login count, and what it does not do:
+
+- **Only the caller's own login counts.** The subject of the ID token must be the caller the link was made for; a
+  link someone else opens, or one opened in another account, grants nothing. The token is verified against the
+  provider's keys (signature, issuer, the login's client as audience, expiry) and must carry the `acr` and the
+  `auth_time` the check asks for.
+- **It counts for one session.** The login belongs to the session of the caller's token (`sid`): once the caller
+  signs out and in again, the new session has to step up itself. A token without a `sid` shares the login with the
+  caller's other tokens. Signing out at the provider does not end a login that was already made: it lasts until
+  `max-age`, or until the caller's token is no longer accepted.
+- **It never signs anyone in to this server.** The caller must already hold a valid token for the MCP endpoint; the
+  login only adds what that token lacks. Its own tokens are used for nothing but that comparison.
+- **Use a client of its own for it.** Confidential, so that nobody but this server can start a device authorization
+  or redeem a code with it; without roles, scopes or an audience any API accepts, and with short-lived tokens and no
+  refresh token, so that a login through it opens nothing. The device authorization grant then exists in the realm
+  for stepping up only, not for signing in. `examples/step-up-passkey/` has such a client.
+- **The login is for a tool, the grant for the caller.** Whoever makes the user sign in, a model following an
+  injected instruction included, gets every tool the check concerns through for that caller's session, system and realm until
+  the grant ends. The `browser` page names the tool that asked; the provider's device page cannot. Keep `max-age`
+  short, and where each destructive call needs the human's own decision, use a confirmer that binds the approval
+  to the operation ([CIBA](ciba-confirmation.md)).
+- **Several instances.** Links, logins under way and grants are kept in the state store: with the
+  [database storage](storage.md) on in `kc_mcp_state`, so the link, the provider's answer and the next call may each
+  reach another instance; without it in the instance's memory. They are removed with the system or realm they
+  belong to. A login that cannot be started or kept refuses the call (`access_check_failed`).
 
 ## Callers
 

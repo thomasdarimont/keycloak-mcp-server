@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Schema version 0.12.0: short-lived state of the server and its extensions, shared by all instances. -->
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                                       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="16-state" author="keycloak-mcp-server">
+        <comment>The state store across instances: one row per entry of a namespace, such as the ticket of a step-up
+            login under way, with the system and realm it belongs to; the value is encrypted when the storage has a key, expired rows are purged hourly</comment>
+        <createTable tableName="kc_mcp_state">
+            <!-- SHA-256 (hex) of namespace and key -->
+            <column name="id" type="varchar(64)">
+                <constraints primaryKey="true" primaryKeyName="pk_kc_mcp_state" nullable="false"/>
+            </column>
+            <column name="namespace" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- what the entry belongs to: removed with the system, or with the realm -->
+            <column name="system_name" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="realm_name" type="varchar(255)"/>
+            <column name="state_value" type="clob">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="kc_mcp_state" indexName="ix_kc_mcp_state_expires_at">
+            <column name="expires_at"/>
+        </createIndex>
+        <createIndex tableName="kc_mcp_state" indexName="ix_kc_mcp_state_system">
+            <column name="system_name"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

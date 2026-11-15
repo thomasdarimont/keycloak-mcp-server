@@ -15,6 +15,7 @@ approvals. With it, several instances share one state. Without a JDBC URL it sta
 | audit | `db` (`AuditListener`) | `kc_mcp_audit_event` | one row per call, denials and reads included |
 | UI sessions | `db` (`UserSessionStore`) | `kc_mcp_user_session` | the management UI's sessions, tokens encrypted, expired rows purged hourly |
 | rate limits | `db` (`RateLimitStore`) | `kc_mcp_rate_limit_bucket`, `kc_mcp_rate_limit_call` | the calls the `rate-limit` access check counts, shared by all instances; purged hourly once older than 24 hours ([Rate limit](security.md#rate-limit)) |
+| state | `db` (`StateStore`) | `kc_mcp_state` | short-lived state every instance must see, such as the step-up check's logins ([Step-up](security.md#step-up-authentication)); values encrypted, expired rows purged hourly |
 | pending approvals | `db` (`PendingApprovalStore`) | `kc_mcp_pending_approval` | CIBA requests waiting for a device ([CIBA confirmation](ciba-confirmation.md)) |
 
 Hibernate ORM with Panache; Liquibase creates and migrates the schema at startup (`db/kc-mcp/changelog.xml` includes
@@ -150,6 +151,7 @@ What the database user of the MCP instances needs, whatever the database; the ad
 | `kc_mcp_pending_approval` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | the instance that asks for a CIBA approval stores and finishes it |
 | `kc_mcp_rate_limit_bucket` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | the `rate-limit` check locks the caller's row (`SELECT ... FOR UPDATE`, which needs `UPDATE` on PostgreSQL) and purges old ones |
 | `kc_mcp_rate_limit_call` | `SELECT`, `INSERT`, `DELETE` | the counted calls; `DELETE` for the hourly purge |
+| `kc_mcp_state` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | entries are replaced under a row lock, taken and purged |
 | `kc_mcp_user_session`, Liquibase's `databasechangelog*` | none | management UI logins and the migrations belong to the admin side |
 
 A table without grants keeps its feature from working on the MCP side until someone decides what that side may do

@@ -35,6 +35,7 @@ import com.github.thomasdarimont.keycloak.mcp.prompts.PromptProvider;
 import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.ExtensionRegistry;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
+import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProvider;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProviderContext;
 import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
@@ -174,12 +175,13 @@ public class DefaultExtensionRegistry implements ExtensionRegistry {
      * their name in {@code kc-mcp.spi.<spi>.provider}.
      */
     private static final Map<Class<? extends Extension>, String> SELECTED = Map.of(PendingApprovalStore.class,
-            PendingApprovalStore.SPI, RateLimitStore.class, RateLimitStore.SPI);
+            PendingApprovalStore.SPI, RateLimitStore.class, RateLimitStore.SPI, StateStore.class, StateStore.SPI);
 
     /** The extension points the registry hands out, resolved at startup. */
     static final List<Class<? extends Extension>> STARTUP_TYPES = List.of(PromptProvider.class, AccessCheck.class,
             AuthorizationEngine.class, AuthZenRequestCustomizer.class, Confirmer.class, AuditListener.class,
-            AuditScrubber.class, ProfileCheck.class, PendingApprovalStore.class, RateLimitStore.class);
+            AuditScrubber.class, ProfileCheck.class, PendingApprovalStore.class, RateLimitStore.class,
+            StateStore.class);
 
     /**
      * Extension points picked outside the registry; discovered here too, so that their

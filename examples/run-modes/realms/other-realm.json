@@ -2,6 +2,10 @@
   "realm": "other",
   "displayName": "Other realm (outside ALLOWED_REALMS)",
   "enabled": true,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
   "users": [
     {
       "username": "zed",

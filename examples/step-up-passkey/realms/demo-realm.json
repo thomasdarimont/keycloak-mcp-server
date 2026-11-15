@@ -1,0 +1,269 @@
+{
+  "realm": "demo",
+  "displayName": "Step-up with a passkey demo",
+  "enabled": true,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "sslRequired": "none",
+  "accessTokenLifespan": 1800,
+  "attributes": {
+    "acr.loa.map": "{\"password\": 1, \"passkey\": 2}"
+  },
+  "browserFlow": "browser step-up",
+  "authenticationFlows": [
+    {
+      "alias": "browser step-up",
+      "description": "Password first; a passkey when the login asks for the level passkey",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "authenticatorFlow": true,
+          "userSetupAllowed": false,
+          "flowAlias": "step-up forms"
+        }
+      ]
+    },
+    {
+      "alias": "step-up forms",
+      "description": "The levels of authentication",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 10,
+          "authenticatorFlow": true,
+          "userSetupAllowed": false,
+          "flowAlias": "step-up level password"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "authenticatorFlow": true,
+          "userSetupAllowed": false,
+          "flowAlias": "step-up level passkey"
+        }
+      ]
+    },
+    {
+      "alias": "step-up level password",
+      "description": "Level 1: username and password",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-level-of-authentication",
+          "authenticatorConfig": "loa-password"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false,
+          "authenticator": "auth-username-password-form"
+        }
+      ]
+    },
+    {
+      "alias": "step-up level passkey",
+      "description": "Level 2: a passkey, asked for again after one minute",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false,
+          "authenticator": "conditional-level-of-authentication",
+          "authenticatorConfig": "loa-passkey"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false,
+          "authenticator": "webauthn-authenticator-passwordless"
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "loa-password",
+      "config": {
+        "loa-condition-level": "1",
+        "loa-max-age": "36000"
+      }
+    },
+    {
+      "alias": "loa-passkey",
+      "config": {
+        "loa-condition-level": "2",
+        "loa-max-age": "60"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "realmRoles": [
+        "offline_access"
+      ],
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-demo",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "realm-management": [
+          "realm-admin"
+        ],
+        "account": [
+          "manage-account",
+          "view-profile"
+        ]
+      }
+    },
+    {
+      "username": "carol",
+      "realmRoles": [
+        "offline_access"
+      ],
+      "enabled": true,
+      "email": "carol@example.com",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Support",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "carol-demo",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "realm-management": [
+          "view-users"
+        ],
+        "account": [
+          "manage-account",
+          "view-profile"
+        ]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "mcp-consumer",
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "name": "MCP consumer (LLM client)",
+      "description": "Public PKCE client that MCP clients log the user in with; its tokens carry aud=mcp-admin for the MCP server. Direct access grants are on for demo.sh only.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://127.0.0.1:33389/mcp-oauth-callback",
+        "http://localhost/callback",
+        "http://localhost/oauth/callback",
+        "http://127.0.0.1/",
+        "https://vscode.dev/redirect"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email",
+        "kc-admin-api"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp server audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mcp-admin",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "mcp-step-up",
+      "name": "Keycloak MCP server",
+      "description": "Step-up logins only: the MCP server signs a user in again with it (device authorization or code flow). Confidential, so nobody else can start one; every login is a passkey login (default ACR value); its tokens open nothing.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "mcp-step-up-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [
+        "http://localhost:8109/step-up/callback"
+      ],
+      "defaultClientScopes": [
+        "acr",
+        "basic"
+      ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true",
+        "pkce.code.challenge.method": "S256",
+        "default.acr.values": "passkey",
+        "use.refresh.tokens": "false",
+        "access.token.lifespan": "60",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Confirm sensitive actions you asked for through the Keycloak MCP server"
+      }
+    }
+  ]
+}

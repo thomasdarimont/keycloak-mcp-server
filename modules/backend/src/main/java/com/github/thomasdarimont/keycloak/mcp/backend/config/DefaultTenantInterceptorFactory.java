@@ -1,8 +1,8 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.config;
 
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import com.google.auto.service.AutoService;
 
@@ -77,7 +77,10 @@ public class DefaultTenantInterceptorFactory implements ConfigSourceInterceptorF
         if (configured != null) {
             return configured;
         }
-        List<String> names = new ArrayList<>();
+        // a set: several sources may name the same system, the environment and a
+        // profile's default in
+        // application.properties for one
+        Set<String> names = new LinkedHashSet<>();
         Iterator<String> it = ctx.iterateNames();
         while (it.hasNext()) {
             String n = it.next();
@@ -88,7 +91,7 @@ public class DefaultTenantInterceptorFactory implements ConfigSourceInterceptorF
                 }
             }
         }
-        return names.size() == 1 ? names.getFirst() : null;
+        return names.size() == 1 ? names.iterator().next() : null;
     }
 
     private static String raw(ConfigSourceInterceptorContext ctx, String name) {
