@@ -84,6 +84,9 @@ class StepUpLoginsTest {
      */
     private final AtomicReference<CountDownLatch> deviceHold = new AtomicReference<>();
     private final CountDownLatch deviceArrived = new CountDownLatch(1);
+    /** Holds the provider's answer to the next poll until it is released. */
+    private final AtomicReference<CountDownLatch> tokenHold = new AtomicReference<>();
+    private final CountDownLatch tokenArrived = new CountDownLatch(1);
     /** How long the provider takes to answer a poll. */
     private final AtomicLong tokenDelayMillis = new AtomicLong();
     private final InMemoryStateStore store = new InMemoryStateStore();
@@ -138,6 +141,11 @@ class StepUpLoginsTest {
             tokenRequests.add(form);
             if ("urn:ietf:params:oauth:grant-type:device_code".equals(form.get("grant_type"))) {
                 sleep(tokenDelayMillis.get());
+                CountDownLatch held = tokenHold.getAndSet(null);
+                if (held != null) {
+                    tokenArrived.countDown();
+                    await(held);
+                }
                 // until the user signed in the provider says so; a redeemed code is gone
                 String pending = deviceError.get();
                 JsonObject signedIn = pending == null ? nextIdToken.getAndSet(null) : null;
@@ -504,6 +512,37 @@ class StepUpLoginsTest {
         later();
         assertTrue(call(device).message().contains("user_code=ABCD-2"));
         assertEquals("device-code-2", tokenRequests.get(tokenRequests.size() - 1).get("device_code"));
+    }
+
+    @Test
+    void aPollThatOutlivesItsAuthorizationLeavesTheNextOneAlone() throws Exception {
+        ProviderConfig device = passkey("login", "device");
+        assertTrue(call(device).message().contains("user_code=ABCD-1"));
+        later();
+        CountDownLatch release = new CountDownLatch(1);
+        tokenHold.set(release);
+        deviceError.set("expired_token");
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            // a poll of the first authorization, shortly before it runs out; the
+            // provider takes its time
+            var slow = executor.submit(() -> call(device));
+            assertTrue(tokenArrived.await(5, java.util.concurrent.TimeUnit.SECONDS));
+
+            // it has run out by now (login-timeout 5m): another call starts the next one
+            now.addAndGet(301_000);
+            assertTrue(call(device).message().contains("user_code=ABCD-2"));
+
+            // the old poll learns that its code expired: that is not the new one's end
+            release.countDown();
+            Decision late = slow.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            assertTrue(late.message().contains("user_code=ABCD-2"), late.message());
+        }
+        deviceError.set("authorization_pending");
+        assertEquals(2, deviceRequests.size(), "the second authorization is still the one");
+        later();
+        assertTrue(call(device).message().contains("user_code=ABCD-2"));
+        assertEquals("device-code-2", tokenRequests.get(tokenRequests.size() - 1).get("device_code"));
+        assertEquals(2, deviceRequests.size());
     }
 
     @Test

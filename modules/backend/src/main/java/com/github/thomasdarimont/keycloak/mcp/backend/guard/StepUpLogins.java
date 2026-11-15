@@ -508,19 +508,24 @@ public class StepUpLogins {
     public DeviceStep device(Request request, Predicate<Grant> sufficient) {
         long now = clock.getAsLong();
         String key = request.key();
-        Device pending = store().get(DEVICES, key, now).map(v -> Device.of(new JsonObject(v))).orElse(null);
-        if (pending == null) {
+        // the entry as it is stored: what this call writes or removes later, it does only
+        // while the entry is still this one
+        String stored = store().get(DEVICES, key, now).orElse(null);
+        if (stored == null) {
             return start(request, key, now);
         }
+        Device pending = Device.of(new JsonObject(stored));
         if (pending.reservation()) {
             return starting();
         }
         // The poll is a slot one caller claims: until it expires nobody else asks the
-        // provider. It is claimed for
-        // the interval and the longest the request may take, and set to the interval once
-        // the answer is in.
-        if (!store().putIfAbsent(request.scope(), POLLS, key, CLAIMED, now + pending.interval() * 1000L + requestMillis,
-                now)) {
+        // provider. It is claimed for the interval and the longest the request may take,
+        // and set to the interval once the answer is in. The slot is the
+        // authorization's own, so a poll that outlives its authorization does not touch
+        // the slot of the one that replaced it.
+        String slot = slot(key, pending);
+        if (!store().putIfAbsent(request.scope(), POLLS, slot, CLAIMED,
+                now + pending.interval() * 1000L + requestMillis, now)) {
             // asked a moment ago, or being asked right now by a parallel call: the
             // provider wants to be left alone
             return pending(pending);
@@ -533,11 +538,11 @@ public class StepUpLogins {
         }
         catch (RuntimeException e) {
             // not asked after all: the next call may, once the interval is over
-            waitFor(request, key, pending.interval());
+            waitFor(request, slot, pending.interval());
             throw e;
         }
         if (answer.status() == 200) {
-            forget(key);
+            forget(key, stored, slot);
             try {
                 keep(request, verify(answer.body().getString("id_token"), provider, request.client()), now);
                 return new DeviceStep(DeviceStatus.GRANTED, null, null, null, 0);
@@ -549,33 +554,32 @@ public class StepUpLogins {
         String error = answer.body().getString("error", "");
         return switch (error) {
             case "authorization_pending" -> {
-                waitFor(request, key, pending.interval());
+                waitFor(request, slot, pending.interval());
                 yield pending(pending);
             }
             case "slow_down" -> {
-                // RFC 8628 3.5: five seconds more for this and every later poll; only the
-                // holder of the slot
-                // writes the device
+                // RFC 8628 3.5: five seconds more for this and every later poll
                 Device slower = pending.slower(SLOW_DOWN_SECONDS);
-                store().put(request.scope(), DEVICES, key, slower.json().encode(), slower.expiresAt());
-                waitFor(request, key, slower.interval());
-                yield pending(slower);
+                waitFor(request, slot, slower.interval());
+                yield store().replace(request.scope(), DEVICES, key, stored, slower.json().encode(), slower.expiresAt(),
+                        clock.getAsLong()) ? pending(slower) : current(request, key);
             }
             case "access_denied" -> {
-                forget(key);
+                forget(key, stored, slot);
                 yield new DeviceStep(DeviceStatus.REFUSED, null, null,
                         "The sign-in was declined at the provider; nothing was granted.", 0);
             }
             case "expired_token", "invalid_grant" -> {
                 // run out, or redeemed by a parallel call: its grant counts if it
-                // satisfies this call, and only then
-                forget(key);
+                // satisfies this call, and only then. Otherwise the request goes on with
+                // the authorization another call started meanwhile, or with a new one.
+                forget(key, stored, slot);
                 Grant kept = grant(request);
                 yield kept != null && sufficient.test(kept) ? new DeviceStep(DeviceStatus.GRANTED, null, null, null, 0)
-                        : start(request, key, now);
+                        : current(request, key);
             }
             default -> {
-                waitFor(request, key, pending.interval());
+                waitFor(request, slot, pending.interval());
                 throw new StepUpLoginException("The provider " + request.client().issuer()
                         + " answered the sign-in with HTTP " + answer.status() + " " + error + " "
                         + answer.body().getString("error_description", ""));
@@ -583,16 +587,41 @@ public class StepUpLogins {
         };
     }
 
-    /** The provider is not asked about this request again before the interval is over. */
-    private void waitFor(Request request, String key, int intervalSeconds) {
+    /**
+     * Where the request stands after this call's authorization is over: with the one
+     * another call started meanwhile, or with a new one.
+     */
+    private DeviceStep current(Request request, String key) {
         long now = clock.getAsLong();
-        store().put(request.scope(), POLLS, key, CLAIMED, now + intervalSeconds * 1000L);
+        Device device = store().get(DEVICES, key, now).map(v -> Device.of(new JsonObject(v))).orElse(null);
+        if (device == null) {
+            return start(request, key, now);
+        }
+        return device.reservation() ? starting() : pending(device);
     }
 
-    /** The authorization is over, one way or the other. */
-    private void forget(String key) {
-        store().remove(DEVICES, key);
-        store().remove(POLLS, key);
+    /** The polling slot of one authorization of a request. */
+    private static String slot(String key, Device device) {
+        return key + "#" + digest(device.deviceCode());
+    }
+
+    /**
+     * The provider is not asked about this authorization again before the interval is
+     * over.
+     */
+    private void waitFor(Request request, String slot, int intervalSeconds) {
+        long now = clock.getAsLong();
+        store().put(request.scope(), POLLS, slot, CLAIMED, now + intervalSeconds * 1000L);
+    }
+
+    /**
+     * The authorization is over, one way or the other. Removed only while it is still the
+     * one this call polled: a poll that returns after its authorization ran out leaves
+     * the one that replaced it alone.
+     */
+    private void forget(String key, String stored, String slot) {
+        store().remove(DEVICES, key, stored, clock.getAsLong());
+        store().remove(POLLS, slot);
     }
 
     private static DeviceStep pending(Device device) {
@@ -654,7 +683,7 @@ public class StepUpLogins {
                     answered + lifetime, interval);
             // the first poll waits for the interval too; set before the device is there
             // to be polled
-            store().put(request.scope(), POLLS, key, CLAIMED, answered + interval * 1000L);
+            store().put(request.scope(), POLLS, slot(key, device), CLAIMED, answered + interval * 1000L);
             if (!store().replace(request.scope(), DEVICES, key, reservation, device.json().encode(), device.expiresAt(),
                     answered)) {
                 // the reservation ran out and somebody else holds the request now: their
