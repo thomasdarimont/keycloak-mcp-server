@@ -1359,8 +1359,10 @@ components:
       properties:
         spi: { type: string, example: confirmer }
         id: { type: string, example: ciba }
-        displayName: { type: string }
-        description: { type: string }
+        displayName: { type: string, description: In the language of `Accept-Language` when a message bundle has it }
+        displayNameKey: { type: string, example: confirmer.ciba.display-name }
+        description: { type: string, description: In the language of `Accept-Language` when a message bundle has it }
+        descriptionKey: { type: string, example: confirmer.ciba.description }
         status:
           type: string
           description: "`active` or `selected` when it takes part; `disabled`, `not supported`, `not selected`; `available` when nothing asked for it yet"
@@ -1379,6 +1381,11 @@ components:
         - type: object
           required: [keyPrefix, envPrefix, properties, groups, server, undeclared, problems]
           properties:
+            helpText:
+              type: string
+              nullable: true
+              description: Longer help on setting the extension up, in the language of `Accept-Language`; `null` when it has none
+            helpTextKey: { type: string, example: confirmer.ciba.help-text }
             keyPrefix: { type: string, example: kc-mcp.spi.confirmer.ciba. }
             envPrefix: { type: string, example: KC_MCP_SPI_CONFIRMER_CIBA_ }
             properties:

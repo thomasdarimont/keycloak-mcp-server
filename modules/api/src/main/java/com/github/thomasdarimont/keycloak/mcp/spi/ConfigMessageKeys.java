@@ -7,6 +7,10 @@ package com.github.thomasdarimont.keycloak.mcp.spi;
  * ({@link ConfigMessages}), English in {@code META-INF/kc-mcp/messages.properties} of the
  * jar that brings the extension.
  * <ul>
+ * <li>the extension itself: {@code <spi>.<id>.display-name},
+ * {@code <spi>.<id>.description} and {@code <spi>.<id>.help-text}
+ * ({@code access-check.step-up.help-text}), the texts of {@link Extension#displayName()},
+ * {@link Extension#description()} and {@link Extension#helpText()}</li>
  * <li>a setting: {@code <spi>.<id>.<name>.label}, {@code <spi>.<id>.<name>.description}
  * ({@code audit-scrubber.pii.mode.label})</li>
  * <li>an option of a choice: {@code <spi>.<id>.<name>.option.<option>}
@@ -39,6 +43,21 @@ public final class ConfigMessageKeys {
 
     /** The prefix of the shared texts. */
     public static final String SHARED = "config.";
+
+    /** The extension's name ({@link Extension#displayName()}). */
+    public static String displayName(String prefix) {
+        return prefix + "display-name";
+    }
+
+    /** The extension's description ({@link Extension#description()}). */
+    public static String description(String prefix) {
+        return prefix + "description";
+    }
+
+    /** The extension's help text ({@link Extension#helpText()}). */
+    public static String helpText(String prefix) {
+        return prefix + "help-text";
+    }
 
     public static String label(String prefix, ConfigProperty property) {
         return prefix + property.name() + ".label";

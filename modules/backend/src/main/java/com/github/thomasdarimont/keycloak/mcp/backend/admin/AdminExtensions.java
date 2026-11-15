@@ -53,7 +53,7 @@ public class AdminExtensions {
     public Map<String, Object> list(Locale locale) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Known k : known().values()) {
-            Map<String, Object> m = summary(k);
+            Map<String, Object> m = summary(k, locale);
             List<ConfigProblem> problems = problems(k.extension(), settings(k.extension()));
             m.put("errors", ConfigProblem.errors(problems).size());
             m.put("warnings", problems.size() - ConfigProblem.errors(problems).size());
@@ -74,7 +74,9 @@ public class AdminExtensions {
         ConfigSpec spec = settings.spec();
         String prefix = ConfigMessageKeys.prefix(spi, k.status().id());
 
-        Map<String, Object> out = summary(k);
+        Map<String, Object> out = summary(k, locale);
+        out.put("helpText", messages.helpText(locale, e).orElse(null));
+        out.put("helpTextKey", ConfigMessageKeys.helpText(prefix));
         out.put("keyPrefix", settings.providerPrefix());
         out.put("envPrefix", settings.envPrefix());
         List<Map<String, Object>> properties = new ArrayList<>();
@@ -154,12 +156,15 @@ public class AdminExtensions {
         return m;
     }
 
-    private static Map<String, Object> summary(Known k) {
+    private Map<String, Object> summary(Known k, Locale locale) {
+        String prefix = ConfigMessageKeys.prefix(k.status().spi(), k.status().id());
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("spi", k.status().spi());
         m.put("id", k.status().id());
-        m.put("displayName", k.extension().displayName());
-        m.put("description", k.extension().description());
+        m.put("displayName", messages.displayName(locale, k.extension()));
+        m.put("displayNameKey", ConfigMessageKeys.displayName(prefix));
+        m.put("description", messages.description(locale, k.extension()).orElse(""));
+        m.put("descriptionKey", ConfigMessageKeys.description(prefix));
         m.put("status", k.status().status());
         m.put("origin", k.status().origin());
         m.put("className", k.status().className());

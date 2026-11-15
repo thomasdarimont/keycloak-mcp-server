@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +27,7 @@ import com.github.thomasdarimont.keycloak.mcp.spi.ConfigMessages;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProblem;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProperty;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigSpec;
+import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
 import com.github.thomasdarimont.keycloak.mcp.storage.audit.DatabaseAuditListener;
 import com.github.thomasdarimont.keycloak.mcp.storage.audit.PiiAuditScrubber;
@@ -108,6 +110,41 @@ class ConfigMessagesTest {
         assertEquals("nope", messages.label(Locale.ROOT, "tools.acme.", ConfigProperty.string("nope")));
         assertEquals("other", messages.label(Locale.ROOT, "tools.acme.", ConfigHint.group("other")));
         assertEquals("drop", messages.option(Locale.ROOT, "audit-scrubber.pii.", PiiAuditScrubber.MODE, "drop"));
+    }
+
+    @Test
+    void anExtensionsHelpComesFromTheBundleElseFromTheExtensionAndMayBeMissing() {
+        assertTrue(messages.helpText(Locale.GERMANY, help(AccessCheck.SPI, "step-up", "from the class"))
+            .orElseThrow()
+            .startsWith("Use it when a login of hours ago"), "the bundle's text comes first");
+        assertEquals(Optional.of("from the class"),
+                messages.helpText(Locale.ROOT, help("tools", "acme", "from the class")));
+        assertEquals(Optional.empty(), messages.helpText(Locale.ROOT, help("tools", "acme", "")));
+        // name and description by the same rule; no bundle has them here, and without a
+        // name of its own an extension goes by its id
+        assertEquals("acme", messages.displayName(Locale.GERMANY, help("tools", "acme", "")));
+        assertEquals(Optional.empty(), messages.description(Locale.GERMANY, help("tools", "acme", "")));
+        assertEquals("access-check.step-up.display-name",
+                ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(AccessCheck.SPI, "step-up")));
+    }
+
+    private static Extension help(String spi, String id, String helpText) {
+        return new Extension() {
+            @Override
+            public String spiName() {
+                return spi;
+            }
+
+            @Override
+            public String id() {
+                return id;
+            }
+
+            @Override
+            public String helpText() {
+                return helpText;
+            }
+        };
     }
 
     @Test

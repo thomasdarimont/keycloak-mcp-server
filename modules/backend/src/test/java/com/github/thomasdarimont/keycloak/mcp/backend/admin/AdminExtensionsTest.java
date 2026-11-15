@@ -65,6 +65,9 @@ class AdminExtensionsTest {
             .then()
             .statusCode(200)
             .body("keyPrefix", equalTo("kc-mcp.spi.audit-scrubber.pii."))
+            .body("helpText",
+                    org.hamcrest.Matchers.startsWith("Use it when stored audit records must not hold personal data"))
+            .body("helpTextKey", equalTo("audit-scrubber.pii.help-text"))
             .body("properties.find { it.name == 'mode' }.label", equalTo("Mode"))
             .body("properties.find { it.name == 'mode' }.labelKey", equalTo("audit-scrubber.pii.mode.label"))
             .body("properties.find { it.name == 'mode' }.value", equalTo("pseudonymize"))
@@ -85,6 +88,29 @@ class AdminExtensionsTest {
             .extract()
             .asString();
         assertFalse(body.contains(SECRET), "the secret never leaves the server");
+    }
+
+    @Test
+    void nameAndDescriptionOfAnExtensionAreTranslatedWhereABundleHasThem() {
+        String english = admin().get("/admin/extensions/audit-scrubber/pii").then().extract().path("displayName");
+        String description = admin().get("/admin/extensions/audit-scrubber/pii").then().extract().path("description");
+        assertFalse(english.isBlank());
+        admin().header("Accept-Language", "de-CH, de;q=0.8")
+            .get("/admin/extensions/audit-scrubber/pii")
+            .then()
+            .statusCode(200)
+            .body("displayName", equalTo("Bereinigung personenbezogener Daten"))
+            .body("displayNameKey", equalTo("audit-scrubber.pii.display-name"))
+            // no German description in any bundle: the extension's own text
+            .body("description", equalTo(description))
+            .body("descriptionKey", equalTo("audit-scrubber.pii.description"));
+        admin().header("Accept-Language", "de")
+            .get("/admin/extensions")
+            .then()
+            .statusCode(200)
+            .body("extensions.find { it.spi == 'audit-scrubber' && it.id == 'pii' }.displayName",
+                    equalTo("Bereinigung personenbezogener Daten"));
+        assertFalse(english.startsWith("Bereinigung"), "English without the header");
     }
 
     @Test

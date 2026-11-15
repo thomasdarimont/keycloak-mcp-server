@@ -78,6 +78,32 @@ public final class ConfigMessages {
         });
     }
 
+    /**
+     * An extension's name: the bundles' text, else what the extension itself says
+     * ({@link Extension#displayName()}). The texts of an extension are never shared ones,
+     * and a bundle without them is no fault: the extension's own text is the English one.
+     */
+    public String displayName(Locale locale, Extension extension) {
+        return own(locale, ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(extension)), extension.displayName())
+            .orElseGet(extension::id);
+    }
+
+    /**
+     * An extension's description, like {@link #displayName}; empty when there is none.
+     */
+    public Optional<String> description(Locale locale, Extension extension) {
+        return own(locale, ConfigMessageKeys.description(ConfigMessageKeys.prefix(extension)), extension.description());
+    }
+
+    /** An extension's help, like {@link #displayName}; empty when there is none. */
+    public Optional<String> helpText(Locale locale, Extension extension) {
+        return own(locale, ConfigMessageKeys.helpText(ConfigMessageKeys.prefix(extension)), extension.helpText());
+    }
+
+    private Optional<String> own(Locale locale, String key, String fromExtension) {
+        return find(locale, key).or(() -> Optional.ofNullable(fromExtension).filter(t -> !t.isBlank()));
+    }
+
     /** A setting's label: its own, the shared one, else its name. */
     public String label(Locale locale, String prefix, ConfigProperty property) {
         return text(locale, prefix, ConfigMessageKeys.label(prefix, property)).orElseGet(() -> {

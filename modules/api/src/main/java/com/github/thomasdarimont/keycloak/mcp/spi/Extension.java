@@ -39,13 +39,34 @@ public interface Extension {
         return getClass().getName();
     }
 
-    /** Human readable name, e.g. "User management". Defaults to the id. */
+    /**
+     * Human readable name, e.g. "User management". Defaults to the id. Where the server
+     * shows it to people in their language (the admin API), the text of the message
+     * bundles under {@code <spi>.<id>.display-name} comes first
+     * ({@link ConfigMessages#displayName}); this is the English text and the one for an
+     * extension without a bundle.
+     */
     default String displayName() {
         return id();
     }
 
-    /** One or two sentences on what the extension does. */
+    /**
+     * One or two sentences on what the extension does. Translated like the
+     * {@link #displayName()}, under {@code <spi>.<id>.description}.
+     */
     default String description() {
+        return "";
+    }
+
+    /**
+     * Optional longer help for whoever sets the extension up: when to choose it, what it
+     * needs, what to watch out for. Shown next to its settings, not in lists; plain text.
+     * The text of the message bundles under {@code <spi>.<id>.help-text}
+     * ({@link ConfigMessageKeys#helpText}) comes first, so prefer the bundle, which can
+     * be translated, and use this for an extension without one. Empty (the default) when
+     * there is nothing to add to the {@link #description()}.
+     */
+    default String helpText() {
         return "";
     }
 

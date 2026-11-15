@@ -71,7 +71,13 @@ public class AcmeToolProvider implements ToolProvider {
   key generator `default`). Candidates not chosen are neither configured nor closed. On an extension point
   that runs all of its extensions, `provider` stops the start.
 - `Extension` base: `id()` (config key, kebab-case; default from class name, `com.acme.TicketChecker` →
-  `com-acme-ticket-checker`), `displayName()`, `description()`, `order()` (lower first).
+  `com-acme-ticket-checker`), `displayName()`, `description()` (one or two sentences, shown in lists), `helpText()` (optional
+  longer help on setting it up: when to choose it, what it needs) and `order()` (lower first). The three texts follow
+  one convention: the message bundle's text under `<spi>.<id>.display-name`, `<spi>.<id>.description` and
+  `<spi>.<id>.help-text` comes first, the method's is the fallback. So the methods carry the English texts, or all
+  there is for an extension without a bundle, and a `messages_<lang>.properties` translates them. The admin API
+  serves them in the caller's language; what the model reads (tool and provider descriptions) and the logs stay as
+  the methods say.
 - `configure(config)` (default nothing): hands every extension its `kc-mcp.spi.<spi>.<id>.*` settings, from files,
   environment and command line, at startup after the `enabled` switch and before `isSupported`. Keep them in fields;
   a constructor cannot see them. Only the settings are passed, the Keycloak systems do not exist yet; tool providers
@@ -88,7 +94,7 @@ public class AcmeToolProvider implements ToolProvider {
   - Texts: in `META-INF/kc-mcp/messages.properties` (English, UTF-8) and `META-INF/kc-mcp/messages_<lang>.properties` of the
     extension's jar, by keys derived from the spec (`ConfigMessageKeys`): `<spi>.<id>.<name>.label` and
     `.description`, `<spi>.<id>.<name>.option.<option>`, `<spi>.<id>.group.<group>.label` and `.description`
-    (`audit-scrubber.pii.mode.label`). The labels are needed, descriptions and option texts are optional. A text the
+    (`audit-scrubber.pii.mode.label`), and `<spi>.<id>.help-text` for the extension as a whole. The labels are needed, descriptions and option texts are optional. A text the
     extension lacks falls back to `config.<name>...`, the shared texts of settings several extensions read
     (`config.client-secret.label`); a key no bundle has shows as the name and is logged once. `ConfigMessages` merges
     the bundles of every jar, the providers directory included, and resolves them per locale; `missingLabels(prefix,

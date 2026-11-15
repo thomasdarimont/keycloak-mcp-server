@@ -140,9 +140,9 @@ instances on the same database ([Several instances](storage.md#several-instances
   recorded values containing a text, for completing the filters. The CIBA number-matching code never reaches the trail
   (it travels in `approval.code`, not the message); rows of older builds show it as `**`. 503
   `storage_disabled` without the database storage ([Audit retention and personal data](storage.md#audit-retention-and-personal-data)).
-- `GET /admin/extensions`: every installed extension (`spi`, `id`, status, origin, class, whether it declares
+- `GET /admin/extensions`: every installed extension (`spi`, `id`, name and description, status, origin, class, whether it declares
   settings, how many errors and warnings its settings have). `GET /admin/extensions/<spi>/<id>`: its settings, read
-  only: each declared setting with its full key and environment variable, type, default, options, conditions
+  only: the extension's help text if it has one (`helpText`), each declared setting with its full key and environment variable, type, default, options, conditions
   (`appliesWhen`), whether it is set and its value (confidential ones `******`), the groups, the keys the server
   handles itself (`enabled`, `required`, ...), undeclared keys (values always masked) and the problems the startup
   checks see, with code, named args and message. Labels, descriptions and messages are in the language of
