@@ -10,6 +10,12 @@
 #   distribution starts the unpacked distribution with bin/kcmcp.sh on Linux (from a directory with a space, with a
 #                config file by relative path, then against a Keycloak in Docker with a real tool call) and with
 #                bin/kcmcp.bat on Windows (MCP session), see .github/scripts/dist-smoke.sh.
+#   changes      says what the change needs (.github/scripts/changes.sh): README files outside the build need only
+#                the spelling check; docs/*.md, which are packaged and whose settings a unit test checks, need the
+#                docs job; everything else the full build. A manual run and a push whose previous commit is not
+#                known build everything.
+#   docs         only when nothing but docs/*.md (and README files) changed: the test that every setting the
+#                documentation names exists.
 #   typos        spell-checks the repository (crate-ci/typos, configured in _typos.toml); etc/typos.sh runs the same
 #                check locally.
 name: CI
@@ -42,8 +48,53 @@ jobs:
       - name: Check the spelling
         uses: crate-ci/typos@v1.52.2
 
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      docs: ${{ steps.classify.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify the changed files
+        id: classify
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # without a known previous commit (a manual run, a new branch, a forced push) build everything
+          if [ "$EVENT" = workflow_dispatch ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            printf 'code=true\ndocs=true\n' | tee -a "$GITHUB_OUTPUT"
+          else
+            git diff --name-only "$BASE" HEAD | .github/scripts/changes.sh | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  docs:
+    name: Documented settings
+    needs: changes
+    if: needs.changes.outputs.code != 'true' && needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Check that every setting the documentation names exists
+        run: ./mvnw test -pl modules/backend -am -Dtest=OptionCatalogueTest -Dsurefire.failIfNoSpecifiedTests=false
+
   build:
     name: Build and test
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
