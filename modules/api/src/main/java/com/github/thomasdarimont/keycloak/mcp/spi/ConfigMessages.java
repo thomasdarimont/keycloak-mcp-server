@@ -79,6 +79,19 @@ public final class ConfigMessages {
     }
 
     /**
+     * An extension point's name for people: the bundles' text, else its name in the
+     * configuration keys ({@link Extension#spiName()}), which is no fault.
+     */
+    public String extensionPoint(Locale locale, String spi) {
+        return find(locale, ConfigMessageKeys.extensionPoint(spi)).orElse(spi);
+    }
+
+    /** What an extension point is for; empty when no bundle says. */
+    public Optional<String> extensionPointDescription(Locale locale, String spi) {
+        return find(locale, ConfigMessageKeys.extensionPointDescription(spi));
+    }
+
+    /**
      * An extension's name: the bundles' text, else what the extension itself says
      * ({@link Extension#displayName()}). The texts of an extension are never shared ones,
      * and a bundle without them is no fault: the extension's own text is the English one.

@@ -61,7 +61,7 @@ public final class UserAgent {
     }
 
     /** The server's version from the jar manifest, {@code dev} without one. */
-    static String version() {
+    public static String version() {
         Package p = UserAgent.class.getPackage();
         String v = p == null ? null : p.getImplementationVersion();
         return v == null || v.isBlank() ? "dev" : v;

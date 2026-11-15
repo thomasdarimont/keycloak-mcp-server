@@ -7,6 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfo;
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfoContributor;
 import com.github.thomasdarimont.keycloak.mcp.state.StateScope;
 import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
 
@@ -17,7 +19,7 @@ import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
  * is one atomic {@code compute} on the key.
  */
 @ApplicationScoped
-public class InMemoryStateStore implements StateStore {
+public class InMemoryStateStore implements StateStore, ServerInfoContributor {
 
     public static final String ID = "memory-state";
 
@@ -45,6 +47,11 @@ public class InMemoryStateStore implements StateStore {
     @Override
     public String description() {
         return "Keeps short-lived state in this instance's memory (single instance).";
+    }
+
+    @Override
+    public void contributeServerInfo(ServerInfo info) {
+        info.put("entries", entries.size());
     }
 
     @Override

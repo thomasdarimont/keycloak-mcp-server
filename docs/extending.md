@@ -74,10 +74,18 @@ public class AcmeToolProvider implements ToolProvider {
   `com-acme-ticket-checker`), `displayName()`, `description()` (one or two sentences, shown in lists), `helpText()` (optional
   longer help on setting it up: when to choose it, what it needs) and `order()` (lower first). The three texts follow
   one convention: the message bundle's text under `<spi>.<id>.display-name`, `<spi>.<id>.description` and
-  `<spi>.<id>.help-text` comes first, the method's is the fallback. So the methods carry the English texts, or all
+  `<spi>.<id>.help-text` comes first, the method's is the fallback. An extension point has texts too, `<spi>.display-name`
+  and `<spi>.description` (an extension that brings its own extension point adds them to its bundle); without a name
+  it shows as its id. So the methods carry the English texts, or all
   there is for an extension without a bundle, and a `messages_<lang>.properties` translates them. The admin API
   serves them in the caller's language; what the model reads (tool and provider descriptions) and the logs stay as
   the methods say.
+- `ServerInfoContributor` (optional, on any extension): `contributeServerInfo(ServerInfo info)` adds what the
+  extension knows about how it runs to the server info (`GET /admin/server-info`, the UI's *Server info* page):
+  `info.put("table", "acme_tickets")` for operational facts, `info.warn("...")` for something that works but should
+  not stay as it is, in a sentence that says what to do. State, not settings (those are in the `configSpec()`), and
+  no secrets. Asked on every read of the server info and only of extensions that take part, after `configure`: answer
+  from memory, without remote calls. A contributor that throws shows as a warning.
 - `configure(config)` (default nothing): hands every extension its `kc-mcp.spi.<spi>.<id>.*` settings, from files,
   environment and command line, at startup after the `enabled` switch and before `isSupported`. Keep them in fields;
   a constructor cannot see them. Only the settings are passed, the Keycloak systems do not exist yet; tool providers

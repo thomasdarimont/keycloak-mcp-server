@@ -30,6 +30,8 @@ tags:
     description: |
       The installed extensions and their settings, read only (the settings come from the configuration): the spec
       with its texts in the `Accept-Language`, the values with confidential and undeclared ones masked, the problems
+  - name: server
+    description: The server itself, its runtime and what its extensions report about themselves
 security:
   - bearer: []
 paths:
@@ -804,6 +806,29 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Disabled" }
+  /admin/server-info:
+    get:
+      tags: [server]
+      summary: The server, its runtime and its extensions
+      description: |
+        Version and start of the server, the Java runtime, the number of systems, and every extension by extension
+        point with its status and what it reports about itself (`ServerInfoContributor`): operational facts and
+        warnings. Extension names are in the `Accept-Language`. Nothing in it is confidential; settings are under
+        `/admin/extensions`.
+      operationId: serverInfo
+      parameters:
+        - name: Accept-Language
+          in: header
+          schema: { type: string, example: "de-CH, de;q=0.8" }
+      responses:
+        "200":
+          description: The server info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Disabled" }
   /admin/extensions/{spi}/{id}:
     parameters:
       - name: spi
@@ -1353,6 +1378,91 @@ components:
           additionalProperties:
             type: integer
             format: int64
+    ServerInfo:
+      type: object
+      required: [server, runtime, systems, extensionPoints, providers, warnings]
+      properties:
+        server:
+          type: object
+          required: [version, startedAt, uptimeSeconds, instanceRole, securityProfile, devMode, toolExposure]
+          properties:
+            version: { type: string, description: "From the jar manifest; `dev` outside a packaged build" }
+            startedAt: { type: string, format: date-time }
+            uptimeSeconds: { type: integer, format: int64 }
+            instanceRole:
+              type: string
+              enum: [all, mcp, admin]
+              description: What this instance serves (`kc-mcp.instance-role`)
+            securityProfile: { type: string, enum: [local, shared] }
+            devMode: { type: boolean }
+            toolExposure: { type: string, example: lazy }
+        runtime:
+          type: object
+          properties:
+            javaVersion: { type: string }
+            javaVendor: { type: string }
+            javaVm: { type: string }
+            os: { type: string }
+            architecture: { type: string }
+            processors: { type: integer }
+            memoryUsedBytes: { type: integer, format: int64 }
+            memoryMaxBytes: { type: integer, format: int64 }
+        systems:
+          type: object
+          required: [count]
+          properties:
+            count: { type: integer }
+        extensionPoints:
+          type: object
+          description: The extension points that have extensions, by their name in the configuration keys
+          additionalProperties:
+            type: object
+            required: [displayName, displayNameKey, descriptionKey]
+            properties:
+              displayName:
+                type: string
+                description: In the `Accept-Language` when a bundle has it, else English, else the extension point's name
+                example: Access checks
+              displayNameKey: { type: string, example: access-check.display-name }
+              description:
+                type: string
+                nullable: true
+                description: What the extension point is for, translated like the name; `null` when no bundle says
+              descriptionKey: { type: string, example: access-check.description }
+        providers:
+          type: object
+          description: The extensions by extension point, then order and id
+          additionalProperties:
+            type: array
+            items: { $ref: "#/components/schemas/ServerInfoProvider" }
+        warnings:
+          type: array
+          description: The warnings of every extension, flattened
+          items:
+            type: object
+            required: [spi, id, message]
+            properties:
+              spi: { type: string }
+              id: { type: string }
+              message: { type: string }
+    ServerInfoProvider:
+      type: object
+      required: [id, displayName, status, origin, info, warnings]
+      properties:
+        id: { type: string, example: db }
+        displayName: { type: string }
+        status:
+          type: string
+          description: As in `ExtensionSummary`
+        origin: { type: string }
+        info:
+          type: object
+          description: Operational facts the extension reports; empty for one that does not take part or reports nothing
+          additionalProperties: { type: string }
+          example: { encryption: "on", key-id: "k1a2b3" }
+        warnings:
+          type: array
+          items: { type: string }
     ExtensionSummary:
       type: object
       required: [spi, id, status, origin, className, configurable]

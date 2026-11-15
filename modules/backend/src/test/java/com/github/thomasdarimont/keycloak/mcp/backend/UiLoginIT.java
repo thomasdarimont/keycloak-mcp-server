@@ -121,6 +121,11 @@ class UiLoginIT {
             .body("capabilities", hasItem("systems:read"))
             .body("capabilities", hasItem("systems:write"));
         alice.get("/bff/api/systems").then().statusCode(200).body("systems.alias", hasItem("default"));
+        alice.get("/bff/me").then().body("capabilities", hasItem("server:read"));
+        alice.get("/bff/api/server-info")
+            .then()
+            .statusCode(200)
+            .body("server.version", org.hamcrest.Matchers.notNullValue());
 
         // the row: plain tokens through the store, encrypted in the table; issuer,
         // subject
@@ -168,6 +173,7 @@ class UiLoginIT {
             .body("viewer", equalTo(false))
             .body("capabilities", empty());
         carol.get("/bff/api/systems").then().statusCode(403).body("error", equalTo("forbidden"));
+        carol.get("/bff/api/server-info").then().statusCode(403).body("error", equalTo("forbidden"));
     }
 
     @Test

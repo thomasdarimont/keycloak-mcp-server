@@ -46,7 +46,7 @@ public class AdminExtensions {
     @Inject
     ConfigMessages messages;
 
-    private record Known(Extension extension, Extensions.ProviderStatus status) {
+    record Known(Extension extension, Extensions.ProviderStatus status) {
     }
 
     /** Every extension, by extension point, then order and id. */
@@ -176,7 +176,7 @@ public class AdminExtensions {
      * The extensions found, and the access checks tool providers contribute (the built-in
      * policy checks), which are not discovered on their own; by {@code <spi>.<id>}.
      */
-    private Map<String, Known> known() {
+    Map<String, Known> known() {
         Map<String, Known> out = new LinkedHashMap<>();
         for (Extension e : extensions.all()) {
             Extensions.ProviderStatus s = extensions.describe(e, config);

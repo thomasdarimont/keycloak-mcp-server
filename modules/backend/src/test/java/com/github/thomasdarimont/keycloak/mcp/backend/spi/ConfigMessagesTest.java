@@ -124,6 +124,10 @@ class ConfigMessagesTest {
         // name of its own an extension goes by its id
         assertEquals("acme", messages.displayName(Locale.GERMANY, help("tools", "acme", "")));
         assertEquals(Optional.empty(), messages.description(Locale.GERMANY, help("tools", "acme", "")));
+        assertEquals("Access checks", messages.extensionPoint(Locale.GERMANY, AccessCheck.SPI));
+        assertEquals("acme-things", messages.extensionPoint(Locale.ROOT, "acme-things"), "no text: its name");
+        assertTrue(messages.extensionPointDescription(Locale.GERMANY, AccessCheck.SPI).isPresent());
+        assertEquals(Optional.empty(), messages.extensionPointDescription(Locale.ROOT, "acme-things"));
         assertEquals("access-check.step-up.display-name",
                 ConfigMessageKeys.displayName(ConfigMessageKeys.prefix(AccessCheck.SPI, "step-up")));
     }

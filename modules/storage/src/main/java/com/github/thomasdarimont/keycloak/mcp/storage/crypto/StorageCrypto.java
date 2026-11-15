@@ -21,6 +21,7 @@ import jakarta.inject.Inject;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
 
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfo;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageConfig;
 
 /**
@@ -98,6 +99,18 @@ public class StorageCrypto {
     /** Whether values are encrypted at rest. */
     public boolean enabled() {
         return secret != null;
+    }
+
+    /**
+     * What a store that keeps its values with this says about itself in the server info:
+     * whether they are encrypted, under which key, and a warning when they are not.
+     */
+    public void contributeServerInfo(ServerInfo info) {
+        info.put("encryption", enabled() ? "on" : "off");
+        currentKeyId().ifPresent(id -> info.put("key-id", id));
+        if (!enabled()) {
+            info.warn("Values are stored unencrypted: set kc-mcp.storage.secret-key.");
+        }
     }
 
     /**

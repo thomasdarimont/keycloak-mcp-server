@@ -61,6 +61,7 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
  * GET    /admin/extensions                   the installed extensions, with their status and problem counts
  * GET    /admin/extensions/{spi}/{id}        one extension's settings: spec, values (confidential ones masked),
  *                                            problems; texts in the Accept-Language
+ * GET    /admin/server-info                  the server, its runtime and what the extensions report about themselves
  * </pre>
  */
 @Path(AdminResource.PATH)
@@ -86,6 +87,9 @@ public class AdminResource {
 
     @Inject
     AdminAudit audit;
+
+    @Inject
+    AdminServerInfo serverInfo;
 
     @Inject
     AdminAdoption adoption;
@@ -264,8 +268,14 @@ public class AdminResource {
         return extensions.config(spi, id, locale(headers));
     }
 
+    @GET
+    @Path("server-info")
+    public Map<String, Object> serverInfo(@Context HttpHeaders headers) {
+        return serverInfo.info(locale(headers));
+    }
+
     /** The caller's first language from {@code Accept-Language}; English without one. */
-    static Locale locale(HttpHeaders headers) {
+    public static Locale locale(HttpHeaders headers) {
         for (Locale l : headers.getAcceptableLanguages()) {
             if (!l.getLanguage().isEmpty() && !"*".equals(l.getLanguage())) {
                 return l;

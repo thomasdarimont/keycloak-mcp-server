@@ -73,6 +73,11 @@ public class UiAccessFilter {
                         UiCapabilities.viewerRole(config).map(r -> " and viewer role " + r).orElse(""));
                 return Optional.of(error(403, "forbidden", accessDeniedMessage(caller)));
             }
+            if (UiCapabilities.operatorOnly(path) && !UiCapabilities.isOperator(caller, config)) {
+                LOG.infof("UI: %s refused the server info, lacks operator role %s", caller, config.admin().role());
+                return Optional.of(error(403, "forbidden", "The server info needs the role " + config.admin().role()
+                        + ", which " + caller.name() + " lacks."));
+            }
             return Optional.empty();
         }
         if (!UiCapabilities.canWrite(caller, config)) {

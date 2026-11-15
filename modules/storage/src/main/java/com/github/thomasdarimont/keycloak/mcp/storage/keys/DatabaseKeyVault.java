@@ -25,6 +25,8 @@ import com.github.thomasdarimont.keycloak.mcp.keycloak.SigningKeyGenerator;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProperty;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigSpec;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfo;
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfoContributor;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageEnabledInterceptorFactory;
 import com.github.thomasdarimont.keycloak.mcp.storage.crypto.StorageCrypto;
 
@@ -51,7 +53,7 @@ import io.quarkus.panache.common.Sort;
  */
 @ApplicationScoped
 @LookupIfProperty(name = StorageEnabledInterceptorFactory.ENABLED, stringValue = "true")
-public class DatabaseKeyVault implements KeyVault {
+public class DatabaseKeyVault implements KeyVault, ServerInfoContributor {
 
     public static final String ID = "db";
 
@@ -115,8 +117,12 @@ public class DatabaseKeyVault implements KeyVault {
 
     @Override
     public String description() {
-        return "private_key_jwt keys and secrets in the database"
-                + (crypto.enabled() ? ", encrypted at rest" : ", not encrypted (set kc-mcp.storage.secret-key)");
+        return "private_key_jwt keys and secrets in the database";
+    }
+
+    @Override
+    public void contributeServerInfo(ServerInfo info) {
+        crypto.contributeServerInfo(info);
     }
 
     @Override

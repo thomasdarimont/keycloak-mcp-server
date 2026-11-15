@@ -12,6 +12,8 @@ import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
 
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfo;
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfoContributor;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageConfig;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageEnabledInterceptorFactory;
 import com.github.thomasdarimont.keycloak.mcp.storage.crypto.StorageCrypto;
@@ -29,7 +31,7 @@ import io.quarkus.scheduler.Scheduled;
  */
 @ApplicationScoped
 @LookupIfProperty(name = StorageEnabledInterceptorFactory.ENABLED, stringValue = "true")
-public class DatabaseUserSessionStore implements UserSessionStore {
+public class DatabaseUserSessionStore implements UserSessionStore, ServerInfoContributor {
 
     public static final String ID = "db";
 
@@ -57,8 +59,12 @@ public class DatabaseUserSessionStore implements UserSessionStore {
 
     @Override
     public String description() {
-        return "browser sessions of the management UI in the database"
-                + (crypto.enabled() ? ", tokens encrypted at rest" : ", not encrypted (set kc-mcp.storage.secret-key)");
+        return "browser sessions of the management UI in the database";
+    }
+
+    @Override
+    public void contributeServerInfo(ServerInfo info) {
+        crypto.contributeServerInfo(info);
     }
 
     /**

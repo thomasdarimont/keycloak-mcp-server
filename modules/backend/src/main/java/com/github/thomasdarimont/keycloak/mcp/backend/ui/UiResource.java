@@ -31,6 +31,7 @@ import com.github.thomasdarimont.keycloak.mcp.access.Caller;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminAdoption;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminAudit;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminResource;
+import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminServerInfo;
 import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminSystems;
 import com.github.thomasdarimont.keycloak.mcp.backend.guard.SecurityIdentityCallerProvider;
 import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
@@ -91,6 +92,8 @@ public class UiResource {
     AdminSystems systems;
     @Inject
     AdminAudit audit;
+    @Inject
+    AdminServerInfo serverInfo;
     @Inject
     AdminAdoption adoption;
     @Inject
@@ -334,5 +337,15 @@ public class UiResource {
     public Map<String, Object> auditValues(@PathParam("field") String field,
             @QueryParam("containing") String containing) {
         return audit.values(field, containing);
+    }
+
+    /**
+     * For operators only ({@link UiCapabilities#operatorOnly}): it describes the server,
+     * not its systems.
+     */
+    @GET
+    @Path("api/server-info")
+    public Map<String, Object> serverInfo(@Context HttpHeaders headers) {
+        return serverInfo.info(AdminResource.locale(headers));
     }
 }

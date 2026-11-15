@@ -148,6 +148,12 @@ instances on the same database ([Several instances](storage.md#several-instances
   checks see, with code, named args and message. Labels, descriptions and messages are in the language of
   `Accept-Language`, English where no bundle has it, each with its message key ([Extending](extending.md),
   `configSpec()`).
+- `GET /admin/server-info`: the server at a glance. `server` (version, start, uptime, instance role, security profile, dev mode, tool exposure),
+  `runtime` (Java, operating system, processors, memory), `systems.count`, `extensionPoints` (their names and descriptions for people) and `providers`: every extension by
+  extension point with its name, status, origin and what it reports about itself, `info` (names and values, such as
+  `encryption: on` of the database stores) and `warnings` (such as values stored unencrypted); the warnings of all
+  extensions are repeated in `warnings`. Only extensions that take part are asked; extensions report through
+  `ServerInfoContributor` ([Extending](extending.md)). Like the rest of the admin API it takes the operator role.
 - **OpenAPI.** The server serves the API's description at `/q/openapi` (YAML; `?format=json`), with every operation,
   the request and response schemas and the error codes; the source is
   `modules/backend/src/main/resources/META-INF/openapi.yaml`, kept in step with the resource by a test. Swagger UI

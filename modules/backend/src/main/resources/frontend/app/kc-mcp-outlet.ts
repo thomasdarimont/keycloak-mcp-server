@@ -8,6 +8,7 @@ import { sessionContext, type SessionState } from './session-context.js';
 import './pages/audit/page.js';
 import './pages/overview.js';
 import './pages/placeholder.js';
+import './pages/server-info.js';
 import './pages/systems/detail.js';
 import './pages/systems/page.js';
 import './pages/systems/settings.js';
@@ -190,6 +191,24 @@ export class KcMcpOutlet extends LitElement {
           return true;
         },
         render: () => html`<kc-mcp-audit-page></kc-mcp-audit-page>`,
+      },
+      {
+        name: 'server-info-extensions',
+        path: `${UI_BASE}/server-info/extensions`,
+        enter: async () => {
+          notifyNavigate();
+          return true;
+        },
+        render: () => html`<kc-mcp-server-info-page tab="extensions"></kc-mcp-server-info-page>`,
+      },
+      {
+        name: 'server-info',
+        path: `${UI_BASE}/server-info`,
+        enter: async () => {
+          notifyNavigate();
+          return true;
+        },
+        render: () => html`<kc-mcp-server-info-page tab="server"></kc-mcp-server-info-page>`,
       },
       {
         name: 'overview',

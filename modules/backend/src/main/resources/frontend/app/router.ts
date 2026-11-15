@@ -21,6 +21,7 @@ export const routes: NavRoute[] = [
   { path: `${UI_BASE}/secrets`, label: 'Secrets', capability: 'secrets:read' },
   { path: `${UI_BASE}/storage`, label: 'Storage', capability: 'storage:read' },
   { path: `${UI_BASE}/audit`, label: 'Audit', capability: 'audit:read' },
+  { path: `${UI_BASE}/server-info`, label: 'Server info', capability: 'server:read' },
 ];
 
 export function overviewHref(): string {
@@ -29,6 +30,14 @@ export function overviewHref(): string {
 
 export function auditHref(): string {
   return `${UI_BASE}/audit`;
+}
+
+export type ServerInfoTab = 'server' | 'extensions';
+
+/** Server info; default tab is Server (`/ui/server-info`). */
+export function serverInfoHref(tab: ServerInfoTab = 'server'): string {
+  const base = `${UI_BASE}/server-info`;
+  return tab === 'server' ? base : `${base}/${tab}`;
 }
 
 export function systemsHref(): string {
@@ -57,6 +66,9 @@ export function navPath(pathname = location.pathname): string {
   }
   if (pathname.startsWith(`${UI_BASE}/systems/`)) {
     return `${UI_BASE}/systems`;
+  }
+  if (pathname.startsWith(`${UI_BASE}/server-info/`)) {
+    return `${UI_BASE}/server-info`;
   }
   return pathname;
 }

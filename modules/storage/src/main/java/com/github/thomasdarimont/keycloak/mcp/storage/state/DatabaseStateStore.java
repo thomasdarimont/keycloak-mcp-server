@@ -13,6 +13,8 @@ import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
 
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfo;
+import com.github.thomasdarimont.keycloak.mcp.spi.ServerInfoContributor;
 import com.github.thomasdarimont.keycloak.mcp.state.StateScope;
 import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
 import com.github.thomasdarimont.keycloak.mcp.storage.StorageConfig;
@@ -34,7 +36,7 @@ import io.quarkus.scheduler.Scheduled;
  */
 @ApplicationScoped
 @LookupIfProperty(name = StorageEnabledInterceptorFactory.ENABLED, stringValue = "true")
-public class DatabaseStateStore implements StateStore {
+public class DatabaseStateStore implements StateStore, ServerInfoContributor {
 
     public static final String ID = "db";
 
@@ -62,8 +64,12 @@ public class DatabaseStateStore implements StateStore {
 
     @Override
     public String description() {
-        return "Keeps short-lived state in kc_mcp_state, shared by all instances"
-                + (crypto.enabled() ? ", encrypted at rest" : ", not encrypted (set kc-mcp.storage.secret-key)");
+        return "Keeps short-lived state in kc_mcp_state, shared by all instances";
+    }
+
+    @Override
+    public void contributeServerInfo(ServerInfo info) {
+        crypto.contributeServerInfo(info);
     }
 
     @Override

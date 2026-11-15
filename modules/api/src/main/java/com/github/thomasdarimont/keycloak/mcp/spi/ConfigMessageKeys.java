@@ -7,6 +7,8 @@ package com.github.thomasdarimont.keycloak.mcp.spi;
  * ({@link ConfigMessages}), English in {@code META-INF/kc-mcp/messages.properties} of the
  * jar that brings the extension.
  * <ul>
+ * <li>an extension point: {@code <spi>.display-name} and {@code <spi>.description}
+ * ({@code access-check.display-name})</li>
  * <li>the extension itself: {@code <spi>.<id>.display-name},
  * {@code <spi>.<id>.description} and {@code <spi>.<id>.help-text}
  * ({@code access-check.step-up.help-text}), the texts of {@link Extension#displayName()},
@@ -43,6 +45,16 @@ public final class ConfigMessageKeys {
 
     /** The prefix of the shared texts. */
     public static final String SHARED = "config.";
+
+    /** The name of an extension point, for people. */
+    public static String extensionPoint(String spi) {
+        return spi + ".display-name";
+    }
+
+    /** What an extension point is for, in a sentence or two. */
+    public static String extensionPointDescription(String spi) {
+        return spi + ".description";
+    }
 
     /** The extension's name ({@link Extension#displayName()}). */
     public static String displayName(String prefix) {

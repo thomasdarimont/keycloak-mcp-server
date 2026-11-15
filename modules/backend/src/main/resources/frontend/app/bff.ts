@@ -46,6 +46,8 @@ export const Cap = {
   secretsRead: 'secrets:read',
   storageRead: 'storage:read',
   auditRead: 'audit:read',
+  /** Operators only. */
+  serverRead: 'server:read',
 } as const;
 
 export function hasCapability(me: Me | null | undefined, capability: string): boolean {
@@ -232,6 +234,56 @@ export async function checkSession(): Promise<SessionCheck | false> {
     throw e;
   }
 }
+
+/** One extension in the server info, with what it reports about itself. */
+export interface ServerInfoProvider {
+  id: string;
+  displayName: string;
+  /** active, selected, disabled, not supported, not selected, available */
+  status: string;
+  /** built-in, or the jar of the providers directory */
+  origin: string;
+  info: Record<string, string>;
+  warnings: string[];
+}
+
+/** GET /bff/api/server-info; operators only. */
+export interface ServerInfo {
+  server: {
+    version: string;
+    startedAt: string;
+    uptimeSeconds: number;
+    /** What this instance serves: all, mcp or admin (kc-mcp.instance-role). */
+    instanceRole: string;
+    /** local or shared */
+    securityProfile: string;
+    devMode: boolean;
+    toolExposure: string;
+  };
+  runtime: {
+    javaVersion: string;
+    javaVendor: string;
+    javaVm: string;
+    os: string;
+    architecture: string;
+    processors: number;
+    memoryUsedBytes: number;
+    memoryMaxBytes: number;
+  };
+  systems: { count: number };
+  /** Names of the extension points for people; the extension point's own name where no bundle has a text. */
+  extensionPoints: Record<
+    string,
+    { displayName: string; displayNameKey: string; description?: string | null; descriptionKey: string }
+  >;
+  /** By extension point. */
+  providers: Record<string, ServerInfoProvider[]>;
+  /** Every extension's warnings, flattened. */
+  warnings: { spi: string; id: string; message: string }[];
+}
+
+/** The server, its runtime and its extensions (GET /bff/api/server-info). */
+export const serverInfo = (): Promise<ServerInfo> => call<ServerInfo>('/api/server-info');
 
 /** All known systems (GET /bff/api/systems). */
 export const listSystems = (): Promise<SystemsList> => call<SystemsList>('/api/systems');

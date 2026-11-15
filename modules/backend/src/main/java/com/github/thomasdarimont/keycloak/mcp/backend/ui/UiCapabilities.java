@@ -20,6 +20,7 @@ public final class UiCapabilities {
     public static final String SECRETS_READ = "secrets:read";
     public static final String STORAGE_READ = "storage:read";
     public static final String AUDIT_READ = "audit:read";
+    public static final String SERVER_READ = "server:read";
 
     private UiCapabilities() {
     }
@@ -49,6 +50,16 @@ public final class UiCapabilities {
     }
 
     /**
+     * Whether reading this BFF path takes the operator role: the server info, which
+     * describes the server and its runtime rather than the systems a viewer looks at.
+     */
+    public static boolean operatorOnly(String path) {
+        return path.equals(SERVER_INFO_PATH) || path.startsWith(SERVER_INFO_PATH + "/");
+    }
+
+    static final String SERVER_INFO_PATH = UiTenant.BFF_PATH + "/api/server-info";
+
+    /**
      * Capability strings for {@code GET /bff/me}; empty when the caller may not use the
      * API.
      */
@@ -62,6 +73,7 @@ public final class UiCapabilities {
         out.add(STORAGE_READ);
         out.add(AUDIT_READ);
         if (canWrite(caller, config)) {
+            out.add(SERVER_READ);
             out.add(SYSTEMS_WRITE);
         }
         return out;

@@ -26,7 +26,7 @@ class UiCapabilitiesTest {
         assertTrue(UiCapabilities.canWrite(alice, config));
         assertEquals(
                 List.of(UiCapabilities.SYSTEMS_READ, UiCapabilities.SECRETS_READ, UiCapabilities.STORAGE_READ,
-                        UiCapabilities.AUDIT_READ, UiCapabilities.SYSTEMS_WRITE),
+                        UiCapabilities.AUDIT_READ, UiCapabilities.SERVER_READ, UiCapabilities.SYSTEMS_WRITE),
                 UiCapabilities.forCaller(alice, config));
     }
 
@@ -39,6 +39,18 @@ class UiCapabilitiesTest {
         assertFalse(UiCapabilities.canWrite(carol, config));
         assertEquals(List.of(UiCapabilities.SYSTEMS_READ, UiCapabilities.SECRETS_READ, UiCapabilities.STORAGE_READ,
                 UiCapabilities.AUDIT_READ), UiCapabilities.forCaller(carol, config));
+    }
+
+    @Test
+    void theServerInfoIsForOperatorsOnly() {
+        assertTrue(UiCapabilities.operatorOnly("/bff/api/server-info"));
+        assertTrue(UiCapabilities.operatorOnly("/bff/api/server-info/anything"));
+        assertFalse(UiCapabilities.operatorOnly("/bff/api/systems"));
+        assertFalse(UiCapabilities.operatorOnly("/bff/api/server-information"));
+        McpServerConfig config = config(
+                Map.of("kc-mcp.admin.role", "realm:admin", "kc-mcp.ui.viewer-role", "realm-management.view-users"));
+        Caller carol = Caller.of("c", "carol", "demo", Set.of("realm-management.view-users"));
+        assertFalse(UiCapabilities.forCaller(carol, config).contains(UiCapabilities.SERVER_READ));
     }
 
     @Test

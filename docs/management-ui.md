@@ -39,10 +39,12 @@ means all realms on that cluster. Realm import / discover and Test connection st
 | role | config | access |
 |---|---|---|
 | operator | `kc-mcp.admin.role` (default `realm:admin`) | read and write `/bff/api/*` |
-| viewer | `kc-mcp.ui.viewer-role` (optional; unset = off) | read-only `/bff/api/*` |
+| viewer | `kc-mcp.ui.viewer-role` (optional; unset = off) | read-only `/bff/api/*`, except the server info |
 
 The BFF enforces; the UI hides what `/bff/me` `capabilities` does not list (`systems:read`, `systems:write`,
-`secrets:read`, `storage:read`, `audit:read`). An operator sees everything a viewer sees. The bearer admin API is unchanged and still
+`secrets:read`, `storage:read`, `audit:read`, `server:read`). An operator sees everything a viewer sees. The
+*Server info* page (`server:read`, `GET /bff/api/server-info`) is for operators only: it describes the server, its
+runtime and its extensions rather than the systems a viewer looks at. The bearer admin API is unchanged and still
 requires the operator role. One `systems:write` covers systems, realms and key rotate.
 
 ## How it works
