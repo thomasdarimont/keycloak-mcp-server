@@ -1,15 +1,23 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.spi;
 
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.access.AccessCheckSpi;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListener;
 import com.github.thomasdarimont.keycloak.mcp.audit.AuditListenerSpi;
+import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeyVaultSpi;
 import com.github.thomasdarimont.keycloak.mcp.spi.Extension;
 import com.github.thomasdarimont.keycloak.mcp.spi.Spi;
@@ -17,6 +25,8 @@ import com.github.thomasdarimont.keycloak.mcp.spi.Spis;
 import com.github.thomasdarimont.keycloak.mcp.state.StateStore;
 import com.github.thomasdarimont.keycloak.mcp.state.StateStoreSpi;
 import com.github.thomasdarimont.keycloak.mcp.tools.ToolProviderSpi;
+
+import io.smallrye.config.SmallRyeConfigBuilder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -84,6 +94,63 @@ class SpisTest {
                 two.getMessage());
         assertTrue(two.getMessage().contains("a class serves one extension point"), two.getMessage());
         assertFalse(two.getMessage().contains(StateStore.class.getSimpleName()));
+    }
+
+    @Test
+    void anExtensionPointWhoseNameContinuesAnothersIsRefused(@TempDir Path dir) throws Exception {
+        Path services = Files.createDirectories(dir.resolve("META-INF/services"));
+        Files.writeString(services.resolve(Spi.class.getName()), TestPointExtraSpi.class.getName());
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { dir.toUri().toURL() },
+                getClass().getClassLoader())) {
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> Spis.load(loader));
+            assertTrue(e.getMessage().contains("'test-point-extra'") && e.getMessage().contains("'test-point'"),
+                    e.getMessage());
+            assertTrue(e.getMessage().contains("rename one"), e.getMessage());
+        }
+    }
+
+    @Test
+    void aRequiredVariableNamesTheMostSpecificExtensionPoint() {
+        // KC_MCP_SPI_AUDIT_LISTENER_DB_REQUIRED: 'audit-listener.db', not
+        // 'audit.listener-db'
+        List<Spi> withAudit = new ArrayList<>(spis);
+        withAudit.addFirst(new Spi() {
+            @Override
+            public String name() {
+                return "audit";
+            }
+
+            @Override
+            public Class<? extends Extension> extensionType() {
+                return TestPointExtra.class;
+            }
+        });
+        McpServerConfig config = new SmallRyeConfigBuilder().withMapping(McpServerConfig.class)
+            .build()
+            .getConfigMapping(McpServerConfig.class);
+        Map<String, String> env = Map.of("KC_MCP_SPI_AUDIT_LISTENER_DB_REQUIRED", "true");
+        assertEquals(List.of("audit-listener.db"), Extensions.missingRequired(config, Set.of(), env, withAudit));
+        assertEquals(List.of(), Extensions.missingRequired(config, Set.of("audit-listener.db"), env, withAudit),
+                "installed");
+        assertEquals(List.of("audit-listener.db"),
+                Extensions.missingRequired(config, Set.of("audit.listener-db"), env, withAudit),
+                "an extension of the other extension point does not satisfy it");
+    }
+
+    /** An extension point of its own, for a name that continues {@code test-point}. */
+    public interface TestPointExtra extends Extension {
+    }
+
+    public static class TestPointExtraSpi implements Spi {
+        @Override
+        public String name() {
+            return TestPointSpi.NAME + "-extra";
+        }
+
+        @Override
+        public Class<? extends Extension> extensionType() {
+            return TestPointExtra.class;
+        }
     }
 
     /** What is not allowed: one class for two extension points. */

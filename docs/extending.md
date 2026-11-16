@@ -72,7 +72,9 @@ public class AcmeToolProvider implements ToolProvider {
   one that implements two, or none, stops the start with a message that names them. A jar that brings an extension
   point of its own declares it the same way: an interface that extends `Extension`, a `Spi` for it registered with
   `@AutoService(Spi.class)`, and its texts `<spi>.display-name` and `<spi>.description` in the jar's message bundle;
-  the extensions are then read with `registry.extensions(AcmeThing.class)`. The server info lists every declared
+  the extensions are then read with `registry.extensions(AcmeThing.class)`. A name must not continue another's
+  (`audit` next to `audit-listener`): `KC_MCP_SPI_AUDIT_LISTENER_DB_REQUIRED` could then mean an extension of either,
+  so such a pair stops the start. The server info lists every declared
   extension point, also one without an extension.
 - Choosing a provider: `key-vault`, `key-generator`, `session-store`, `approval-store`, `rate-limit-store` and `state-store` are served by exactly one
   extension, the others run all of theirs. `kc-mcp.spi.key-vault.provider=db`

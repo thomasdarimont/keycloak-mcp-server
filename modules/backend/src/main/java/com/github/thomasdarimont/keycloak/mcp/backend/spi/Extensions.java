@@ -236,7 +236,12 @@ public class Extensions {
             return Optional.empty();
         }
         String path = name.substring(root.length(), name.length() - suffix.length());
-        for (String spi : spis.stream().map(Spi::name).toList()) {
+        // the longest name first: of 'audit' and 'audit-listener' the more specific one
+        // (Spis.load refuses such a pair, a list given by hand may hold one)
+        for (String spi : spis.stream()
+            .map(Spi::name)
+            .sorted(Comparator.comparingInt(String::length).reversed())
+            .toList()) {
             String prefix = spi.toUpperCase(Locale.ROOT).replace('-', '_') + "_";
             if (path.startsWith(prefix) && path.length() > prefix.length()) {
                 return Optional.of(key(spi, path.substring(prefix.length()).replace('_', '-')));

@@ -29,7 +29,10 @@ public final class Spis {
      * Every extension point this class loader finds, by name: the server's own and those
      * of the jars it sees.
      *
-     * @throws IllegalStateException when two share a name or an interface
+     * @throws IllegalStateException when two share a name or an interface, or when one's
+     * name continues another's ({@code audit} and {@code audit-listener}): an environment
+     * variable such as {@code KC_MCP_SPI_AUDIT_LISTENER_DB_REQUIRED} would then name an
+     * extension of either
      */
     public static List<Spi> load(ClassLoader loader) {
         Map<String, Spi> byName = new LinkedHashMap<>();
@@ -59,6 +62,16 @@ public final class Spis {
         }
         List<Spi> all = new ArrayList<>(byName.values());
         all.sort(Comparator.comparing(Spi::name));
+        for (Spi shorter : all) {
+            for (Spi longer : all) {
+                if (longer.name().startsWith(shorter.name() + "-")) {
+                    throw new IllegalStateException("The extension point '" + longer.name() + "' ("
+                            + longer.getClass().getName() + ") continues the name of '" + shorter.name() + "' ("
+                            + shorter.getClass().getName() + "): their environment variables could not be told"
+                            + " apart, rename one");
+                }
+            }
+        }
         return List.copyOf(all);
     }
 
