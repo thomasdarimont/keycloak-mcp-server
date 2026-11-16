@@ -37,7 +37,7 @@
         <!-- pinned above the Quarkus platform's 2.21.7 for the jackson-databind CVE fix; drop once the platform catches up -->
         <jackson.version>2.21.8</jackson.version>
         <auto-service.version>1.1.1</auto-service.version>
-        <jandex-maven-plugin.version>3.6.0</jandex-maven-plugin.version>
+        <jandex-maven-plugin.version>3.6.1</jandex-maven-plugin.version>
         <quarkus-web-bundler.version>3.0.0</quarkus-web-bundler.version>
         <mvnpm.lit.version>3.3.3</mvnpm.lit.version>
         <mvnpm.lit-context.version>1.1.6</mvnpm.lit-context.version>
