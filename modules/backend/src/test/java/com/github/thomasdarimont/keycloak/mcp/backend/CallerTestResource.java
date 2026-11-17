@@ -151,8 +151,13 @@ public class CallerTestResource implements QuarkusTestResourceLifecycleManager {
                                 .add("profile")
                                 .add("kc-admin-api")
                                 .add("service_account")));
-        String account = new JsonObject(get("/admin/realms/demo/clients/" + service + "/service-account-user"))
-            .getString("id");
+        // Keycloak after 26.8 names the user on the client and drops the
+        // service-account-user endpoint
+        String account = new JsonObject(get("/admin/realms/demo/clients/" + service)).getString("serviceAccountUserId");
+        if (account == null) {
+            account = new JsonObject(get("/admin/realms/demo/clients/" + service + "/service-account-user"))
+                .getString("id");
+        }
         post("/admin/realms/demo/users/" + account + "/role-mappings/clients/" + rm,
                 new JsonArray().add(new JsonObject(get("/admin/realms/demo/clients/" + rm + "/roles/realm-admin"))));
     }
