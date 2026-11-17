@@ -46,6 +46,33 @@ How the server presents its tools to a model, which tools exist, and the prompts
   call per composite role and group reached), `authz_evaluate` without resources. Heavy: `federation_sync` with
   `full`. Unlabelled tools make a fixed handful of requests, paged where a result can be long.
 
+## HTTP headers
+
+A client of protocol version `2026-07-28` mirrors the method and the tool's name in the headers `Mcp-Method` and
+`Mcp-Name`, so that a proxy in front of the server can route, limit or log without reading the body. The server
+refuses a request whose headers are missing or say something else than its body: HTTP 400 with the JSON-RPC error
+`-32020` (`HeaderMismatch`). What a proxy judged is then what runs.
+
+With `execute_tool` the name in `Mcp-Name` is `execute_tool`, whatever tool is run. So the server marks three
+arguments with `x-mcp-header` in the tools' input schemas, and the client sends them as headers too
+(`kc-mcp.param-headers`, on by default):
+
+| argument | of | header |
+|---|---|---|
+| `name` | `execute_tool` | `Mcp-Param-Tool: keycloak_user_delete` |
+| `system` | every tool that takes it, `whoami` | `Mcp-Param-System: prod` |
+| `realm` | every tool that takes it | `Mcp-Param-Realm: demo` |
+
+- They are checked like the standard headers: an argument that is given without its header, or with another value,
+  answers 400. An argument that is left out, for instance because an entry fills it in, has no header.
+- `system` and `realm` of a tool run through `execute_tool` sit inside its `arguments` and are not mirrored. A proxy
+  that routes by system or realm uses the [entries](systems.md), whose path names both.
+- A proxy must not trust the headers of a request without `MCP-Protocol-Version: 2026-07-28` or later: older,
+  session-based clients do not send them and the server does not check them there.
+- Values that are not plain ASCII arrive as `=?base64?…?=`.
+- `kc-mcp.param-headers=false` removes the marks, for a client of the new protocol version that does not send such
+  headers.
+
 ## Tool areas
 
 | category        | tools |

@@ -1,6 +1,7 @@
 # Baseline for `npx @modelcontextprotocol/conformance server --expected-failures conformance/expected-failures.yml`.
-# Every entry is a scenario the keycloak-mcp-server fails on purpose; the reason is next to it. A scenario that starts
-# passing makes the run fail ("stale baseline"), so this list stays honest. See README.md in this folder.
+# Every entry is a scenario, or one check of a scenario (`<scenario>:<check-id>`), the keycloak-mcp-server fails on
+# purpose; the reason is next to it. An entry that starts passing makes the run fail ("stale baseline"), so this list
+# stays honest. The suite version is the one run.sh names. See README.md in this folder.
 server:
   # --- content types the Keycloak tools never produce: results are JSON text (+ structuredContent) or an error
   - tools-call-image
@@ -27,3 +28,44 @@ server:
   # --- the fixture tool needs $schema/$defs/$ref in its input schema; tool schemas here are flat by design
   #     (small local models), InputSchema cannot express nesting
   - json-schema-2020-12
+  # --- tasks (SEP-2663): the server has none; a tool call answers with its result
+  - tasks-lifecycle
+  - tasks-capability-negotiation
+  - tasks-wire-fields
+  - tasks-request-state-removal
+  - tasks-mrtr-input
+  - tasks-request-headers
+  - tasks-dispatch-and-envelope
+  - tasks-required-task-error
+  - tasks-mrtr-composition
+  # --- input requests from inside a tool or prompt (SEP-2322): the server answers input_required itself, for the
+  #     confirmation of a destructive tool; the ToolHandler SPI has no way to ask the client for input, so the
+  #     fixtures cannot provide the test_input_required_result_* tools and prompt
+  - input-required-result-basic-elicitation
+  - input-required-result-basic-sampling
+  - input-required-result-basic-list-roots
+  - input-required-result-request-state
+  - input-required-result-multiple-input-requests
+  - input-required-result-multi-round
+  - input-required-result-non-tool-request
+  - input-required-result-result-type
+  - input-required-result-tampered-state
+  - input-required-result-capability-check
+  # --- server-stateless, single checks: the other checks of the scenario are enforced
+  #     an error for mismatching headers comes from the MCP extension with id null instead of the request's id
+  - server-stateless:sep-2575-http-server-error-jsonrpc-id
+  #     the next four need diagnostic tools that ask the client for something from inside a tool (a capability,
+  #     an elicitation, a log message): not in the ToolHandler SPI
+  - server-stateless:sep-2575-server-rejects-undeclared-capability
+  - server-stateless:sep-2575-missing-capability-http-400
+  - server-stateless:sep-2575-http-server-no-independent-requests-on-stream
+  - server-stateless:sep-2575-server-no-log-without-loglevel
+  # --- recommendations (SHOULD) the suite reports as warnings; a warning counts against the baseline too
+  #     no list_changed notification on a subscription stream when the suite changes the tool or prompt list
+  - server-stateless:sep-2575-server-sends-prompts-list-changed-on-subscription
+  - server-stateless:sep-2575-server-sends-tools-list-changed-on-subscription
+  #     the error for an unknown resource comes from the MCP extension without data.uri; the server has no resources
+  - sep-2164-resource-not-found:sep-2164-data-uri
+  #     both need the test_input_required_result_elicitation fixture tool, see above
+  - input-required-result-missing-input-response:sep-2322-missing-response-rerequests
+  - input-required-result-ignore-extra-params:sep-2322-ignore-unexpected-params

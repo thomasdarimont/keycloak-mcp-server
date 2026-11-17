@@ -136,13 +136,24 @@ public class McpClient {
             .put("id", ids.incrementAndGet())
             .put("method", "tools/call")
             .put("params", params);
-        Response r = given().header("Accept", "application/json, text/event-stream")
+        var request = given().header("Accept", "application/json, text/event-stream")
             .header("Content-Type", "application/json")
             .header("Mcp-Protocol-Version", version)
             .header("Mcp-Method", "tools/call")
-            .header("Mcp-Name", name)
-            .body(msg.encode())
-            .post(path);
+            .header("Mcp-Name", name);
+        // the arguments the server marks with x-mcp-header (kc-mcp.param-headers)
+        if ("execute_tool".equals(name) && arguments.getValue("name") instanceof String tool) {
+            request.header("Mcp-Param-Tool", tool);
+        }
+        else {
+            if (arguments.getValue("system") instanceof String system) {
+                request.header("Mcp-Param-System", system);
+            }
+            if (arguments.getValue("realm") instanceof String realm) {
+                request.header("Mcp-Param-Realm", realm);
+            }
+        }
+        Response r = request.body(msg.encode()).post(path);
         if (r.statusCode() >= 400) {
             throw new IllegalStateException("HTTP " + r.statusCode() + ": " + r.asString());
         }

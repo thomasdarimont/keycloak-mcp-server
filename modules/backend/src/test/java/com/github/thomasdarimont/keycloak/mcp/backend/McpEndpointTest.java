@@ -69,12 +69,14 @@ class McpEndpointTest {
         RestAssured.given()
             .header("Origin", "http://localhost:5173")
             .header("Access-Control-Request-Method", "POST")
-            .header("Access-Control-Request-Headers", "content-type,mcp-protocol-version,mcp-method,mcp-name")
+            .header("Access-Control-Request-Headers",
+                    "content-type,mcp-protocol-version,mcp-method,mcp-name,mcp-param-tool")
             .options("/mcp")
             .then()
             .header("Access-Control-Allow-Origin", "http://localhost:5173")
             .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-method"))
-            .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-name"));
+            .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-name"))
+            .header("Access-Control-Allow-Headers", Matchers.containsStringIgnoringCase("mcp-param-tool"));
         RestAssured.given()
             .header("Origin", "http://localhost:5173")
             .header("Content-Type", "application/json")

@@ -177,6 +177,22 @@ public interface McpServerConfig {
     @WithDefault("false")
     boolean requireCaller();
 
+    /**
+     * Marks the arguments a proxy in front of the server may want to route, limit or log
+     * by with {@code x-mcp-header} in the tools' input schemas (MCP HTTP header
+     * standardization, protocol version {@code 2026-07-28}): the {@code name} of
+     * {@code execute_tool} as {@code Mcp-Param-Tool}, {@code system} as
+     * {@code Mcp-Param-System} and {@code realm} as {@code Mcp-Param-Realm}. A client of
+     * that protocol version then sends the headers, and a request whose header is missing
+     * or says something else than its body is refused with HTTP 400
+     * ({@code HeaderMismatch}). Without it a proxy sees {@code Mcp-Name: execute_tool}
+     * for every tool run through {@code execute_tool}. Older, session-based clients are
+     * not affected. {@code false}: no argument is mirrored, for a client of the new
+     * protocol version that does not send such headers.
+     */
+    @WithDefault("true")
+    boolean paramHeaders();
+
     /** Effective value: {@link #requireCaller()}, or always in profile {@code shared}. */
     default boolean callerRequired() {
         return requireCaller() || securityProfile().shared();

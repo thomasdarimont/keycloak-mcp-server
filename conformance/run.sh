@@ -8,7 +8,8 @@
 # Exit code: 0 when only baselined scenarios fail (expected-failures.yml), 1 otherwise. Reports: conformance/results/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION=${CONFORMANCE_VERSION:-0.1.16}
+# the alpha covers protocol version 2026-07-28 (stateless requests, header validation); 0.1.16 stops at 2025-06-18
+VERSION=${CONFORMANCE_VERSION:-0.2.0-alpha.12}
 PORT=${PORT:-8085}
 URL=""
 SUITE=${SUITE:-all}

@@ -116,7 +116,7 @@ public class McpToolRegistrar {
                     + "service account), their realm-management roles with readable labels, and what they may "
                     + "view or manage. Call it when an action was forbidden or the user asks what they can do.")
             .setAnnotations(new ToolAnnotations("Who am I", true, false, true, false))
-            .setInputSchema(metaTools.whoamiSchema())
+            .setInputSchema(mirrored(metaTools.whoamiSchema(), TARGET_HEADERS))
             .setHandler(args -> toResponse(
                     metaTools.whoami(str(args.args(), "language"), str(args.args(), InputSchema.SYSTEM),
                             TransportContext.of(args, MetaTools.WHOAMI)
@@ -129,7 +129,7 @@ public class McpToolRegistrar {
             .setTitle("Execute a Keycloak tool")
             .setDescription("Run a Keycloak admin tool found via search_tools: name plus its arguments object.")
             .setAnnotations(new ToolAnnotations("Execute a Keycloak tool", false, true, false, false))
-            .setInputSchema(metaTools.executeSchema())
+            .setInputSchema(mirrored(metaTools.executeSchema(), Map.of("name", "Tool")))
             .setHandler(args -> {
                 Map<String, Object> a = args.args();
                 return toResponse(
@@ -147,7 +147,9 @@ public class McpToolRegistrar {
             .setDescription(MetaTools.listedDescription(spec))
             .setAnnotations(new ToolAnnotations(spec.title(), spec.isReadOnly(), spec.isDestructive(),
                     spec.idempotent(), false))
-            .setInputSchema(config.effectiveConfirmFallback().acceptsFlag() ? withConfirm(spec) : spec.inputSchema())
+            .setInputSchema(
+                    mirrored(config.effectiveConfirmFallback().acceptsFlag() ? withConfirm(spec) : spec.inputSchema(),
+                            TARGET_HEADERS))
             .setHandler(args -> {
                 Map<String, Object> a = args.args();
                 boolean confirm = Boolean.TRUE.equals(boolOf(a.get(InputSchema.CONFIRM)));
@@ -157,6 +159,34 @@ public class McpToolRegistrar {
                             .withBinding(EntryRoutes.current().orElse(null))));
             }, VIRTUAL_THREADS)
             .register();
+    }
+
+    /** The arguments that say where a call goes, and the header each is mirrored in. */
+    private static final Map<String, String> TARGET_HEADERS = Map.of(InputSchema.SYSTEM, "System", InputSchema.REALM,
+            "Realm");
+
+    /**
+     * The schema with {@code x-mcp-header} on the given string arguments it has
+     * ({@code kc-mcp.param-headers}): a client of protocol version 2026-07-28 sends
+     * {@code Mcp-Param-<header>} with the value, and the MCP extension refuses a request
+     * whose header does not match its body. A copy: the catalog's schema is also what
+     * {@code search_tools} shows.
+     */
+    private JsonObject mirrored(JsonObject schema, Map<String, String> headers) {
+        if (!config.paramHeaders() || schema == null || schema.getJsonObject("properties") == null) {
+            return schema;
+        }
+        JsonObject copy = schema.copy();
+        JsonObject properties = copy.getJsonObject("properties");
+        boolean changed = false;
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+            JsonObject property = properties.getJsonObject(header.getKey());
+            if (property != null && "string".equals(property.getValue("type"))) {
+                property.put("x-mcp-header", header.getValue());
+                changed = true;
+            }
+        }
+        return changed ? copy : schema;
     }
 
     /**
