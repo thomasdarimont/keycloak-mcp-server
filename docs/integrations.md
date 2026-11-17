@@ -9,7 +9,7 @@ system or realm uses `/mcp/systems/<system>[/<realm>]` instead ([Several Keycloa
 Two cases run through every client:
 
 - **No login** (`local` profile, the server holds a service account): the client only needs the URL.
-- **Login** (`QUARKUS_OIDC_TENANT_ENABLED=true`, usually with `KC_MCP_DELEGATION=forward`): the server answers 401
+- **Login** (`QUARKUS_OIDC_TENANT_ENABLED=true`, with `KC_MCP_DELEGATION=exchange` or `KC_MCP_REQUIRE_CALLER=true`): the server answers 401
   with a `resource_metadata` link, the client reads the protected resource metadata, finds the realm and logs the user
   in with authorization code and PKCE in the browser. The client needs an OAuth client at Keycloak, `mcp-consumer` in
   the examples, and Keycloak needs the client's callback address.
@@ -142,8 +142,7 @@ body; the `Mcp-Session-Id` header of the `initialize` answer goes on every later
   redirect URIs under control. Name the client in the MCP client's configuration instead.
 - **Client ID Metadata Documents.** With `--features=cimd` and a client policy, a client's published metadata URL is
   its `client_id` and Keycloak creates the client at first use. Such a client gets realm-level scopes only and no roles
-  unless a scope maps them, and the `resource-indicators` feature removes the Admin API audience forwarded tokens need
-  (`examples/cimd-vscode/`).
+  unless a scope maps them (`examples/cimd-vscode/`).
 - **Scopes.** Clients ask for what the protected resource metadata lists (`QUARKUS_OIDC_RESOURCE_METADATA_SCOPES`,
   default the admin API scope); every listed scope must exist on the client, or Keycloak answers `invalid_scope`.
   Claude Code also requests `offline_access`: assign it to the client as an optional scope, as the demo realms do. The

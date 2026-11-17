@@ -32,12 +32,14 @@ flowchart LR
 
 [Security](security.md#the-two-profiles) (security profiles, access levels), [Configuration](configuration.md).
 
-## 2. Users log in, their token is forwarded
+## 2. Users log in and act with their own roles
 
-The quick start and the shape a shared server has (`examples/run-modes/env/user-forward.env`, `KC_MCP_DELEGATION=forward`).
+The quick start and the shape a shared server has (`examples/run-modes/env/user-login.env`, `KC_MCP_DELEGATION=exchange`).
 The MCP endpoint answers 401 with protected resource metadata, the client logs the user in at Keycloak with the
-authorization code flow and PKCE, and the server passes the user's own token on to the Admin REST API. The server holds
-no admin credentials; Keycloak enforces the user's roles on every call.
+authorization code flow and PKCE, and the user consents to the server's client acting for them. The token the client
+then presents only opens the MCP server: the MCP specification forbids passing it on. For the Admin REST API the
+server exchanges it for a delegated token, which scenario 3 shows step by step. The server's client holds no admin
+role; Keycloak enforces the user's roles on every call.
 
 ```mermaid
 sequenceDiagram
@@ -54,14 +56,17 @@ sequenceDiagram
     end
     rect rgba(127,127,127,0.10)
     C->>K: authorization code + PKCE (client mcp-consumer)
-    K->>U: login page
-    U-->>K: alice / alice-demo
-    K-->>C: access token (aud mcp-admin, alice's roles)
+    K->>U: login page, consent page
+    U-->>K: alice / alice-demo, yes
+    K-->>C: access token (aud keycloak-mcp, may_act keycloak-mcp)
     end
     rect rgba(127,127,127,0.10)
     C->>S: POST /mcp ... Authorization: Bearer <alice>
-    S->>S: verify token (OIDC tenant), access checks, confirmation
-    S->>K: Admin REST API with alice's token
+    S->>S: verify token (OIDC tenant)
+    S->>K: token exchange: alice's token for a delegated one
+    K-->>S: delegated token (sub alice, act keycloak-mcp)
+    S->>S: access checks, confirmation
+    S->>K: Admin REST API with the delegated token
     K-->>S: result, enforced by alice's realm-management roles
     S-->>C: tool result, audited as caller=alice delegated
     end
@@ -71,7 +76,7 @@ sequenceDiagram
 
 ## 3. The server as a delegated agent
 
-`KC_MCP_DELEGATION=exchange` (`examples/delegated-auth/`): the user consents to the server's client acting for them, and
+The exchange of scenario 2 in detail (`examples/delegated-auth/`): the user consents to the server's client acting for them, and
 Keycloak's token exchange delegation issues a token that names both, `sub` the user and `act` the server's client. The
 server's own role scope caps every delegated token, and Keycloak's events record who acted for whom.
 
@@ -109,7 +114,9 @@ the `delegate` permission).
 `examples/xaa/`, MCP Enterprise-Managed Authorization: the client trades the user's SSO identity for an ID-JAG at the
 enterprise IdP and redeems it at Keycloak with the JWT authorization grant. There is no login page and no consent screen
 of Keycloak; the IdP's policy decides whether this agent may connect for this user, Keycloak's roles decide what they may
-do. The server is a resource server as in scenario 2 (`KC_MCP_DELEGATION=forward`).
+do. The server exchanges the token as in scenario 3 (`KC_MCP_DELEGATION=exchange`). As nobody is asked to consent, the
+realm's administrator names the server's client as the allowed actor instead: mappers on the agent's client write the
+`may_act` claim and a client policy checks it against the `delegate` permission.
 
 ```mermaid
 sequenceDiagram
@@ -129,11 +136,11 @@ sequenceDiagram
     I->>I: policy: may alice connect this agent to the server?
     I-->>C: ID-JAG (iss IdP, sub e-1001, aud realm acme, client_id agent, 5 minutes)
     C->>K: JWT authorization grant, assertion=ID-JAG
-    K-->>C: access token of the linked Keycloak user (aud server, alice's roles)
+    K-->>C: access token of the linked Keycloak user (aud server, may_act keycloak-mcp)
     end
     rect rgba(127,127,127,0.10)
     C->>S: POST /mcp ... Bearer <alice>
-    S->>K: Admin REST API with alice's token
+    S->>K: token exchange, then the Admin REST API with the delegated token
     K-->>S: result, enforced by her realm-management roles
     S-->>C: tool result
     end

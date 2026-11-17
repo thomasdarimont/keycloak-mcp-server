@@ -2,7 +2,7 @@
   "clientId": "keycloak-mcp-server",
   "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "basic", "email", "service_account", "kc-admin-api"],
   "name": "Keycloak MCP server",
-  "description": "The keycloak-mcp-server administers this Keycloak with this service account; it authenticates with a signed JWT whose public key Keycloak fetches from the MCP server (jwks.url).",
+  "description": "The MCP server's client in this realm: its service account administers the realm, and users who consent let it act on their behalf (token exchange, capped by its role scope). Signed JWT, public key fetched from the MCP server (jwks.url).",
   "enabled": true,
   "protocol": "openid-connect",
   "publicClient": false,
@@ -14,6 +14,7 @@
   "attributes": {
     "use.jwks.url": "true",
     "jwks.url": "${MCP_JWKS_URL}",
-    "token.endpoint.auth.signing.alg": "RS256"
+    "token.endpoint.auth.signing.alg": "RS256",
+    "standard.token.exchange.enabled": "true"
   }
 }

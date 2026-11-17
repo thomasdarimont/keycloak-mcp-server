@@ -23,7 +23,7 @@ expected to work; older unchecked. Since
     `howToEnable` / `howToDisable`
   - startup check: logs version and unavailable tools; below baseline is a problem (`fail` aborts)
 - Wording by `kc-mcp.explanations`: `admins` technical + `howToFix`; `users` plain ("the 'organization' feature is
-  switched off. A Keycloak administrator can enable it") with a hint to keep it plain; `auto` picks `users` for forward
+  switched off. A Keycloak administrator can enable it") with a hint to keep it plain; `auto` picks `users` for delegated
   callers without master admin or `realm-admin`, else `admins`. Support desk: `KC_MCP_EXPLANATIONS=users`.
 - Unknown capabilities never block; Keycloak decides.
 - Version differences under one endpoint live in the handler (`call.capabilities()`: `atLeast("26.9")`,

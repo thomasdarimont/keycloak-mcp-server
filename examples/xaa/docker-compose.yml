@@ -1,8 +1,10 @@
 # Cross-App Access (ID-JAG, MCP Enterprise-Managed Authorization): Keycloak 26.8.2 as the MCP server's authorization
 # server accepting ID-JAGs (identity-assertion-jwt, experimental), a stand-in enterprise IdP issuing them, and the MCP
-# server forwarding the resulting user tokens to the Admin API. See README.md.
+# server as the client keycloak-mcp, exchanging the resulting user tokens for delegated ones (token exchange
+# delegation, preview). See README.md.
 #
-#   docker compose up -d                          # Keycloak on http://localhost:8101 (admin / admin), IdP on :8102
+#   docker compose up -d                          # Keycloak on http://localhost:8101 (admin / admin), IdP on :8102,
+#                                                 # the init job grants keycloak-mcp the delegate permission
 #   docker compose --profile mcp up -d --build    # also the MCP server from ../../modules/backend/target on :8103
 #   docker compose down -v                        # reset everything (the realm is re-imported on the next start)
 services:
@@ -16,8 +18,9 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      # the JWT authorization grant for ID-JAGs (experimental); the rest are the 26.8 defaults the other examples use
-      KC_FEATURES: identity-assertion-jwt,identity-brokering-api:v2
+      # the JWT authorization grant for ID-JAGs (experimental); token exchange delegation needs parameterized scopes
+      # (both preview); the rest are the 26.8 defaults the other examples use
+      KC_FEATURES: identity-assertion-jwt,token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
       KC_LOG_LEVEL: info
     volumes:
@@ -31,6 +34,19 @@ services:
       timeout: 5s
       retries: 40
       start_period: 20s
+
+  # The one setting a realm import cannot carry: the Admin Permissions grant that lets keycloak-mcp act for users.
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.8.2
+    entrypoint: ["/bin/bash", "/grant-delegation.sh"]
+    environment:
+      REALMS: acme
+      ACTOR: keycloak-mcp
+    volumes:
+      - ./init/grant-delegation.sh:/grant-delegation.sh:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
 
   # The enterprise IdP: Keycloak cannot issue ID-JAGs yet (keycloak#48818), so a standard-library Python script does.
   # Its issuer is the public http://localhost:8102; Keycloak fetches the JWKS as http://idp:8102/jwks.
@@ -70,3 +86,5 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
+      keycloak-init:
+        condition: service_completed_successfully

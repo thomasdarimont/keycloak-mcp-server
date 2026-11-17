@@ -9,15 +9,19 @@
             <map>
               <entry key="KC_MCP_SYSTEMS_DEFAULT_URL" value="http://localhost:8098" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM" value="demo" />
-              <entry key="KC_MCP_DELEGATION" value="forward" />
+              <entry key="KC_MCP_DELEGATION" value="exchange" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_GRANT_TYPE" value="client_credentials" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID" value="keycloak-mcp" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET" value="keycloak-mcp-secret" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="demo" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_CONFIRM_FALLBACK" value="deny" />
               <entry key="QUARKUS_HTTP_PORT" value="8099" />
               <entry key="QUARKUS_OIDC_TENANT_ENABLED" value="true" />
-              <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="mcp-admin" />
-              <entry key="QUARKUS_OIDC_RESOURCE_METADATA_SCOPES" value="openid" />
+              <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="keycloak-mcp" />
+              <entry key="QUARKUS_OIDC_RESOURCE_METADATA_SCOPES" value="openid,delegation:client:keycloak-mcp" />
               <entry key="KC_MCP_SPI_CONFIRMER_CIBA_ENABLED" value="true" />
               <entry key="KC_MCP_SPI_CONFIRMER_CIBA_CLIENT_ID" value="mcp-ciba" />
               <entry key="KC_MCP_SPI_CONFIRMER_CIBA_CLIENT_SECRET" value="mcp-ciba-secret" />

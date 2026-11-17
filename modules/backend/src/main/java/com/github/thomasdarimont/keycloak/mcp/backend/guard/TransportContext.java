@@ -14,9 +14,9 @@ import io.quarkiverse.mcp.server.ToolManager.ToolArguments;
  * @param via "direct" or "execute_tool", for the audit log
  * @param caller who acts through the connection; {@link Caller#NONE} until the endpoint
  * authenticates callers
- * @param callerToken the caller's raw access token, or {@code null}; forwarded to
- * Keycloak in delegation mode {@code forward}. Deliberately not part of {@link Caller},
- * which is shown to policies and logs.
+ * @param callerToken the caller's raw access token, or {@code null}; exchanged for a
+ * delegated token in delegation mode {@code exchange}. Deliberately not part of
+ * {@link Caller}, which is shown to policies and logs.
  */
 public record TransportContext(McpConnection connection, Elicitation elicitation, McpLog log, String via, Caller caller,
         String callerToken, EntryBinding binding) {

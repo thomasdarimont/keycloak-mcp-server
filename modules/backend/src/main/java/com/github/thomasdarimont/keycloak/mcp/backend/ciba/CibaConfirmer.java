@@ -253,7 +253,7 @@ public class CibaConfirmer implements Confirmer {
             problems.add(ConfigProblem.error(CALLERS_REQUIRED,
                     "kc-mcp.spi.confirmer.ciba.enabled=true needs authenticated callers, or"
                             + " there is nobody whose device could be asked: set kc-mcp.require-caller=true (with"
-                            + " quarkus.oidc.tenant-enabled=true), kc-mcp.delegation=forward|exchange, or"
+                            + " quarkus.oidc.tenant-enabled=true), kc-mcp.delegation=exchange, or"
                             + " kc-mcp.security-profile=shared"));
         }
         if (givenStore == null && registry != null && registry.extensions(PendingApprovalStore.class).isEmpty()) {

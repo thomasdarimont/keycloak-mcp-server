@@ -2,7 +2,8 @@
 # The CIBA confirmation, step by step. Needs the stack up (docker compose up -d) and the MCP server running with
 # env/ciba.env (see README.md), plus python3, curl and jq.
 #
-#   1. alice logs in to the MCP server; whoami shows her as the caller
+#   1. alice logs in to the MCP server and consents to keycloak-mcp acting on her behalf (the script walks
+#      Keycloak's login and consent pages); whoami shows her as the caller and the delegation
 #   2. alice creates a throw-away user (a write: no confirmation) and asks to delete it (destructive): the first call
 #      files a CIBA request and answers at once with a two-digit number. On her device (the approver, where she is
 #      signed in) the request shows who asks for what and asks for that number: a wrong number is refused, the right
@@ -17,7 +18,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export MCP_URL=${MCP_URL:-http://localhost:8099/mcp}
-KEYCLOAK=${KEYCLOAK_URL:-http://localhost:8098}
+export KEYCLOAK_URL=${KEYCLOAK_URL:-http://localhost:8098}
+KEYCLOAK=$KEYCLOAK_URL
 APPROVER=${APPROVER_URL:-http://localhost:8095}
 
 USERS=
@@ -37,6 +39,9 @@ call() { ./mcp-call.py "$@" || true; }
 # an access token of the approver's client: what the browser session holds after the OIDC login
 device_token() { curl -s -d grant_type=password -d client_id=ciba-approver -d scope=openid -d "username=$1" -d "password=$2" \
   "$KEYCLOAK/realms/demo/protocol/openid-connect/token" | jq -r .access_token; }
+# one login of alice at the MCP server for the whole run, as an MCP client has it
+ALICE=$(./mcp-call.py --login alice:alice-demo --print-token) || true
+[ -n "$ALICE" ] || { echo "alice could not log in at $KEYCLOAK; is the stack up?" >&2; exit 1; }
 ALICE_DEVICE=$(device_token alice alice-demo)
 CAROL_DEVICE=$(device_token carol carol-demo)
 device() { local token=$1; shift; curl -s -H "Authorization: Bearer $token" "$@"; }
@@ -54,7 +59,7 @@ pending() {
 create() {
   # not $RANDOM: process substitutions may reseed it identically and produce the same name twice
   local name="temp-$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8)"
-  local id; id=$(call --login alice:alice-demo keycloak_user_create "{\"username\": \"$name\", \"email\": \"$name@example.com\", \"firstName\": \"Temp\", \"lastName\": \"User\"}" | jq -r '.id')
+  local id; id=$(call --token "$ALICE" keycloak_user_create "{\"username\": \"$name\", \"email\": \"$name@example.com\", \"firstName\": \"Temp\", \"lastName\": \"User\"}" | jq -r '.id')
   echo "$name $id"
 }
 
@@ -67,19 +72,19 @@ if [ -n "$USERS" ]; then
     last=${LAST_NAMES[$(( $(od -An -N2 -tu2 /dev/urandom) % ${#LAST_NAMES[@]} ))]}
     # a random suffix keeps names unique across runs
     name=$(tr 'A-Z' 'a-z' <<<"$first.$last")-$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-4)
-    call --login alice:alice-demo keycloak_user_create "{\"username\": \"$name\", \"email\": \"$name@example.com\", \"firstName\": \"$first\", \"lastName\": \"$last\"}" \
+    call --token "$ALICE" keycloak_user_create "{\"username\": \"$name\", \"email\": \"$name@example.com\", \"firstName\": \"$first\", \"lastName\": \"$last\"}" \
       | jq -c --arg n "$name" '{username: $n, id, error, message} | with_entries(select(.value != null))'
   done
   exit 0
 fi
 
 step "1. alice logs in to the MCP server; whoami"
-call --login alice:alice-demo whoami | jq -c '{caller: .caller.username, delegation, can: .can.demo}'
+call --token "$ALICE" whoami | jq -c '{caller: .caller.username, delegation, can: .can.demo}'
 
 step "2. delete a user: the first call files the request and shows the number, alice's device asks for it"
 read -r NAME ID < <(create)
 echo "created $NAME ($ID); asking to delete it ..."
-FIRST=$(call --login alice:alice-demo keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}")
+FIRST=$(call --token "$ALICE" keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}")
 jq -c '{error, message, approval}' <<<"$FIRST"
 CODE=$(jq -r '.approval.code' <<<"$FIRST")
 echo "alice's device shows:"; pending
@@ -87,13 +92,13 @@ echo "without signing in the device shows nothing:"; curl -s "$APPROVER/pending"
 echo "a wrong number is refused:"; device "$ALICE_DEVICE" -X POST "$APPROVER/approve/latest?code=00" | jq -c .
 echo "the number from the chat ($CODE) approves:"; device "$ALICE_DEVICE" -X POST "$APPROVER/approve/latest?code=$CODE" | jq -c .
 echo "the second call collects the approval and runs:"
-call --login alice:alice-demo keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}" | jq -c .
-call --login alice:alice-demo keycloak_user_search "{\"search\": \"$NAME\", \"exact\": true}" | jq -c '{found: (.items | length)}'
+call --token "$ALICE" keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}" | jq -c .
+call --token "$ALICE" keycloak_user_search "{\"search\": \"$NAME\", \"exact\": true}" | jq -c '{found: (.items | length)}'
 
 step "3. delete another user: alice declines on her device"
 read -r NAME ID < <(create)
 echo "created $NAME ($ID); asking to delete it ..."
-call --login alice:alice-demo keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}" | jq -c '{error, approval: .approval.status}'
+call --token "$ALICE" keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}" | jq -c '{error, approval: .approval.status}'
 echo "alice's device shows:"; pending
 
 step "4. carol's device: none of alice's requests, and she cannot decide them"
@@ -103,11 +108,11 @@ echo "carol trying to approve alice's request $LATEST:"; device "$CAROL_DEVICE" 
 
 echo; echo "back to 3.: alice declines ..."; device "$ALICE_DEVICE" -X POST "$APPROVER/decline/latest" | jq -c .
 echo "the second call:"
-call --login alice:alice-demo keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}" | jq -c '{error, message}'
-call --login alice:alice-demo keycloak_user_search "{\"search\": \"$NAME\", \"exact\": true}" | jq -c '{found: (.items | length)}'
+call --token "$ALICE" keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\"}" | jq -c '{error, message}'
+call --token "$ALICE" keycloak_user_search "{\"search\": \"$NAME\", \"exact\": true}" | jq -c '{found: (.items | length)}'
 
 step "5. confirm: true counts for nothing: a new request reaches the device all the same (declined again)"
-call --login alice:alice-demo keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\", \"confirm\": true}" | jq -c '{error, approval: .approval.status}'
+call --token "$ALICE" keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\", \"confirm\": true}" | jq -c '{error, approval: .approval.status}'
 pending >/dev/null && device "$ALICE_DEVICE" -X POST "$APPROVER/decline/latest" >/dev/null
-call --login alice:alice-demo keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\", \"confirm\": true}" | jq -c '{error, message}'
+call --token "$ALICE" keycloak_user_delete "{\"id\": \"$ID\", \"username\": \"$NAME\", \"confirm\": true}" | jq -c '{error, message}'
 echo; echo "Sign in as alice / alice-demo at $APPROVER/ to see her decisions."

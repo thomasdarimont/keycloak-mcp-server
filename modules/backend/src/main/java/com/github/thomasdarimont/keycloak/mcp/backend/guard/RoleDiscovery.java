@@ -59,8 +59,8 @@ public class RoleDiscovery {
 
     @Inject
     public RoleDiscovery(KeycloakSystems systems, McpServerConfig config, CapabilityDiscovery capabilities) {
-        // in forward mode the caller's token decides per call; the server may not even
-        // have credentials
+        // when delegating, the caller's delegated token decides per call; the server's
+        // own client holds no admin role
         this(systems::names, systems::get, config.roleFilter() && config.delegation() == DelegationMode.OFF);
         this.capabilities = capabilities::get;
     }

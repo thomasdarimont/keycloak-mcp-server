@@ -21,7 +21,7 @@ public enum Explanations {
      */
     USERS,
     /**
-     * {@link #USERS} for callers acting on their own behalf (delegation {@code forward})
+     * {@link #USERS} for callers acting on their own behalf (delegation {@code exchange})
      * whose token holds neither the master admin nor a {@code realm-admin} role,
      * {@link #ADMINS} otherwise.
      */

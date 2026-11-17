@@ -57,12 +57,8 @@ public class CapabilityDiscovery {
 
     @Inject
     public CapabilityDiscovery(KeycloakSystems systems, McpServerConfig config) {
-        // in forward mode the server's own credentials are not meant to be used: only a
-        // configured version counts
-        // the server's own credentials read the server info whenever it has some: in
-        // forward delegation they
-        // are optional, in exchange mode the actor client has no admin role and the read
-        // fails quietly
+        // the server's own credentials read the server info: in exchange mode the actor
+        // client has no admin role and the read fails quietly
         this(systems::names, name -> {
             KeycloakAdmin admin = systems.get(name);
             return load(admin, config.delegation() == DelegationMode.OFF || admin.system().hasCredentials());

@@ -39,7 +39,8 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      KC_FEATURES: identity-brokering-api:v2
+      # token exchange delegation (the user login of the MCP instance) needs parameterized scopes, both preview
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
     ports:
       - "127.0.0.1:8093:8080"
@@ -109,8 +110,9 @@ services:
       postgres:
         condition: service_healthy
 
-  # Public ingress: the MCP endpoint only, people log in, calls run with their own token. Reads the configuration,
-  # cannot change it.
+  # Public ingress: the MCP endpoint only. People log in and consent to the system's client acting on their behalf;
+  # calls run with the delegated token Keycloak exchanges theirs for (sub = the user, act = keycloak-mcp-server).
+  # Reads the configuration, cannot change it.
   mcp:
     build:
       context: ../..
@@ -131,11 +133,12 @@ services:
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
       KC_MCP_TOOL_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
-      KC_MCP_DELEGATION: forward
+      # the system's client (registered on the admin instance, key read from the database) is the actor
+      KC_MCP_DELEGATION: exchange
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       QUARKUS_OIDC_TENANT_ENABLED: "true"
-      # only tokens minted for the MCP server (audience mapper on mcp-consumer)
+      # only tokens minted for the MCP server (audience mapper on mcp-consumer, and the delegation scope)
       QUARKUS_OIDC_TOKEN_AUDIENCE: keycloak-mcp-server
     ports:
       - "8095:8081"

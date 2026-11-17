@@ -2,8 +2,9 @@
 # The whole flow. Needs the stack up (docker compose up -d --build), curl, jq and python3.
 #
 #   1. register the system "acme" on the admin instance (admin API -> PostgreSQL as the writer, key generated there)
-#   2. the keycloak-mcp-server client in Keycloak's master realm, JWKS URL on the admin instance
-#   3. the realm acme-dev with the public mcp-consumer client and the demo users
+#   2. the realm acme-dev with the public mcp-consumer client and the demo users
+#   3. the keycloak-mcp-server client in that realm, JWKS URL on the admin instance, allowed to act for the realm's
+#      users who consent to it (the actor of the MCP instance's delegated tokens); keycloak-mcp-admin in master
 #   4. call tools as users on the MCP instance, which reads the system the admin instance stored
 #   5. what each side cannot do: no admin API on the MCP instance, no MCP endpoint on the admin instance,
 #      no admin API with an MCP token, no writes with the MCP instance's database user
@@ -14,7 +15,7 @@ MCP=http://localhost:8095
 ADMIN_INTERNAL=http://admin:8081                   # how Keycloak reaches the admin instance inside the compose network
 ADMIN_TOKEN=${KC_MCP_ADMIN_TOKEN:-demo-admin-token}
 KCADM="docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh"
-SHARED=../dynamic-systems                          # realm, server client and mcp-call.py of the dynamic-systems example
+SHARED=../dynamic-systems                          # realm, server client, delegation grant and mcp-call.py of the dynamic-systems example
 export KEYCLOAK_URL=http://localhost:8093          # for mcp-call.py --login
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
@@ -34,8 +35,8 @@ SYSTEM=$(admin -X PUT "$ADMIN/admin/systems/acme" -d @- <<'JSON'
 {
   "displayName": "ACME Corp.",
   "url": "http://keycloak:8080",
-  "issuer": "http://localhost:8093/realms/master",
-  "authRealm": "master",
+  "issuer": "http://localhost:8093/realms/acme-dev",
+  "authRealm": "acme-dev",
   "clientId": "keycloak-mcp-server",
   "clientAuth": "private_key_jwt",
   "defaultRealm": "acme-dev",
@@ -53,17 +54,31 @@ echo "$SYSTEM" | jq -c '{alias, source, signingKey: .signingKey.kid}'
 JWKS_URL="$ADMIN_INTERNAL$(echo "$SYSTEM" | jq -r .signingKey.jwksPath)"
 echo "JWKS for Keycloak: $JWKS_URL (served by the admin instance; the MCP instance signs with the same key)"
 
-step "2. the keycloak-mcp-server client in the master realm (Signed JWT, that JWKS URL) and keycloak-mcp-admin"
+step "2. the realm acme-dev: public client mcp-consumer (consent required, audience keycloak-mcp-server), demo users"
 $KCADM config credentials --server http://localhost:8080 --realm master --user admin --password admin >/dev/null
-CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-server --fields id --format csv --noquotes | head -1 || true)
+if $KCADM get realms/acme-dev >/dev/null 2>&1; then
+  echo "realm acme-dev exists"
+else
+  $KCADM create realms -f - < "$SHARED/realms/acme-dev.json"
+  echo "created realm acme-dev (alice = admin, sam = support, dave = developer, bob = disabled)"
+fi
+
+step "3. the keycloak-mcp-server client in the realm acme-dev (Signed JWT, that JWKS URL) and keycloak-mcp-admin in master"
+CLIENT_ID=$($KCADM get clients -r acme-dev -q clientId=keycloak-mcp-server --fields id --format csv --noquotes | head -1 || true)
 if [ -z "$CLIENT_ID" ]; then
-  sed "s#\${MCP_JWKS_URL}#$JWKS_URL#" "$SHARED/clients/keycloak-mcp-server.json" | $KCADM create clients -r master -f - >/dev/null
-  CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-server --fields id --format csv --noquotes | head -1)
+  sed "s#\${MCP_JWKS_URL}#$JWKS_URL#" "$SHARED/clients/keycloak-mcp-server.json" | $KCADM create clients -r acme-dev -f - >/dev/null
+  CLIENT_ID=$($KCADM get clients -r acme-dev -q clientId=keycloak-mcp-server --fields id --format csv --noquotes | head -1)
   echo "created client keycloak-mcp-server"
 fi
-$KCADM add-roles -r master --uusername service-account-keycloak-mcp-server --rolename admin
-$KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
-  | $KCADM create "clients/$CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
+# the service account holds realm-admin of acme-dev, and the role is in the client's scope: that scope is also what
+# caps the delegated tokens the MCP instance acts with
+$KCADM add-roles -r acme-dev --uusername service-account-keycloak-mcp-server --cclientid realm-management --rolename realm-admin
+REALM_MGMT_ID=$($KCADM get clients -r acme-dev -q clientId=realm-management --fields id --format csv --noquotes | head -1)
+$KCADM get "clients/$REALM_MGMT_ID/roles/realm-admin" -r acme-dev --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
+  | $KCADM create "clients/$CLIENT_ID/scope-mappings/clients/$REALM_MGMT_ID" -r acme-dev -f - >/dev/null
+# the Admin Permissions grant that lets the client act for the realm's users who consent to it
+docker compose exec -T -e REALMS=acme-dev -e ACTOR=keycloak-mcp-server -e KEYCLOAK=http://localhost:8080 \
+  keycloak bash -s < "$SHARED/init/grant-delegation.sh" | grep '^\['
 ADMIN_CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-admin --fields id --format csv --noquotes | head -1 || true)
 if [ -z "$ADMIN_CLIENT_ID" ]; then
   $KCADM create clients -r master -f - < clients/keycloak-mcp-admin.json >/dev/null
@@ -76,14 +91,6 @@ ADMIN_AT=$(curl -s "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
 echo "admin API with a master admin's token: HTTP $(status -H "Authorization: Bearer $ADMIN_AT" "$ADMIN/admin/systems")"
 
-step "3. the realm acme-dev: public client mcp-consumer (audience keycloak-mcp-server), demo users"
-if $KCADM get realms/acme-dev >/dev/null 2>&1; then
-  echo "realm acme-dev exists"
-else
-  $KCADM create realms -f - < "$SHARED/realms/acme-dev.json"
-  echo "created realm acme-dev (alice = admin, sam = support, dave = developer, bob = disabled)"
-fi
-
 step "4. tools on the MCP instance: it knows 'acme' only from the database, as the reader"
 U=$MCP/mcp/systems/acme/acme-dev
 # the MCP instance reads the systems again every kc-mcp.spi.system-repository.db.cache-seconds (10)
@@ -91,7 +98,8 @@ for _ in $(seq 1 15); do
   "$SHARED/mcp-call.py" --login alice:alice-demo "$U" whoami 2>/dev/null | jq -e .system >/dev/null 2>&1 && break
   echo "(the MCP instance does not know 'acme' yet, waiting for its cache)"; sleep 2
 done
-"$SHARED/mcp-call.py" --login alice:alice-demo "$U" whoami | jq -c '{caller: .caller.username, system, keycloakCallsRunAs}'
+export MCP_CALL_QUIET=1                             # the login steps (form, consent page) are not printed
+"$SHARED/mcp-call.py" --login alice:alice-demo "$U" whoami | jq -c '{caller: .caller.username, system, keycloakCallsRunAs, delegation}'
 "$SHARED/mcp-call.py" --login sam:sam-demo "$U" keycloak_user_search '{"search": "bob"}' | jq -c '[.items[]?.username] // .'
 "$SHARED/mcp-call.py" --login sam:sam-demo "$U" keycloak_user_set_enabled '{"id": "bob", "enabled": true}' | jq -c '{error}'
 
@@ -103,8 +111,7 @@ step "5b. the MCP endpoint on the admin instance"
 echo "POST $ADMIN/mcp/systems/acme/acme-dev: HTTP $(status -X POST -H 'Content-Type: application/json' -d '{}' "$ADMIN/mcp/systems/acme/acme-dev")"
 
 step "5c. the admin API with a token issued for the MCP endpoint (alice, realm admin of acme-dev)"
-MCP_AT=$(curl -s "$KEYCLOAK_URL/realms/acme-dev/protocol/openid-connect/token" \
-  -d 'grant_type=password&client_id=mcp-consumer&username=alice&password=alice-demo' | jq -r .access_token)
+MCP_AT=$("$SHARED/mcp-call.py" --login alice:alice-demo@acme-dev --print-token)
 echo "GET $ADMIN/admin/systems: HTTP $(status -H "Authorization: Bearer $MCP_AT" "$ADMIN/admin/systems")"
 MASTER_MCP_AT=$(curl -s "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' | jq -r .access_token)

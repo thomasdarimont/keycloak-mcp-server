@@ -103,6 +103,32 @@ class ExchangeIT {
     }
 
     @Test
+    void viewerIsToldUpFrontWhatSheMayDo() {
+        McpClient carol = delegating("carol");
+        JsonObject search = McpClient
+            .text(carol.callTool("search_tools", new JsonObject().put("query", "disable user")));
+        JsonObject disable = search.getJsonArray("tools")
+            .stream()
+            .map(t -> (JsonObject) t)
+            .filter(t -> t.getString("name").equals("keycloak_user_set_enabled"))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(false, disable.getBoolean("allowed"), disable.encode());
+        assertTrue(disable.getJsonArray("missingRoles").contains("manage-users"), disable.encode());
+        assertTrue(search.getString("hint").contains("whoami"), search.encode());
+
+        JsonObject me = McpClient.text(carol.callTool("whoami", new JsonObject().put("language", "de")));
+        assertEquals("carol", me.getJsonObject("caller").getString("username"), me.encode());
+        JsonArray roles = me.getJsonObject("roles").getJsonArray("demo");
+        assertTrue(roles.stream().map(r -> ((JsonObject) r).getString("label")).toList().contains("Benutzer anzeigen"),
+                me.encode());
+        JsonObject can = me.getJsonObject("can").getJsonObject("demo");
+        assertEquals("view", can.getString("users"), me.encode());
+        assertEquals("none", can.getString("clients"), me.encode());
+        assertTrue(me.getJsonObject("tools").getInteger("forbidden") > 0, me.encode());
+    }
+
+    @Test
     void withoutConsentTheExchangeFailsAndSaysWhy() {
         McpClient alice = as("alice", "openid");
         JsonObject me = McpClient.text(alice.callTool("whoami", new JsonObject()));

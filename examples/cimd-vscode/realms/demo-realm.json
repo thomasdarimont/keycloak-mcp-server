@@ -6,11 +6,42 @@
   "loginWithEmailAllowed": true,
   "resetPasswordAllowed": true,
   "bruteForceProtected": true,
+  "adminPermissionsEnabled": true,
   "eventsEnabled": true,
   "adminEventsEnabled": true,
   "adminEventsDetailsEnabled": true,
   "accessTokenLifespan": 1800,
-  "clients": [],
+  "clients": [
+    {
+      "clientId": "keycloak-mcp",
+      "name": "keycloak-mcp (the MCP server, actor)",
+      "description": "The MCP server's own client: a service account without any admin role, allowed to perform token exchange. Users consent to it acting on their behalf; its role scope (clientScopeMappings) caps what a delegated token may carry, whoever the user is.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "keycloak-mcp-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": ["acr", "basic", "roles", "profile", "kc-admin-api", "service_account"],
+      "optionalClientScopes": []
+    }
+  ],
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "keycloak-mcp",
+        "roles": ["realm-admin"]
+      }
+    ]
+  },
   "groups": [
     {
       "name": "mcp-admins",

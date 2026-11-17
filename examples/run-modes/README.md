@@ -30,7 +30,7 @@ docker compose logs mcp | grep 'tools registered'    # shows version, build time
 After changing the server, run `./mvnw package` and `up --build` again; without `--build` compose reuses the
 previous image. With `quarkus:dev` on the host nothing is needed.
 
-Point your MCP client at `http://localhost:8081/mcp` (LM Studio: copy `mcp.json`; with `env/user-forward.env` copy
+Point your MCP client at `http://localhost:8081/mcp` (LM Studio: copy `mcp.json`; with `env/user-login.env` copy
 `mcp-oauth.json` instead, see below). IntelliJ: `.run/` holds one `quarkus:dev` run configuration per env file and the
 demo stack, next to the configurations of the other examples (regenerate all with `examples/gen-run-configs.sh` after
 editing an env file).
@@ -61,7 +61,8 @@ An existing stack keeps its old realm: after changes to `realms/demo-realm.json`
 | `env/read-only.env` | reads only, lazy exposure (just `search_tools` / `execute_tool`) |
 | `env/multi-system.env` | two systems `prod` and `staging` (both this Keycloak) to show the `system` argument |
 | `env/private-key-jwt.env` | client authentication with a signed JWT instead of a secret; see below |
-| `env/user-forward.env` | the user logs in through the browser and every call runs with *their* token; see below |
+| `env/user-login.env` | the user logs in through the browser and every call runs with *their* roles, through a delegated token; see below |
+| `env/shared.env` | the same under the `shared` security profile; see below |
 
 ## private_key_jwt demo
 
@@ -79,17 +80,27 @@ assertion and issues the service-account token. The assertion's `kid` equals the
 thumbprint), so key rotation is a matter of swapping the PEM and restarting. Compose runs the same setup with
 `KC_MCP_ENV_FILE=env/private-key-jwt.env docker compose --profile mcp up -d --build` (the key is mounted at `/keys`).
 
-## User login demo (`env/user-forward.env`)
+## User login demo (`env/user-login.env`)
 
-The server holds no admin credentials. The MCP endpoint answers anonymous requests with a `401` and
+The MCP endpoint answers anonymous requests with a `401` and
 `WWW-Authenticate: Bearer resource_metadata="http://localhost:8081/.well-known/oauth-protected-resource"`; LM Studio
 follows that, logs the user in at Keycloak as the public client `mcp-consumer` (authorization code + PKCE) and sends
-the user's access token. The server forwards that token to the Admin API, so Keycloak enforces the user's own
-`realm-management` roles and the audit line names the human.
+the user's access token. That token only opens the MCP server. For the Admin API the server exchanges it at Keycloak
+for a delegated token (`KC_MCP_DELEGATION=exchange`, Keycloak's token exchange delegation, preview in 26.8): `sub` is
+the user, `act` the server's client `keycloak-mcp`. So Keycloak enforces the user's own `realm-management` roles, its
+events name both, and the audit line names the human. The server's client holds no admin role; without a user's
+token its credentials reach nothing. The user's own token is never sent to the Admin API: the MCP specification
+forbids passing it through.
+
+What this needs in Keycloak is in the realm file and the compose file: the features `token-exchange-delegation` and
+`parameterized-scopes`, consent on `mcp-consumer` (the login shows a page asking whether `keycloak-mcp` may act on
+the user's behalf, every session), the client `keycloak-mcp` with *Standard Token Exchange*, and the Admin
+Permissions grant that the `keycloak-init` job creates. [delegated-auth](../delegated-auth/) explains each of them
+and shows a client whose role scope narrows what a delegated token may carry; here it lets `realm-admin` through.
 
 ```shell
 cd examples/run-modes && docker compose up -d && cd ..                 # Keycloak must be up before the server starts
-set -a; source examples/run-modes/env/user-forward.env; set +a
+set -a; source examples/run-modes/env/user-login.env; set +a
 ./mvnw quarkus:dev -pl modules/backend -am
 curl -i http://localhost:8081/mcp                           # 401 + WWW-Authenticate … resource_metadata=…
 curl http://localhost:8081/.well-known/oauth-protected-resource
@@ -113,11 +124,11 @@ see the startup check list what is missing.
 (`language: de` gives German ones) and a per-area summary such as `users: view, clients: none`.
 To switch users, remove the server in LM Studio and add it again, or log the user out in the Keycloak account
 console. Other MCP clients need their own callback added to `mcp-consumer`'s redirect URIs (Keycloak allows `*`
-only at the end of a URI). A token obtained for `demo-app` is rejected with `401` because it lacks `aud=mcp-admin`.
+only at the end of a URI). A token obtained for `demo-app` is rejected with `401` because it lacks `aud=keycloak-mcp`.
 
-`mcp-consumer` has direct access grants off, so a script cannot fetch a user token with a password grant. For scripted
-checks (curl, `examples/dynamic-systems/mcp-call.py --login alice:alice-demo@demo`), switch them on for the running stack
-only: `kcadm.sh update clients/<id> -r demo -s directAccessGrantsEnabled=true`. `docker compose down -v` forgets it.
+`mcp-consumer` asks for consent, so a script cannot fetch a user token with a password grant. For scripted checks
+`./mcp-call.py --login alice:alice-demo whoami` walks the browser flow instead (login form, consent page, code with
+PKCE) and calls the tool with the token; `--show-tokens` prints the user's, the client's and the delegated token.
 
 ## MCP prompts
 
@@ -129,7 +140,7 @@ not, fetch the rendered text and paste it into the chat:
 ```shell
 examples/run-modes/prompt.sh                                                       # list prompts and arguments
 examples/run-modes/prompt.sh keycloak_onboard_user realm=demo username=nina email=nina@example.com groups=/devs
-MCP_TOKEN=<access token> examples/run-modes/prompt.sh ...                          # with env/user-forward.env
+MCP_TOKEN=<access token> examples/run-modes/prompt.sh ...                          # with env/user-login.env
 ```
 
 ## Prompts to try
@@ -147,8 +158,8 @@ MCP_TOKEN=<access token> examples/run-modes/prompt.sh ...                       
 11. With `realm-manager.env`: "Delete user dave" (denied), "Create a client" (tool not visible),
     "Give carol the admin role" (escalation refused).
 12. With `other` realm: "List users in realm other" (realm_not_allowed).
-13. With `user-forward.env` as carol: "Which users are in the demo realm?" (works), "Disable dave" (forbidden, her
-    token lacks `manage-users`); as alice the same prompt succeeds and the audit log shows `caller=alice`.
+13. With `user-login.env` as carol: "Which users are in the demo realm?" (works), "Disable dave" (forbidden, she
+    lacks `manage-users`); as alice the same prompt succeeds and the audit log shows `caller=alice`.
 14. "What would alice's access token for demo-app contain with the offline_access scope?" / "...her ID token" /
     "...the userinfo response" (the admin console's *Evaluate* tab; unsigned examples), then "Which mappers and
     realm roles does demo-app get?".

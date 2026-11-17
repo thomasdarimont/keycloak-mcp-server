@@ -138,7 +138,7 @@ shell "delegated-auth: stack up (Keycloak :8096 + delegation grant)" "delegated-
 shell "delegated-auth: demo.sh" "delegated-auth-demo" "examples/delegated-auth" "./demo.sh"
 shell "delegated-auth: down -v" "delegated-auth-down" "examples/delegated-auth" "docker compose down -v"
 
-# --- xaa: dev mode forwarding the tokens Keycloak issues for ID-JAGs (Keycloak :8101, stand-in IdP :8102), the demo
+# --- xaa: dev mode exchanging the tokens Keycloak issues for ID-JAGs (Keycloak :8101, stand-in IdP :8102), the demo
 for f in examples/xaa/env/*.env; do
   name=$(basename "$f" .env)
   maven_dev "quarkus:dev ($name: xaa stack on :8101, IdP :8102, MCP :8103)" "dev-$name" < "$f"

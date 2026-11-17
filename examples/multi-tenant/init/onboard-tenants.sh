@@ -1,7 +1,9 @@
 #!/bin/bash
 # What a SaaS onboarding job does per tenant: a confidential client for the MCP server in the tenant's master
 # realm, authenticating with a Signed JWT whose public key Keycloak fetches from the MCP server, and the
-# admin roles of every realm the tenant owns on the client's service account. Idempotent.
+# admin roles of every realm the tenant owns on the client's service account. The tenant's realms carry the same
+# client (same id, same JWKS URL, no admin roles; see realms/*.json) for the user login: there the job grants it
+# the Admin Permission "Users / delegate", which lets it act on behalf of the realm's users. Idempotent.
 set -euo pipefail
 KC=/opt/keycloak/bin/kcadm.sh
 $KC config credentials --server http://keycloak:8080 --realm master --user admin --password admin
@@ -33,6 +35,8 @@ onboard() {
       | $KC create "clients/$id/scope-mappings/clients/$realm_client" -r master -f - >/dev/null
     echo "  $client administers $realm"
   done
+  # user login: the client of the same name in each of the tenant's realms may act for that realm's users
+  REALMS="$*" ACTOR="$client" KEYCLOAK=http://keycloak:8080 /bin/bash /grant-delegation.sh
 }
 
 onboard tenant-a realm-a-1 realm-a-2

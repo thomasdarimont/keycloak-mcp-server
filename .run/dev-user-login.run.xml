@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="quarkus:dev (user-forward)" type="MavenRunConfiguration" factoryName="Maven">
+  <configuration default="false" name="quarkus:dev (user-login)" type="MavenRunConfiguration" factoryName="Maven">
     <MavenSettings>
       <option name="myGeneralSettings" />
       <option name="myRunnerSettings">
@@ -9,12 +9,17 @@
             <map>
               <entry key="KC_MCP_SYSTEMS_DEFAULT_URL" value="http://localhost:8080" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM" value="demo" />
-              <entry key="KC_MCP_DELEGATION" value="forward" />
+              <entry key="KC_MCP_DELEGATION" value="exchange" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_GRANT_TYPE" value="client_credentials" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID" value="keycloak-mcp" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET" value="keycloak-mcp-secret" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="demo" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
               <entry key="QUARKUS_OIDC_TENANT_ENABLED" value="true" />
-              <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="mcp-admin" />
+              <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="keycloak-mcp" />
+              <entry key="QUARKUS_OIDC_RESOURCE_METADATA_SCOPES" value="openid,delegation:client:keycloak-mcp" />
               <entry key="KC_MCP_MODEL_CONFIRMATION_TRUSTED_ROLES" value="realm-management.realm-admin" />
             </map>
           </option>

@@ -35,7 +35,7 @@ KEYCLOAK = os.environ.get("KEYCLOAK_URL", "http://localhost:8096")
 MCP_URL = os.environ.get("MCP_URL", "http://localhost:8097/mcp")
 REALM = os.environ.get("REALM", "demo")
 CLIENT = "mcp-consumer"
-REDIRECT = "http://localhost:9999/callback"       # registered on mcp-consumer; nothing listens there, the code is read from the redirect
+REDIRECT = os.environ.get("REDIRECT_URI", "http://localhost:9999/callback")       # registered on mcp-consumer; nothing listens there, the code is read from the redirect
 DELEGATION_SCOPE = "openid delegation:client:keycloak-mcp"
 ACTOR = os.environ.get("ACTOR_CLIENT_ID", "keycloak-mcp")
 ACTOR_SECRET = os.environ.get("ACTOR_CLIENT_SECRET", "keycloak-mcp-secret")
@@ -150,6 +150,8 @@ def login(username, password, scope):
             target = KEYCLOAK + target
         if 'name="username"' in html:
             status, html, headers = send(target, {"username": username, "password": password, "credentialId": ""})
+        elif 'name="password"' in html:                                    # username first, then the password page
+            status, html, headers = send(target, {"password": password, "credentialId": ""})
         elif 'name="accept"' in html:
             asked = re.findall(r"<li>\s*<span>\s*([^<]+?)\s*</span>", html)
             print("consent page: " + "; ".join(asked), file=sys.stderr)

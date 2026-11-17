@@ -2,6 +2,7 @@
   "realm": "demo",
   "displayName": "Step-up with a passkey demo",
   "enabled": true,
+  "adminPermissionsEnabled": true,
   "eventsEnabled": true,
   "eventsExpiration": 2592000,
   "adminEventsEnabled": true,
@@ -184,20 +185,23 @@
     {
       "clientId": "mcp-consumer",
       "optionalClientScopes": [
+        "delegation:client",
         "offline_access"
       ],
       "name": "MCP consumer (LLM client)",
-      "description": "Public PKCE client that MCP clients log the user in with; its tokens carry aud=mcp-admin for the MCP server. Direct access grants are on for demo.sh only.",
+      "description": "Public PKCE client that MCP clients log the user in with; its tokens open the MCP server only (aud=keycloak-mcp). Consent required: Keycloak asks the user whether keycloak-mcp may act on their behalf.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
+      "consentRequired": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": true,
       "redirectUris": [
         "http://127.0.0.1:33389/mcp-oauth-callback",
+        "http://localhost:9999/*",
         "http://localhost/callback",
         "http://localhost/oauth/callback",
         "http://127.0.0.1/",
@@ -212,8 +216,7 @@
         "roles",
         "profile",
         "basic",
-        "email",
-        "kc-admin-api"
+        "email"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
@@ -226,7 +229,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.custom.audience": "mcp-admin",
+            "included.client.audience": "keycloak-mcp",
             "access.token.claim": "true",
             "id.token.claim": "false",
             "introspection.token.claim": "true"
@@ -264,6 +267,35 @@
         "display.on.consent.screen": "true",
         "consent.screen.text": "Confirm sensitive actions you asked for through the Keycloak MCP server"
       }
+    },
+    {
+      "clientId": "keycloak-mcp",
+      "name": "keycloak-mcp (the MCP server, actor)",
+      "description": "The MCP server's own client: a service account without any admin role, allowed to perform token exchange. Users consent to it acting on their behalf; its role scope (clientScopeMappings) caps what a delegated token may carry, whoever the user is.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "keycloak-mcp-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": ["acr", "basic", "roles", "profile", "kc-admin-api", "service_account"],
+      "optionalClientScopes": []
     }
-  ]
+  ],
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "keycloak-mcp",
+        "roles": ["realm-admin"]
+      }
+    ]
+  }
 }

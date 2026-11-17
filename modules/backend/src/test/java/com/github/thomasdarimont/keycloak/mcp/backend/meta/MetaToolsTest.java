@@ -166,7 +166,7 @@ class MetaToolsTest {
             .isError());
     }
 
-    // ---- caller awareness (delegation forward)
+    // ---- caller awareness (delegated calls)
     // ------------------------------------------------------------------
 
     /** Fixtures carry no role requirements; these do. */
@@ -206,12 +206,12 @@ class MetaToolsTest {
                 "demo", 50, List.of());
     }
 
-    private static MetaTools forward(ToolCatalog catalog) {
+    private static MetaTools delegating(ToolCatalog catalog) {
         AccessPolicy policy = new AccessPolicy(false, List.of());
         Confirmer confirmer = req -> Decision.CONFIRMED;
         return new MetaTools(catalog, policy,
-                new ToolInvoker(catalog, policy, confirmer, 50, null, DelegationMode.FORWARD), new ProgressiveState(),
-                5, DelegationMode.FORWARD);
+                new ToolInvoker(catalog, policy, confirmer, 50, null, DelegationMode.EXCHANGE), new ProgressiveState(),
+                5, DelegationMode.EXCHANGE);
     }
 
     private static String token(String... realmManagementRoles) {
@@ -235,7 +235,7 @@ class MetaToolsTest {
 
     @Test
     void searchMarksToolsTheCallerMayNotUse() {
-        Map<String, Object> p = payload(forward(roleCatalog()).search("disable user", null, 5, "c1",
+        Map<String, Object> p = payload(delegating(roleCatalog()).search("disable user", null, 5, "c1",
                 ExposureMode.HYBRID, caller(token("view-users"))));
         List<?> tools = (List<?>) p.get("tools");
         Map<?, ?> disable = tools.stream()
@@ -254,11 +254,11 @@ class MetaToolsTest {
         assertTrue(String.valueOf(p.get("hint")).contains("allowed=false"), String.valueOf(p.get("hint")));
 
         // an admin sees no marks, and so does an anonymous session (nothing to judge by)
-        Map<String, Object> admin = payload(forward(roleCatalog()).search("disable user", null, 5, "c1",
+        Map<String, Object> admin = payload(delegating(roleCatalog()).search("disable user", null, 5, "c1",
                 ExposureMode.HYBRID, caller(token("realm-admin"))));
         assertTrue(((List<?>) admin.get("tools")).stream().noneMatch(t -> ((Map<?, ?>) t).containsKey("allowed")));
         assertEquals(MetaTools.HINT, admin.get("hint"));
-        Map<String, Object> anon = payload(forward(roleCatalog()).search("disable user", null, 5, "c1",
+        Map<String, Object> anon = payload(delegating(roleCatalog()).search("disable user", null, 5, "c1",
                 ExposureMode.HYBRID, TransportContext.none()));
         assertTrue(((List<?>) anon.get("tools")).stream().noneMatch(t -> ((Map<?, ?>) t).containsKey("allowed")));
     }
@@ -266,7 +266,7 @@ class MetaToolsTest {
     @Test
     void whoamiExplainsTheCallersRoles() {
         Map<String, Object> p = payload(
-                forward(roleCatalog()).whoami(null, null, caller(token("view-users", "view-events"))));
+                delegating(roleCatalog()).whoami(null, null, caller(token("view-users", "view-events"))));
         Map<?, ?> who = (Map<?, ?>) p.get("caller");
         assertEquals("demoreadonly", who.get("username"));
         assertEquals("demo", who.get("realm"));
@@ -289,13 +289,14 @@ class MetaToolsTest {
 
     @Test
     void whoamiTranslatesRoleLabels() {
-        Map<String, Object> de = payload(forward(roleCatalog()).whoami("de-DE", null, caller(token("manage-users"))));
+        Map<String, Object> de = payload(
+                delegating(roleCatalog()).whoami("de-DE", null, caller(token("manage-users"))));
         List<?> demo = (List<?>) ((Map<?, ?>) de.get("roles")).get("demo");
         assertEquals("Benutzer verwalten", ((Map<?, ?>) demo.getFirst()).get("label"));
         assertEquals("de", de.get("labelLanguage"));
         assertEquals("manage", ((Map<?, ?>) ((Map<?, ?>) de.get("can")).get("demo")).get("users"));
         // unsupported languages fall back to English, and say so
-        Map<String, Object> fr = payload(forward(roleCatalog()).whoami("fr", null, caller(token("manage-users"))));
+        Map<String, Object> fr = payload(delegating(roleCatalog()).whoami("fr", null, caller(token("manage-users"))));
         assertEquals("Manage users",
                 ((Map<?, ?>) ((List<?>) ((Map<?, ?>) fr.get("roles")).get("demo")).getFirst()).get("label"));
         assertEquals("en", fr.get("labelLanguage"));
@@ -303,12 +304,12 @@ class MetaToolsTest {
 
     @Test
     void whoamiForSuperAdminsAndTheRoleless() {
-        Map<String, Object> none = payload(forward(roleCatalog()).whoami(null, null, caller(token())));
+        Map<String, Object> none = payload(delegating(roleCatalog()).whoami(null, null, caller(token())));
         assertEquals("unknown", none.get("roles"));
         assertTrue(String.valueOf(none.get("hint")).contains("no realm-management roles"));
         assertEquals(3, ((Map<?, ?>) none.get("tools")).get("allowed"));
 
-        Map<String, Object> anon = payload(forward(roleCatalog()).whoami(null, null, TransportContext.none()));
+        Map<String, Object> anon = payload(delegating(roleCatalog()).whoami(null, null, TransportContext.none()));
         assertEquals("anonymous", anon.get("caller"));
         assertTrue(String.valueOf(anon.get("keycloakCallsRunAs")).contains("service account"));
 

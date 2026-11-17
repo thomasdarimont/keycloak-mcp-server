@@ -3,7 +3,7 @@
 # host.docker.internal:9080.
 #
 #   docker compose up -d          # start (the realm is imported once; `docker compose down -v` resets everything)
-#   ./setup.sh                    # then: master realm clients and user, the server's key and configuration
+#   ./setup.sh                    # then: master realm clients and user, the delegation grants, the server's key
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2
@@ -14,6 +14,8 @@ services:
       KC_HOSTNAME: http://localhost:8080
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      # the delegated tokens: token exchange delegation needs parameterized scopes (both preview in 26.8)
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes
       KC_LOG_LEVEL: info
     volumes:
       - ./realms:/opt/keycloak/data/import:ro

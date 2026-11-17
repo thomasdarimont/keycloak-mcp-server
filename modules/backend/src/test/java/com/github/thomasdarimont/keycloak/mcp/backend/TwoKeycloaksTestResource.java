@@ -17,12 +17,17 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 /**
- * The forward setup with a second, independent Keycloak as the system {@code other}: its
- * own keys, no demo realm; its {@code admin} logs in at the master realm through a public
+ * The caller setup in delegation mode {@code exchange} with a second, independent
+ * Keycloak as the system {@code other}: its own keys, no demo realm. Neither Keycloak is
+ * set up for delegation: a token that may be used at a system gets as far as that
+ * Keycloak's token exchange and is refused there ({@code delegation_failed}), one that
+ * may not is refused by the server before anything is sent
+ * ({@code caller_foreign_system}). Delegated calls that succeed: {@link ExchangeIT}. The
+ * second Keycloak has its {@code admin} logs in at the master realm through a public
  * client {@code mcp-consumer} shaped like the first Keycloak's (audience
  * {@code mcp-admin}, the {@code kc-admin-api} scope).
  */
-public class TwoKeycloaksTestResource extends ForwardTestResource {
+public class TwoKeycloaksTestResource extends CallerTestResource {
 
     static String otherBase;
 
@@ -119,6 +124,12 @@ public class TwoKeycloaksTestResource extends ForwardTestResource {
         // default system is the second:
         // what the tenant verifies must not count as the second system's own issuer
         config.put("kc-mcp.default-system", "other");
+        config.put("kc-mcp.delegation", "exchange");
+        config.put("kc-mcp.require-caller", "false");
+        // an actor the second Keycloak does not know: the exchange is refused there
+        config.put("kc-mcp.systems.other.client-id", "mcp-server");
+        config.put("kc-mcp.systems.other.client-secret", "unknown-there");
+        config.put("kc-mcp.systems.other.grant-type", "client_credentials");
         config.put("kc-mcp.startup-check", "warn");
         // systems registered through the admin API (alice, realm-admin of the first
         // Keycloak's demo realm, may use it) live in an embedded database

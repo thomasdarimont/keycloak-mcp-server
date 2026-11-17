@@ -108,7 +108,7 @@ the database connection.
 | `kc-mcp.spi.audit-listener.db.retention-days` |                        | delete audit rows older than this (startup, then hourly); unset keeps all |
 | `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` | `3600`    | how long a rotated-away key stays in the JWKS; then its private key is deleted (hourly purge) |
 | `kc-mcp.spi.audit-scrubber.pii.mode` | `keep`                  | `keep`, `pseudonymize`, `drop`; `args` argument names, `targets` listeners (default `db`) |
-| `kc-mcp.delegation`             | `off`                       | `forward`: calls run with the caller's token; `exchange`: with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); both need `quarkus.oidc.tenant-enabled=true` |
+| `kc-mcp.delegation`             | `off`                       | `exchange`: calls run with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); needs `quarkus.oidc.tenant-enabled=true`. The caller's own token is never sent to the Admin API ([Security](security.md#callers)) |
 | `kc-mcp.admin-api-scope`        | `kc-admin-api`              | scope requested with Admin API tokens and advertised to MCP clients (Keycloak 26.8.2+ audience check); dropped on `invalid_scope`; blank: none |
 | `kc-mcp.dns-rebinding-protection` | `auto`                    | `auto` (on while anonymous), `on`, `off`: `Host`/`Origin` of MCP requests must be localhost or in `kc-mcp.dns-rebinding-allowed-hosts` |
 | `kc-mcp.dev-mode`               | `false`                     | what `bin/kcmcp.sh start-dev` sets; see [Development mode](#development-mode-start-dev) |
@@ -121,7 +121,7 @@ the database connection.
 | `kc-mcp.model-confirmation`     | `auto`                      | guidance to the model about destructive tools: `ask`, `server`, `auto` ([Guardrails](security.md#guardrails)) |
 | `kc-mcp.model-confirmation-trusted-roles` |                   | role refs whose holders are told to pass `confirm: true` right away in `ask` mode |
 | `quarkus.oidc.tenant-enabled`   | `false`                     | verify bearer tokens of the default system's auth realm (`quarkus.oidc.auth-server-url`, derived unless set) |
-| `quarkus.oidc.token.audience`   |                             | required `aud` (recommended with `forward`) |
+| `quarkus.oidc.token.audience`   |                             | required `aud`: only tokens issued for this server are accepted (set it whenever callers log in) |
 | `quarkus.oidc.token.issuer`     |                             | public issuer when the system url is internal (Docker) |
 | `quarkus.oidc.resource-metadata.authorization-server` | `quarkus.oidc.auth-server-url` | login address MCP clients are sent to; the public issuer when the system url is internal |
 | `kc-mcp.explanations`           | `auto`                      | refusal wording: `admins` (config details, `howToFix`), `users` (plain words), `auto` (by caller roles in delegation mode, else admins) |

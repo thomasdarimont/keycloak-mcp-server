@@ -26,12 +26,12 @@ The same server also runs locally for a single administrator, which is where the
   each with its own signing key; the model names the system, or a client gets an MCP entry bound to one system or
   realm. The `shared` profile refuses to start without authentication and the other settings a server other people
   reach needs.
-- **The user's own identity, or a service account.** Users log in through their MCP client, so every Admin API call
-  runs with their own token and Keycloak enforces their roles; destructive tools can be approved on the user's own
-  device through CIBA. As a *delegated agent*, the server instead acts for the user with a token Keycloak exchanges
-  for it: the user consents, the token names both (`sub` the user, `act` the server's client), the server's own role
-  scope caps what it may do, and Keycloak's events show who acted for whom. A service account is the alternative for a
-  local or single-purpose setup.
+- **The user's own identity, or a service account.** Users log in through their MCP client and consent to the server
+  acting for them. Every Admin API call then runs with a token Keycloak exchanges for theirs: it names both (`sub`
+  the user, `act` the server's client), Keycloak enforces the user's roles, the server's own role scope caps what it
+  may do, and Keycloak's events show who acted for whom. The token a user presents is never passed on to Keycloak,
+  as the MCP specification demands. Destructive tools can be approved on the user's own device through CIBA. A
+  service account is the alternative for a local or single-purpose setup.
 - **Guardrails by default.** Destructive tools need a confirmation, every call is audited with secrets redacted, roles
   the identity lacks hide the tools they would need, and allow-lists fence in realms, hosts and tools.
 - **Small models cope.** By default the model sees three tools: `whoami`, `search_tools` and `execute_tool`. It searches
@@ -59,24 +59,29 @@ so a standalone setup can grow into it without a different product.
 The shortest path is local, in the shape the server is meant for: one Keycloak, the server on your machine, and you
 logging in through your MCP client, so every call runs with your own roles. Needs Java 21 and Docker.
 
-1. Start the demo Keycloak (realm `demo` with users, groups and the public client `mcp-consumer` that MCP clients log in
-   with):
+1. Start the demo Keycloak (realm `demo` with users, groups, the public client `mcp-consumer` that MCP clients log in
+   with and the server's own client `keycloak-mcp`):
 
    ```shell
-   cd examples/run-modes && docker compose up -d && cd ../..
+   cd examples/run-modes && docker compose up -d --wait && cd ../..
    ```
 
-2. Run the server with the user's own login. It holds no admin credentials: every Admin API call is made with the token
-   of the person who logged in, and Keycloak enforces their roles. Keycloak has to be up first, the server reads the
-   realm's discovery document at startup.
+2. Run the server with the user's own login. Its client holds no admin role: every Admin API call is made with a
+   delegated token that Keycloak issues for the person who logged in and the server's client together, so Keycloak
+   enforces that person's roles and its events name both. The token the MCP client presents only opens the MCP
+   server and is never passed on, as the MCP specification demands. Keycloak has to be up first, the server reads
+   the realm's discovery document at startup.
 
    ```shell
-   set -a; source examples/run-modes/env/user-forward.env; set +a
+   set -a; source examples/run-modes/env/user-login.env; set +a
    ./mvnw quarkus:dev -pl modules/backend -am        # MCP endpoint: http://localhost:8081/mcp
    ```
 
+   The delegated token is Keycloak's token exchange delegation, a preview feature of Keycloak 26.8 that the demo
+   stack switches on ([what it needs](examples/delegated-auth/README.md)).
+
 3. Connect an MCP client and log in. The browser opens on connect; log in as `alice / alice-demo` (realm admin) or
-   `carol / carol-demo` (may only view).
+   `carol / carol-demo` (may only view) and confirm that `keycloak-mcp` may act on your behalf.
 
    - LM Studio: add `examples/run-modes/mcp-oauth.json` to its MCP settings:
      ```json
@@ -118,9 +123,9 @@ for a complete stack.
 - **One pipeline for every call.** Access policy, argument validation, realm check, confirmation, the handler, audit.
   Errors are structured (`unknown_tool`, `invalid_arguments`, `forbidden`, `confirmation_required`, ...) and say what
   to do next. [Tools](docs/tools.md), [Security](docs/security.md)
-- **Keycloak's roles are the boundary.** The server acts with a service account, with the signed-in user's token
-  (`forward`), or with a delegated token Keycloak issues for the user and the server's client together (`exchange`,
-  Keycloak's token exchange delegation); the `realm-management` roles of that identity decide what works, server
+- **Keycloak's roles are the boundary.** The server acts with a service account, or with a delegated token Keycloak
+  issues for the signed-in user and the server's client together (`exchange`, Keycloak's token exchange delegation).
+  A caller's own token is never passed on to Keycloak. The `realm-management` roles of that identity decide what works, server
   flags only narrow further. [Security](docs/security.md), [delegated-auth](examples/delegated-auth/)
 - **Destructive tools ask first.** Through the client's elicitation, a `confirm: true` flag (local profile), an own
   `Confirmer` such as a ticket check, or CIBA on the user's device. [CIBA confirmation](docs/ciba-confirmation.md)

@@ -671,9 +671,9 @@ public class AccessPolicy {
 
     /**
      * Roles that decide a call: the caller's own when the call is delegated (parsed from
-     * the forwarded token, or in mode {@code exchange} from the delegated token Keycloak
-     * issued for the caller, which carries their roles within the actor client's scope),
-     * otherwise the server token's as discovered; {@code null} when role checks are off.
+     * the delegated token Keycloak issued for the caller, which carries their roles
+     * within the actor client's scope), otherwise the server token's as discovered;
+     * {@code null} when role checks are off.
      *
      * @param system Keycloak system name, or {@code null} for the single/default system
      * @throws com.github.thomasdarimont.keycloak.mcp.catalog.ToolException
@@ -690,8 +690,8 @@ public class AccessPolicy {
     }
 
     /**
-     * The token whose roles decide a delegated call: the caller's own, or in mode
-     * {@code exchange} the delegated token (cached per caller token by the admin client).
+     * The token whose roles decide a delegated call: the delegated token (cached per
+     * caller token by the admin client); the caller's own where no system is at hand.
      */
     private String decidingToken(String system, String callerToken) {
         if (delegation != DelegationMode.EXCHANGE || systems == null) {

@@ -1,7 +1,7 @@
 {
   "clientId": "keycloak-mcp-server",
   "name": "Keycloak MCP server",
-  "description": "The MCP server's own identity: a service account authenticating with a signed JWT (private_key_jwt); Keycloak fetches the public key from the server's JWKS.",
+  "description": "The MCP server's client, the actor of the token exchange: a service account without admin roles, authenticating with a signed JWT (private_key_jwt, key from the server's JWKS). Its role scope caps what a delegated token may carry.",
   "enabled": true,
   "protocol": "openid-connect",
   "publicClient": false,
@@ -24,6 +24,7 @@
     "service_account"
   ],
   "attributes": {
+    "standard.token.exchange.enabled": "true",
     "use.jwks.url": "true",
     "jwks.url": "http://host.docker.internal:9080/.well-known/jwks.json",
     "token.endpoint.auth.signing.alg": "RS256"

@@ -1,7 +1,7 @@
 # CIBA confirmation demo: Keycloak 26.8.2 with the CIBA grant and its HTTP authentication channel pointing at a small
 # "approver" service that stands in for the user's device, plus the optional MCP server. See README.md.
 #
-#   docker compose up -d                          # Keycloak on http://localhost:8098 (admin / admin), approver on :8095
+#   docker compose up -d                          # Keycloak on http://localhost:8098 (admin / admin), approver on :8095, permission granted
 #   docker compose --profile mcp up -d --build    # also the MCP server from ../../modules/backend/target on :8099
 #   docker compose down -v                        # reset everything (the realm is re-imported on the next start)
 services:
@@ -15,7 +15,9 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      KC_FEATURES: identity-brokering-api:v2
+      # token exchange delegation needs parameterized scopes (both preview): the server acts for the logged-in user
+      # with a delegated token
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
       KC_LOG_LEVEL: info
       # Where Keycloak delivers CIBA authentication requests (the "authentication device"): the approver below.
@@ -52,6 +54,16 @@ services:
     ports:
       - "8095:8095"
 
+  # The one setting a realm import cannot carry: the Admin Permissions grant that lets keycloak-mcp act for users.
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.8.2
+    entrypoint: ["/bin/bash", "/grant-delegation.sh"]
+    volumes:
+      - ./init/grant-delegation.sh:/grant-delegation.sh:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
   # Optional: the MCP server itself, built from this repository (run ../../mvnw package -DskipTests first).
   mcp:
     profiles: ["mcp"]
@@ -78,3 +90,5 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
+      keycloak-init:
+        condition: service_completed_successfully

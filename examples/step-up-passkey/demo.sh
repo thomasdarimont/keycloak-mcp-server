@@ -2,7 +2,8 @@
 # The step-up, step by step. Needs the stack up (docker compose up -d) and the MCP server running with
 # env/step-up-device.env or env/step-up-browser.env (see README.md), plus python3 and jq.
 #
-#   1. alice logs in to the MCP server with her password; whoami shows her acr
+#   1. alice logs in to the MCP server with her password and consents to keycloak-mcp acting on her behalf (the
+#      script walks Keycloak's login and consent pages); whoami shows her acr and the delegation
 #   2. she creates a throw-away user (a write: no step-up) and asks to delete it (destructive): the call is refused
 #      with insufficient_user_authentication and a link
 #   3. YOU open the link in a browser and sign in as alice (alice-demo) with a passkey (register one first, see
@@ -28,10 +29,9 @@ fi
 
 step "1. alice logs in to the MCP server; whoami"
 # one login for the whole run, as an MCP client has it: a step-up counts for the session it was asked in
-TOKEN=$(curl -s -d grant_type=password -d client_id=mcp-consumer -d scope=openid -d username=alice -d password=alice-demo \
-  "$KEYCLOAK_URL/realms/demo/protocol/openid-connect/token" | jq -r '.access_token // empty')
+TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token) || true
 [ -n "$TOKEN" ] || { echo "alice could not log in at $KEYCLOAK_URL; is the stack up?" >&2; exit 1; }
-call --token "$TOKEN" whoami | jq -c '{caller: .caller}'
+call --token "$TOKEN" whoami | jq -c '{caller: .caller, delegation}'
 
 step "2. delete a user: refused, with a link to sign in again"
 NAME="temp-$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8)"

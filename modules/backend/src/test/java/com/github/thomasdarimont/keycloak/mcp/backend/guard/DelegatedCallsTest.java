@@ -25,10 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Delegation mode {@code forward} without Keycloak: caller required, roles judged from
- * the caller's token.
+ * Delegated calls without Keycloak: caller required, roles judged from the caller's token
+ * (no system at hand whose Keycloak would exchange it).
  */
-class ForwardModeTest {
+class DelegatedCallsTest {
 
     /** Fixtures carry no role requirements; these two do. */
     private final ToolCatalog catalog = new ToolCatalog(List.of(
@@ -87,7 +87,7 @@ class ForwardModeTest {
 
     private ToolInvoker invoker() {
         return new ToolInvoker(catalog, new AccessPolicy(false, List.of()), req -> Decision.CONFIRMED, 50, null,
-                DelegationMode.FORWARD);
+                DelegationMode.EXCHANGE);
     }
 
     @Test
@@ -129,11 +129,11 @@ class ForwardModeTest {
     }
 
     @Test
-    void forwardNeedsTheOidcTenant() {
-        CallerAuth off = new CallerAuth(DelegationMode.FORWARD, false, false);
+    void delegationNeedsTheOidcTenant() {
+        CallerAuth off = new CallerAuth(DelegationMode.EXCHANGE, false, false);
         assertThrows(IllegalStateException.class, () -> off.validate(null));
         assertTrue(new CallerAuth(DelegationMode.OFF, true, true).required());
         assertFalse(new CallerAuth(DelegationMode.OFF, false, true).required());
-        new CallerAuth(DelegationMode.FORWARD, false, true).validate(null);
+        new CallerAuth(DelegationMode.EXCHANGE, false, true).validate(null);
     }
 }

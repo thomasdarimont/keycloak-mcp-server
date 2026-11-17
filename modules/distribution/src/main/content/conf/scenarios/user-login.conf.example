@@ -1,18 +1,38 @@
-# The user's own identity: the MCP client logs the user in at Keycloak (browser, code flow with PKCE) and every
-# Admin API call runs with their token, so Keycloak enforces their realm-management roles. The server holds no admin
-# credentials. Keycloak: a public client (mcp-consumer) with PKCE, the MCP clients' redirect URIs and an Audience
-# mapper adding aud=mcp-admin; the kc-admin-api scope on it for Keycloak 26.8.2+. Client setup: docs/integrations.md.
+# The user's own identity: the MCP client logs the user in at Keycloak (browser, code flow with PKCE), the user
+# consents to the server's client acting on their behalf, and every Admin API call runs with a delegated token
+# Keycloak exchanges the user's token for (sub = the user, act = the server's client), so Keycloak enforces the
+# user's realm-management roles. The user's own token never reaches the Admin API.
+# Keycloak needs for this: version 26.8+ started with --features=token-exchange-delegation,parameterized-scopes
+# (both preview), and in the realm:
+#   - Admin Permissions enabled (Realm settings -> General)
+#   - the server's client (mcp-admin): confidential, "Service accounts roles" on without any admin role assigned,
+#     "Standard Token Exchange" on, full scope off, kc-admin-api as a default client scope; its role scope
+#     (Client scopes -> Dedicated scope -> Scope) lists the realm-management roles a delegated token may carry at most
+#   - a public client the users log in with (mcp-consumer): PKCE, the MCP clients' redirect URIs, "Consent required"
+#     on, the optional client scope delegation:client, an Audience mapper for mcp-admin, no kc-admin-api scope
+#   - the Admin Permissions grant that lets mcp-admin act for the users: a client policy naming mcp-admin and a
+#     permission on the resource type Users with the scope "delegate"
+# A complete setup with a realm, the grant as a script and a walkthrough: examples/delegated-auth in the repository;
+# docs/security.md (Callers) and docs/integrations.md describe the modes and the MCP clients.
 # Keycloak must be up before the server starts: it reads the realm's discovery document.
 #   cp conf/scenarios/user-login.conf.example conf/user-login.conf   # then edit, and
 #   bin/kcmcp.sh start --config conf/user-login.conf
 kc-mcp.systems.default.url=http://localhost:8080
 kc-mcp.systems.default.auth-realm=demo
-kc-mcp.delegation=forward
+kc-mcp.delegation=exchange
+kc-mcp.systems.default.grant-type=client_credentials
+kc-mcp.systems.default.client-id=mcp-admin
+kc-mcp.systems.default.client-secret=change-me
+# The server's client holds no admin role and cannot read Keycloak's server info, so the version is stated.
+kc-mcp.systems.default.version=26.8.2
 kc-mcp.systems.default.default-realm=demo
 kc-mcp.systems.default.allowed-realms=demo
 kc-mcp.tool-exposure=hybrid
 quarkus.oidc.tenant-enabled=true
+# Only tokens issued for this server: the Audience mapper on mcp-consumer adds aud=mcp-admin.
 quarkus.oidc.token.audience=mcp-admin
+# What MCP clients are told to ask for at login; without the delegation scope every tool answers delegation_failed.
+quarkus.oidc.resource-metadata.scopes=openid,delegation:client:mcp-admin
 # Realm admins are told to pass confirm: true right away instead of being asked first (guidance only).
 kc-mcp.model-confirmation-trusted-roles=realm-management.realm-admin
 # When Keycloak is reached at an internal address, the tokens and the browser still use the public one:

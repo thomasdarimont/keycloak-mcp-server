@@ -15,15 +15,22 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 /**
- * Keycloak with a {@code demo} realm shaped like the example: public client
- * {@code mcp-consumer} whose tokens carry {@code aud=mcp-admin}, {@code alice} with
- * {@code realm-admin}, {@code carol} with {@code view-users} only, and a second client
- * {@code other-app} without the audience. The server runs in delegation mode
- * {@code forward} with the OIDC tenant on and no credentials of its own. The realm lives
- * in the {@link SharedKeycloak} unless a subclass needs a Keycloak of its own
+ * Keycloak with a {@code demo} realm whose users log in to the MCP server: the public
+ * client {@code mcp-consumer} whose tokens carry the server's audience
+ * ({@code mcp-admin}), {@code alice} with {@code realm-admin}, {@code carol} with
+ * {@code view-users} only, {@code bob} with nothing, and a second client
+ * {@code other-app} without the audience. The server requires a caller
+ * ({@code kc-mcp.require-caller}) with the OIDC tenant on, and its admin calls run as the
+ * service account of {@code mcp-server}, a realm admin: a caller's token is never sent to
+ * Keycloak. Calls with the caller's own roles are {@link ExchangeTestResource}'s. The
+ * realm lives in the {@link SharedKeycloak} unless a subclass needs a Keycloak of its own
  * ({@link #shared()}).
  */
-public class ForwardTestResource implements QuarkusTestResourceLifecycleManager {
+public class CallerTestResource implements QuarkusTestResourceLifecycleManager {
+
+    /** The server's own client: its service account is a realm admin of {@code demo}. */
+    public static final String SERVICE_CLIENT = "mcp-server";
+    public static final String SERVICE_SECRET = "mcp-server-secret";
 
     static String base;
 
@@ -75,14 +82,17 @@ public class ForwardTestResource implements QuarkusTestResourceLifecycleManager 
     protected void bootstrapMore() throws IOException, InterruptedException {
     }
 
-    /** Hook for subclasses: server settings added to (or replacing) the forward ones. */
+    /** Hook for subclasses: server settings added to (or replacing) the base ones. */
     protected Map<String, String> extraConfig() {
         return Map.of();
     }
 
     Map<String, String> baseConfig() {
         return Map.ofEntries(Map.entry("kc-mcp.systems.default.url", base),
-                Map.entry("kc-mcp.systems.default.auth-realm", "demo"), Map.entry("kc-mcp.delegation", "forward"),
+                Map.entry("kc-mcp.systems.default.auth-realm", "demo"), Map.entry("kc-mcp.delegation", "off"),
+                Map.entry("kc-mcp.require-caller", "true"),
+                Map.entry("kc-mcp.systems.default.client-id", SERVICE_CLIENT),
+                Map.entry("kc-mcp.systems.default.client-secret", SERVICE_SECRET),
                 Map.entry("kc-mcp.systems.default.default-realm", "demo"),
                 Map.entry("kc-mcp.systems.default.allowed-realms", "demo"), Map.entry("kc-mcp.tool-exposure", "direct"),
                 Map.entry("kc-mcp.systems.default.grant-type", "client_credentials"),
@@ -125,6 +135,26 @@ public class ForwardTestResource implements QuarkusTestResourceLifecycleManager 
         user("alice", rm, "realm-admin");
         user("carol", rm, "view-users");
         user("bob", rm);
+
+        // the server's own identity at Keycloak
+        String service = post("/admin/realms/demo/clients",
+                new JsonObject().put("clientId", SERVICE_CLIENT)
+                    .put("secret", SERVICE_SECRET)
+                    .put("publicClient", false)
+                    .put("serviceAccountsEnabled", true)
+                    .put("standardFlowEnabled", false)
+                    .put("directAccessGrantsEnabled", false)
+                    .put("defaultClientScopes",
+                            new JsonArray().add("acr")
+                                .add("basic")
+                                .add("roles")
+                                .add("profile")
+                                .add("kc-admin-api")
+                                .add("service_account")));
+        String account = new JsonObject(get("/admin/realms/demo/clients/" + service + "/service-account-user"))
+            .getString("id");
+        post("/admin/realms/demo/users/" + account + "/role-mappings/clients/" + rm,
+                new JsonArray().add(new JsonObject(get("/admin/realms/demo/clients/" + rm + "/roles/realm-admin"))));
     }
 
     private String publicClient(String clientId) throws IOException, InterruptedException {

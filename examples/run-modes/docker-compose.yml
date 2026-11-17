@@ -32,8 +32,9 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      # token exchange delegation (the user login of env/user-login.env) needs parameterized scopes, both preview.
       # 26.8 warns about its deprecated defaults: use the v2 brokering API, drop the Twitter (OAuth 1.0a) broker
-      KC_FEATURES: identity-brokering-api:v2
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
       KC_LOG_LEVEL: info
     ports:
@@ -53,6 +54,17 @@ services:
       timeout: 5s
       retries: 40
       start_period: 20s
+
+  # The one setting a realm import cannot carry: the Admin Permissions grant that lets the server's client
+  # keycloak-mcp act for the users who consent to it (env/user-login.env, env/shared.env).
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.8.2
+    entrypoint: ["/bin/bash", "/grant-delegation.sh"]
+    volumes:
+      - ./init/grant-delegation.sh:/grant-delegation.sh:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
 
   mailpit:
     image: axllent/mailpit:v1.33

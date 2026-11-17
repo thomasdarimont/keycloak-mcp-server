@@ -1,7 +1,9 @@
 # Two tenants on one Keycloak: tenant-a owns realm-a-1 and realm-a-2, tenant-b owns realm-b-1. The onboarding job
 # gives each tenant a `keycloak-mcp-server-<tenant>` client in master (Signed JWT, public key fetched from the MCP
 # server at /auth/keys/<tenant>/jwks.json) with realm-admin on the tenant's realms. The MCP server knows the
-# tenants from systems.json and answers at one MCP entry per tenant or realm. See README.md.
+# tenants from systems.json and answers at one MCP entry per tenant or realm. For the user login (mcp-users) the
+# same client exists in each of the tenant's realms, without admin roles, and may act for the realm's users
+# (token exchange delegation). See README.md.
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2
@@ -13,8 +15,9 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      # 26.8 warns about its deprecated defaults: use the v2 brokering API, drop the Twitter (OAuth 1.0a) broker
-      KC_FEATURES: identity-brokering-api:v2
+      # token exchange delegation (preview in 26.8) for mcp-users. 26.8 warns about its deprecated defaults: use
+      # the v2 brokering API, drop the Twitter (OAuth 1.0a) broker
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
     ports:
       - "127.0.0.1:8090:8080"
@@ -33,6 +36,7 @@ services:
     entrypoint: ["/bin/bash", "/onboard-tenants.sh"]
     volumes:
       - ./init/onboard-tenants.sh:/onboard-tenants.sh:ro
+      - ./init/grant-delegation.sh:/grant-delegation.sh:ro
     depends_on:
       keycloak:
         condition: service_healthy
@@ -65,8 +69,10 @@ services:
       keycloak-init:
         condition: service_completed_successfully
 
-  # The same server with user login: the MCP endpoint requires an OAuth login, every call runs with the user's
-  # own token (forward delegation). A realm entry logs its users in at that realm.
+  # The same server with user login: the MCP endpoint requires an OAuth login, and every Admin API call is made with
+  # a delegated token Keycloak issues for the user and the tenant's client together (token exchange delegation:
+  # sub = the user, act = keycloak-mcp-server-<tenant>). A realm entry logs its users in at that realm, and the
+  # exchange happens there: the tenant's client exists in each of its realms with the same key as in master.
   mcp-users:
     build:
       context: ../..
@@ -81,9 +87,10 @@ services:
       KC_MCP_KEYS_DIR: /deployments/data/keys
       KC_MCP_TOOL_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
-      # callers act with their own token; the default OIDC tenant (root /mcp) is the master realm,
-      # an entry /mcp/systems/<tenant>/<realm> verifies tokens of that realm
-      KC_MCP_DELEGATION: forward
+      # callers act with their own roles; the default OIDC tenant (root /mcp) is the master realm,
+      # an entry /mcp/systems/<tenant>/<realm> verifies tokens of that realm and tells MCP clients to ask for the
+      # scope delegation:client:keycloak-mcp-server-<tenant>
+      KC_MCP_DELEGATION: exchange
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       QUARKUS_OIDC_TENANT_ENABLED: "true"
@@ -95,6 +102,9 @@ services:
     ports:
       - "8092:8081"
     depends_on:
+      # Keycloak fetches the tenants' public keys from the first server (the clients' JWKS URL)
+      mcp:
+        condition: service_started
       keycloak:
         condition: service_healthy
       keycloak-init:

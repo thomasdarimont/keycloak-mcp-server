@@ -4,6 +4,10 @@ The realm has no OAuth client for VS Code. VS Code uses the URL of its published
 ([Client ID Metadata Documents](https://client.dev/)), Keycloak fetches that document and creates the client on first
 use. Keycloak's guide: [Integrating with MCP](https://www.keycloak.org/securing-apps/mcp-authz-server).
 
+The user consents to the MCP server's client `keycloak-mcp` acting on their behalf, and the server exchanges the
+user's token for a delegated one before it calls the Admin API (`KC_MCP_DELEGATION=exchange`, Keycloak's token
+exchange delegation, preview). [delegated-auth](../delegated-auth/) explains that part in detail.
+
 CIMD is an experimental Keycloak feature (`--features=cimd`) and the specification is still a draft. Keycloak fetches
 `https://vscode.dev/oauth/client-metadata.json`, so its container needs internet access.
 
@@ -13,7 +17,7 @@ CIMD is an experimental Keycloak feature (`--features=cimd`) and the specificati
 cd examples/cimd-vscode
 ../../etc/mkcert.sh                 # once: a trusted certificate for localhost in .certs/, its CA in the trust stores
 docker compose up -d --wait         # Keycloak 26.8.2 on https://localhost:8100 (admin / admin)
-./setup.sh                          # the client scopes
+docker compose logs keycloak-init   # the init job grants keycloak-mcp the permission to act for users
 ../../mvnw -f ../../pom.xml package -DskipTests
 set -a; . env/cimd.env; set +a
 java -jar ../../modules/backend/target/quarkus-app/quarkus-run.jar start     # the MCP server on http://localhost:8101
@@ -26,13 +30,16 @@ java -jar ../../modules/backend/target/quarkus-app/quarkus-run.jar start     # t
 ```
 
 Start the server in VS Code and choose to authenticate. The browser opens Keycloak's login page at
-`https://localhost:8100`; sign in as one of these users and accept the consent screen:
+`https://localhost:8100`; sign in as one of these users and accept the consent screen, which asks *Allow keycloak-mcp
+to act on your behalf?*:
 
 | user | password | can |
 |---|---|---|
 | `alice` | `alice-demo` | everything in the realm (`realm-admin`) |
 | `carol` | `carol-demo` | read users (`view-users`) |
 | `dave` | `dave-demo` | reach the server; every Admin API tool is forbidden |
+
+The tool `whoami` shows `delegation: {mode: exchange, consented: true, actor: keycloak-mcp}`.
 
 Once signed in, ask the chat about the realm, for example *list users in the demo realm on keycloak*:
 
@@ -63,40 +70,55 @@ mkcert's CA in its trust store: `etc/mkcert.sh` adds it to the JDK named by `JAV
 A client ID from any other domain is refused, `client_not_found` in Keycloak's events. For other clients, add their
 domains to both lists; the guide lists the values for Claude Code and Claude Desktop.
 
-**`setup.sh`** makes three scopes realm-level optional scopes, which is what a client created from a document inherits:
+The realm file also has the one client the example needs, **`keycloak-mcp`**, which is the MCP server itself: a
+confidential client (`keycloak-mcp-secret`) with a service account that holds no admin role, *Standard Token Exchange*
+on, and *Full scope allowed* off with the role scope `realm-management` `realm-admin` (`clientScopeMappings`). The
+role scope is the most a delegated token may carry. *Admin Permissions* are enabled for the realm.
+
+**`init/grant-delegation.sh`**, run by the `keycloak-init` job, grants `keycloak-mcp` the Admin Permission *delegate*
+on the Users resource type. A realm import cannot carry it. Without it Keycloak drops the delegation scope silently
+and the token carries no `may_act` claim.
+
+A client created from a document needs nothing else. It gets the realm's default and optional scopes, and with the
+features `token-exchange-delegation` and `parameterized-scopes` on, `delegation:client` is one of the realm's optional
+scopes:
 
 | scope | gives the token | without it |
 |---|---|---|
-| `kc-admin-api` (built in) | the Admin API audience | Keycloak's Admin API refuses the token |
-| `mcp-server` | `aud=keycloak-mcp-server` | the MCP server answers 401 |
-| `mcp-admin-roles` | the user's `realm-management` roles | "no admin roles" for everyone |
+| `delegation:client:keycloak-mcp` | `aud=keycloak-mcp` and `may_act` naming `keycloak-mcp` | the MCP server answers 401 |
 
-The server advertises all three in its protected resource metadata (`QUARKUS_OIDC_RESOURCE_METADATA_SCOPES`), and VS Code
-asks for what is advertised. Users still need the roles themselves; the scope only lets them into the token.
+The server advertises `openid` and that scope in its protected resource metadata
+(`QUARKUS_OIDC_RESOURCE_METADATA_SCOPES`), and VS Code asks for what is advertised. The user's token carries no roles
+and no Admin API audience, it opens the MCP server only. The server (`env/cimd.env`) logs in as `keycloak-mcp` and
+exchanges the user's token for a delegated one: `sub` is the user, `act` is `keycloak-mcp`, the roles are the user's
+`realm-management` roles within the role scope of `keycloak-mcp`. Admin events name the user.
 
 ## Three things that differ from a pre-registered client
 
 - **No roles by default.** Keycloak creates these clients with `fullScopeAllowed=false`, so tokens carry no roles
-  until a client scope maps them. A scope with role mappings is dropped for users holding none of its roles, which is
-  why the audience has a scope of its own.
-- **Consent is always on.** Each user sees the consent screen once per client.
+  until a client scope maps them. This example does not need them: the roles come with the delegated token.
+- **Consent is always on.** Keycloak creates these clients with *Consent required*, which is what the delegation scope
+  demands: on a client without consent Keycloak refuses it with `invalid_scope`. It asks for the delegation in every
+  login session and does not store that consent.
 - **The clients persist.** The first login creates a real client whose `clientId` is the URL. Tightening the policy
   later does not remove it; delete it in the admin console.
 
 ## Why not resource indicators
 
 MCP clients send `resource=<server URL>`. With Keycloak's `resource-indicators` feature on, `aud` is reduced to that
-value: the token no longer names the Admin API, which `KC_MCP_DELEGATION=forward` needs. This example leaves the
-feature off, so Keycloak ignores `resource` and the audiences come from the scopes.
+value, here `http://localhost:8101`. The token still carries `may_act`, but it no longer names `keycloak-mcp` in
+`aud`, and Keycloak 26.8.2 then refuses the token exchange: `access_denied: Client is not within the token audience`.
+This example leaves the feature off, so Keycloak ignores `resource` and the audience comes from the delegation scope.
 
 MCP 2025-06-18 and later require resource indicators of the authorization server, so this is a deliberate departure.
-A strict setup would keep the feature on and use `KC_MCP_DELEGATION=exchange`, with the server exchanging the token for
-one that may call the Admin API ([delegated-auth](../delegated-auth/)); that combination is untested with CIMD.
+With the feature on, the `client-id-metadata-document` executor also needs the server's URL in its *resource
+indicator allow list* (`cimd-resource-indicator-allow-list`); otherwise the login ends with `invalid_target`.
 
 ## Limits
 
 - Not a template for production: `start-dev`, a local CA, an MCP server on plain HTTP and demo passwords.
 - Anyone can publish a document, so keep the trusted domains narrow: VS Code's document says nothing about who runs it,
   and the loopback redirect fits any local program. The user's consent and roles are the protection here.
-- The login and tool calls were tested by scripting VS Code's authorization code flow with PKCE, its real client ID and
-  redirect URI. That script is not subject to VS Code's content security policy.
+- The login, the consent and the tool calls were tested by scripting VS Code's authorization code flow with PKCE, its
+  real client ID and redirect URI, and the scopes the server advertises. That script is not subject to VS Code's
+  content security policy, and it does not show whether VS Code asks for a scope with a parameter as advertised.

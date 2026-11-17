@@ -12,11 +12,11 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 /**
- * {@link ForwardTestResource} plus the management UI: two identity providers, both the
+ * {@link CallerTestResource} plus the management UI: two identity providers, both the
  * demo realm, as the public clients {@code keycloak-mcp-ui} and {@code keycloak-mcp-ui-2}
  * (any redirect URI, the test port is random), sessions in an in-memory H2 database.
  */
-public class UiTestResource extends ForwardTestResource {
+public class UiTestResource extends CallerTestResource {
 
     @Override
     public Map<String, String> start() {

@@ -1,7 +1,5 @@
 package com.github.thomasdarimont.keycloak.mcp.backend;
 
-import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 import io.quarkus.test.common.QuarkusTestResource;
@@ -14,9 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Two independent Keycloaks behind one server in forward delegation: a caller of the
- * first never has their token sent to the second, a caller of the second administers it
- * through its entry.
+ * Two independent Keycloaks behind one server in delegation mode exchange: a caller of
+ * the first never has their token sent to the second, a caller of the second administers
+ * it through its entry.
  */
 @QuarkusTest
 @QuarkusTestResource(value = TwoKeycloaksTestResource.class, restrictToAnnotatedClass = true)
@@ -24,14 +22,14 @@ class TwoKeycloaksIT {
 
     @Test
     void aCallerOfOneKeycloakCannotActOnTheOther() {
-        String aliceToken = ForwardTestResource.token("mcp-consumer", "alice", "alice");
+        String aliceToken = CallerTestResource.token("mcp-consumer", "alice", "alice");
 
-        // her own Keycloak, through its entry: works as before
+        // her own Keycloak, through its entry: her token may be used there, so it gets as
+        // far as that Keycloak's token exchange (which this realm is not set up for)
         McpClient own = new McpClient().path("/mcp/systems/default").bearer(aliceToken).initialize(false);
         JsonObject found = McpClient
             .text(own.callTool("keycloak_user_search", new JsonObject().put("search", "carol")));
-        assertEquals(null, found.getString("error"), found.encode());
-        assertTrue(usernames(found).contains("carol"), found.encode());
+        assertEquals("delegation_failed", found.getString("error"), found.encode());
 
         // the root entry: the default tenant verified her token (first Keycloak), the
         // default system is the second;
@@ -55,12 +53,11 @@ class TwoKeycloaksIT {
         McpClient other = new McpClient().path("/mcp/systems/other").bearer(adminToken).initialize(false);
         JsonObject who = McpClient.text(other.callTool("whoami", new JsonObject()));
         assertEquals("admin", who.getJsonObject("caller").getString("username"), who.encode());
-        // the token of the second Keycloak is forwarded to it: the search runs with the
-        // caller's rights there
+        // the token of the second Keycloak may be used at it: it is handed to that
+        // Keycloak's token exchange (which is not set up there)
         JsonObject found = McpClient
             .text(other.callTool("keycloak_user_search", new JsonObject().put("search", "admin")));
-        assertEquals(null, found.getString("error"), found.encode());
-        assertTrue(usernames(found).contains("admin"), found.encode());
+        assertEquals("delegation_failed", found.getString("error"), found.encode());
         // the first Keycloak's realm is not his to reach: the bound entry refuses the
         // system argument before the issuer is even looked at
         JsonObject foreign = McpClient.text(other.callTool("keycloak_user_search",
@@ -76,18 +73,11 @@ class TwoKeycloaksIT {
         assertEquals(401, r.statusCode(), r.asString());
     }
 
-    private static List<String> usernames(JsonObject searchResult) {
-        return searchResult.getJsonArray("items")
-            .stream()
-            .map(item -> ((JsonObject) item).getString("username"))
-            .toList();
-    }
-
     @Test
     void theOtherSystemsEntryDoesNotAcceptTheFirstKeycloaksTokens() {
         Response r = given().header("Accept", "application/json, text/event-stream")
             .header("Content-Type", "application/json")
-            .header("Authorization", "Bearer " + ForwardTestResource.token("mcp-consumer", "alice", "alice"))
+            .header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "alice", "alice"))
             .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
             .post("/mcp/systems/other");
         assertEquals(401, r.statusCode(), r.asString());
@@ -104,14 +94,53 @@ class TwoKeycloaksIT {
     }
 
     @Test
+    void anEntrysMetadataIsServedBeforeTheEntryWasEverAskedFor() {
+        // a system nobody has sent a request to: its tenant does not exist yet
+        String alice = CallerTestResource.token("mcp-consumer", "alice", "alice");
+        given().header("Authorization", "Bearer " + alice)
+            .contentType("application/json")
+            .body(new JsonObject().put("url", TwoKeycloaksTestResource.otherBase)
+                .put("authRealm", "master")
+                .put("defaultRealm", "master")
+                .put("clientAuth", "client_secret")
+                .put("clientId", "mcp-admin")
+                .put("clientSecret", "unused-here")
+                .encode())
+            .put("/admin/systems/untouched")
+            .then()
+            .statusCode(201);
+        String wellKnown = "/.well-known/oauth-protected-resource/mcp/systems/untouched";
+        JsonObject first = new JsonObject(given().get(wellKnown).then().statusCode(200).extract().asString());
+        assertTrue(first.getString("resource").endsWith("/mcp/systems/untouched"), first.encode());
+        assertEquals(TwoKeycloaksTestResource.otherBase + "/realms/master",
+                first.getJsonArray("authorization_servers").getString(0), first.encode());
+        JsonObject realm = new JsonObject(
+                given().get(wellKnown + "/some-realm").then().statusCode(200).extract().asString());
+        assertEquals(TwoKeycloaksTestResource.otherBase + "/realms/some-realm",
+                realm.getJsonArray("authorization_servers").getString(0), realm.encode());
+
+        // once the entry was asked, Quarkus serves the document: the same one
+        Response challenge = given().header("Accept", "application/json, text/event-stream")
+            .header("Content-Type", "application/json")
+            .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+            .post("/mcp/systems/untouched");
+        assertEquals(401, challenge.statusCode());
+        assertTrue(challenge.header("WWW-Authenticate").contains(wellKnown), challenge.header("WWW-Authenticate"));
+        assertEquals(first, new JsonObject(given().get(wellKnown).then().statusCode(200).extract().asString()));
+
+        // a path that names no system stays unknown
+        given().get("/.well-known/oauth-protected-resource/mcp/systems/no-such-system").then().statusCode(404);
+    }
+
+    @Test
     void replacingASystemsKeycloakRevokesTheOldIssuersTokens() {
         // alice, realm-admin of the first Keycloak's demo realm, may use the admin API
-        String alice = ForwardTestResource.token("mcp-consumer", "alice", "alice");
+        String alice = CallerTestResource.token("mcp-consumer", "alice", "alice");
         JsonObject service = new JsonObject().put("authRealm", "master")
             .put("defaultRealm", "master")
             .put("clientAuth", "client_secret")
             .put("clientId", "mcp-admin")
-            .put("clientSecret", "unused-in-forward-mode");
+            .put("clientSecret", "unused-here");
         given().header("Authorization", "Bearer " + alice)
             .contentType("application/json")
             .body(service.copy().put("url", TwoKeycloaksTestResource.otherBase).encode())
@@ -125,7 +154,7 @@ class TwoKeycloaksIT {
         // tenant's demo realm)
         given().header("Authorization", "Bearer " + alice)
             .contentType("application/json")
-            .body(service.copy().put("url", ForwardTestResource.base).encode())
+            .body(service.copy().put("url", CallerTestResource.base).encode())
             .put("/admin/systems/moved")
             .then()
             .statusCode(200);

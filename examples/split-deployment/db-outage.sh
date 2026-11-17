@@ -19,6 +19,7 @@ MCP=http://localhost:8095
 U=$MCP/mcp/systems/acme/acme-dev
 CALL=../dynamic-systems/mcp-call.py
 export KEYCLOAK_URL=http://localhost:8093
+export MCP_CALL_QUIET=1                             # only the tool result or the error, not the login steps
 
 case "$MODE" in cutoff|restart) ;; *) echo "usage: $0 [cutoff|restart]" >&2; exit 2 ;; esac
 

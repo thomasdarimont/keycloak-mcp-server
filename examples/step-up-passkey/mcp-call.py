@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
-"""Call a tool on the MCP server as a user of the demo realm: mcp-call.py --login user:password <tool> [json-args]
+"""Call a tool on the MCP server as a user of the demo realm:
+mcp-call.py --login user:password [--scope "..."] [--new-session] <tool> [json-args]
 
     ./mcp-call.py --login alice:alice-demo whoami
     ./mcp-call.py --login alice:alice-demo keycloak_user_delete '{"id": "<uuid>", "username": "temp"}'
-    ./mcp-call.py --token <access token> whoami
+    ./mcp-call.py --login alice:alice-demo --scope openid whoami          # a login without the delegation scope
+    TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token)         # only log in, print the access token
+    ./mcp-call.py --token "$TOKEN" whoami                                 # one login for several calls
     MCP_URL=http://localhost:8109/mcp KEYCLOAK_URL=http://localhost:8108 ./mcp-call.py ...   (the defaults)
 
---login uses the password grant of the public client mcp-consumer (on for this demo only); MCP clients such as
-LM Studio log the user in through the browser instead (mcp-oauth.json). The MCP session is kept between runs
-(per user, in $TMPDIR/mcp-call-session-<user>), as a real client keeps its session: a pending approval belongs to
-the session that asked for it, so the call that collects it must come from the same one. --new-session starts over.
+--login walks Keycloak's browser flow the way an MCP client's browser does: authorization request for the public
+client mcp-consumer, login form, consent page (Keycloak asks every session whether keycloak-mcp may act on the user's
+behalf), authorization code for an access token. The scope defaults to "openid delegation:client:keycloak-mcp".
+The password grant cannot do this: a client that requires consent refuses it. Each --login is a new session at
+Keycloak; --print-token and --token keep one login for several calls.
+
+The MCP session is kept between runs (per user, in $TMPDIR/mcp-call-session-<user>; with --token the user is read
+from the token), as a real client keeps its session: a pending approval belongs to the session that asked for it,
+so the call that collects it must come from the same one. --new-session starts over.
 """
+import base64
+import hashlib
 import json
 import os
+import re
+import secrets
 import sys
 import urllib.error
 import urllib.parse
@@ -22,21 +34,90 @@ KEYCLOAK = os.environ.get("KEYCLOAK_URL", "http://localhost:8108")
 MCP_URL = os.environ.get("MCP_URL", "http://localhost:8109/mcp")
 REALM = os.environ.get("REALM", "demo")
 CLIENT = "mcp-consumer"
+REDIRECT = os.environ.get("REDIRECT_URI", "http://localhost:9999/callback")       # registered on mcp-consumer; nothing listens there, the code is read from the redirect
+DELEGATION_SCOPE = "openid delegation:client:keycloak-mcp"
 BEARER = None
 SESSION = None
 SESSION_FILE = None
 
 
-def login(user, password):
-    form = urllib.parse.urlencode({"grant_type": "password", "client_id": CLIENT, "username": user,
-                                   "password": password, "scope": "openid"}).encode()
-    req = urllib.request.Request(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/token", form,
-                                 {"content-type": "application/x-www-form-urlencoded"})
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def login(username, password, scope):
+    opener = urllib.request.build_opener(_NoRedirect)
+    # Keycloak marks its cookies Secure; browsers accept that on localhost, Python's cookie jar does not: by hand
+    cookies = {}
+
+    def send(url, form=None):
+        data = urllib.parse.urlencode(form).encode() if form is not None else None
+        headers = {"content-type": "application/x-www-form-urlencoded"} if form is not None else {}
+        if cookies:
+            headers["cookie"] = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        try:
+            with opener.open(urllib.request.Request(url, data, headers)) as r:
+                status, body, response_headers = r.status, r.read().decode(), r.headers
+        except urllib.error.HTTPError as e:
+            status, body, response_headers = e.code, e.read().decode(), e.headers
+        for header in response_headers.get_all("set-cookie") or []:
+            name, _, value = header.split(";", 1)[0].partition("=")
+            cookies[name.strip()] = value.strip()
+        return status, body, response_headers
+
+    verifier = secrets.token_urlsafe(48)                                   # PKCE, as mcp-consumer demands
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    query = urllib.parse.urlencode({"client_id": CLIENT, "response_type": "code", "redirect_uri": REDIRECT,
+                                    "scope": scope, "state": "demo", "code_challenge": challenge,
+                                    "code_challenge_method": "S256"})
+    status, html, headers = send(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/auth?{query}")
+    for _ in range(10):
+        if status in (302, 303):
+            location = headers.get("Location")
+            if location.startswith(REDIRECT):
+                answer = urllib.parse.parse_qs(urllib.parse.urlparse(location).query)
+                if "code" not in answer:
+                    sys.exit(f"Keycloak answered {answer.get('error')}: {answer.get('error_description')}")
+                code = answer["code"][0]
+                form = {"grant_type": "authorization_code", "client_id": CLIENT, "code": code, "redirect_uri": REDIRECT,
+                        "code_verifier": verifier}
+                status, body, _ = send(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/token", form)
+                if status != 200:
+                    sys.exit(f"token request failed: HTTP {status} {body}")
+                token = json.loads(body)
+                print(f"logged in as {username}, token scope: {token.get('scope')}", file=sys.stderr)
+                return token["access_token"]
+            status, html, headers = send(location)
+            continue
+        action = re.search(r'action="([^"]+)"', html)
+        if not action:
+            sys.exit("unexpected Keycloak page: " + re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()[:400])
+        target = action.group(1).replace("&amp;", "&")
+        if not target.startswith("http"):
+            target = KEYCLOAK + target
+        if 'name="username"' in html:
+            status, html, headers = send(target, {"username": username, "password": password, "credentialId": ""})
+        elif 'name="password"' in html:                                    # username first, then the password page
+            status, html, headers = send(target, {"password": password, "credentialId": ""})
+        elif 'name="accept"' in html:
+            asked = re.findall(r"<li>\s*<span>\s*([^<]+?)\s*</span>", html)
+            print("consent page: " + "; ".join(asked), file=sys.stderr)
+            code = re.search(r'name="code" value="([^"]+)"', html).group(1)
+            status, html, headers = send(target, {"code": code, "accept": "Yes"})
+        else:
+            sys.exit("unexpected Keycloak page: " + re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()[:400])
+    sys.exit("login did not finish")
+
+
+def token_user(token):
+    """The user a token was issued for, to keep one MCP session per user also with --token."""
     try:
-        with urllib.request.urlopen(req) as r:
-            return json.loads(r.read())["access_token"]
-    except urllib.error.HTTPError as e:
-        sys.exit(f"login of {user} failed: HTTP {e.code} {e.read().decode()}")
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", claims.get("preferred_username") or claims.get("sub") or "token")
+    except (IndexError, ValueError):
+        return "token"
 
 
 def rpc(method, params=None, msg_id=1):
@@ -87,18 +168,33 @@ def main(argv):
     global BEARER, SESSION, SESSION_FILE
     args = list(argv)
     user = "token"
+    credentials = None
+    scope = DELEGATION_SCOPE
     fresh = False
+    print_token = False
     while args and args[0].startswith("--"):
         flag = args.pop(0)
-        if flag == "--login":
-            user, _, password = args.pop(0).partition(":")
-            BEARER = login(user, password)
+        if flag == "--new-session":
+            fresh = True
+        elif flag == "--print-token":
+            print_token = True
+        elif not args:
+            sys.exit(__doc__)
+        elif flag == "--login":
+            credentials = args.pop(0)
+        elif flag == "--scope":
+            scope = args.pop(0)
         elif flag == "--token":
             BEARER = args.pop(0)
-        elif flag == "--new-session":
-            fresh = True
+            user = token_user(BEARER)
         else:
             sys.exit(__doc__)
+    if credentials:
+        user, _, password = credentials.partition(":")
+        BEARER = login(user, password, scope)
+    if print_token:
+        print(BEARER or "")
+        return 0 if BEARER else 1
     if not args:
         sys.exit(__doc__)
     tool, raw = args[0], (args[1] if len(args) > 1 else "{}")

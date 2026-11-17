@@ -64,7 +64,7 @@ public class EntryTenantResolver implements TenantConfigResolver {
     private static final Logger LOG = Logger.getLogger(EntryTenantResolver.class);
 
     /** Quarkus serves the RFC 9728 metadata of a path under this prefix. */
-    static final String RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
+    public static final String RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
 
     @Inject
     KeycloakSystems systems;
@@ -150,7 +150,7 @@ public class EntryTenantResolver implements TenantConfigResolver {
      * The tenant of an entry, {@code null} for the default tenant or an unknown system;
      * the same object as last time while the system is unchanged.
      */
-    OidcTenantConfig tenantFor(EntryBinding binding, RoutingContext context) {
+    public OidcTenantConfig tenantFor(EntryBinding binding, RoutingContext context) {
         Optional<KeycloakAdmin> admin = systems.find(binding.system());
         if (admin.isEmpty()) {
             return null;
@@ -199,6 +199,24 @@ public class EntryTenantResolver implements TenantConfigResolver {
             .build();
         tenants.put(tenantId, new Tenant(fingerprint, config));
         return config;
+    }
+
+    /** Whether an entry names a system this server knows. */
+    public boolean known(EntryBinding binding) {
+        return systems.find(binding.system()).isPresent();
+    }
+
+    /**
+     * The default tenant as a tenant configuration: what the root endpoint and the
+     * entries of its realm are verified against.
+     */
+    public OidcTenantConfig defaultTenant() {
+        return OidcTenantConfig.builder(OidcConfig.getDefaultTenant(oidcConfig)).build();
+    }
+
+    /** {@code kc-mcp.hostname} when set, else empty: the address is the request's. */
+    public String publicAddress() {
+        return PublicHostname.of(config.hostname()).orElse("");
     }
 
     /**

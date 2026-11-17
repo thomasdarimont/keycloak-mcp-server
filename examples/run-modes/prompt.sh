@@ -5,7 +5,7 @@ client that does not expose MCP prompts itself.
     examples/run-modes/prompt.sh                                   # lists the prompts and their arguments
     examples/run-modes/prompt.sh keycloak_onboard_user username=nina email=nina@example.com groups=/staff/devs
 
-MCP_URL (default http://localhost:8081/mcp) and MCP_TOKEN (bearer token, needed in forward mode) are honoured.
+MCP_URL (default http://localhost:8081/mcp) and MCP_TOKEN (bearer token, needed when callers log in) are honoured.
 """
 import json
 import os

@@ -128,14 +128,12 @@ public interface McpServerConfig {
 
     /**
      * {@code off} (default): admin calls use the server's own credentials;
-     * {@code forward}: the caller's access token is forwarded to the Admin API, so
-     * Keycloak enforces the user's own roles; {@code exchange}: the caller's token is
-     * exchanged for a delegated token whose actor is the server's own client (Keycloak
-     * 26.8 token exchange delegation, needs the caller's consent and the client's
-     * {@code delegate} permission). Both require the MCP endpoint to authenticate callers
-     * ({@code quarkus.oidc.tenant-enabled=true}); {@code forward} makes the server
-     * credentials optional, {@code exchange} needs a confidential client with a service
-     * account.
+     * {@code exchange}: the caller's token is exchanged for a delegated token whose actor
+     * is the server's own client (Keycloak 26.8 token exchange delegation, needs the
+     * caller's consent and the client's {@code delegate} permission), so Keycloak
+     * enforces the user's own roles. It requires the MCP endpoint to authenticate callers
+     * ({@code quarkus.oidc.tenant-enabled=true}) and a confidential client with a service
+     * account. The caller's token itself is never sent to the Admin API.
      */
     @WithDefault("off")
     @WithConverter(DelegationMode.Converter.class)
@@ -174,7 +172,7 @@ public interface McpServerConfig {
     /**
      * Refuse unauthenticated MCP requests with a 401 challenge even when the server acts
      * with its own credentials (the caller then only matters for policies and the audit
-     * log). Implied by {@code delegation=forward}.
+     * log). Implied by {@code delegation=exchange}.
      */
     @WithDefault("false")
     boolean requireCaller();

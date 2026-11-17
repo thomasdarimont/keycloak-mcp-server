@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Completes the setup of this example after `docker compose up -d`:
 #   1. the server's private_key_jwt key pair (conf/keycloak-mcp-server.pem in the distribution)
-#   2. the master realm, which --import-realm cannot touch: the clients mcp-consumer, keycloak-mcp-server and
-#      keycloak-mcp-ui (the management UI), the user
-#      root (password root-demo) with the master admin role, the service account with the admin role
-#   3. the admin API's token (conf/kcmcp.conf in the distribution, read on every start), printed for curl and Swagger UI
+#   2. the master realm, which --import-realm cannot touch: Admin Permissions on, the clients mcp-consumer,
+#      keycloak-mcp-server (the actor of the token exchange, no admin role on its service account) and
+#      keycloak-mcp-ui (the management UI), the user root (password root-demo) with the master admin role
+#   3. the Admin Permissions grant that lets keycloak-mcp-server act on behalf of the users of master and demo
+#      (init/grant-delegation.sh, run inside the Keycloak container; a realm import cannot carry it)
+#   4. the admin API's token (conf/kcmcp.conf in the distribution, read on every start), printed for curl and Swagger UI
 # The server configuration stays here in conf/; the start command points at it.
 # Idempotent: run it again after `docker compose down -v`.
 #
@@ -33,6 +35,10 @@ for _ in $(seq 1 60); do curl -sf http://localhost:8080/realms/master > /dev/nul
 curl -sf http://localhost:8080/realms/master > /dev/null || { echo "Keycloak is not up on :8080 (docker compose up -d)" >&2; exit 1; }
 $KCADM config credentials --server http://localhost:8080 --realm master --user admin --password admin > /dev/null
 
+# the delegation grant of step 3 is an Admin Permissions (fine-grained admin permissions V2) permission
+$KCADM update realms/master -s adminPermissionsEnabled=true > /dev/null
+echo "Admin Permissions enabled"
+
 client_id() { $KCADM get clients -r master -q clientId="$1" --fields id --format csv --noquotes | head -1; }
 
 ID=$(client_id keycloak-mcp-server || true)
@@ -42,9 +48,10 @@ if [ -z "$ID" ]; then
 else
   echo "client keycloak-mcp-server exists"
 fi
-# the service account administers every realm of this Keycloak ...
-$KCADM add-roles -r master --uusername service-account-keycloak-mcp-server --rolename admin 2> /dev/null || true
-# ... and, full scope being off, the client's role scope lets the admin role into its tokens
+# the service account holds no admin role: every Admin API call runs with a delegated token for the user (a setup
+# from before the exchange mode gave it the admin role)
+$KCADM remove-roles -r master --uusername service-account-keycloak-mcp-server --rolename admin 2> /dev/null || true
+# full scope being off, the client's role scope lists what a delegated token may carry at most: the admin role
 scope_admin() { # $1 client id (uuid)
   $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
     | $KCADM create "clients/$1/scope-mappings/realm" -r master -f - > /dev/null 2>&1 || true
@@ -54,7 +61,7 @@ scope_admin "$(client_id keycloak-mcp-server)"
 ID=$(client_id mcp-consumer || true)
 if [ -z "$ID" ]; then
   $KCADM create clients -r master -f - < clients/master-mcp-consumer.json > /dev/null
-  echo "created client mcp-consumer (public, PKCE, aud=keycloak-mcp-server)"
+  echo "created client mcp-consumer (public, PKCE, consent required, aud=keycloak-mcp-server)"
 else
   echo "client mcp-consumer exists"
 fi
@@ -78,11 +85,13 @@ else
   echo "user root exists"
 fi
 $KCADM add-roles -r master --uusername root --rolename admin 2> /dev/null || true
-# the admin role in mcp-consumer's role scope: root's token carries it (full scope off)
-scope_admin "$(client_id mcp-consumer)"
 echo "root holds master/admin: administers every realm"
 
-echo "== 3. the admin API token: $DIST/conf/kcmcp.conf"
+echo "== 3. the delegation grant: keycloak-mcp-server may act on behalf of the users of master and demo"
+docker compose exec -T -e REALMS="master demo" -e ACTOR=keycloak-mcp-server -e KEYCLOAK=http://localhost:8080 \
+  keycloak /bin/bash -s < init/grant-delegation.sh
+
+echo "== 4. the admin API token: $DIST/conf/kcmcp.conf"
 TOKEN=$(sed -n 's/^kc-mcp.admin.token=//p' "$DIST/conf/kcmcp.conf" | head -1)
 if [ -z "$TOKEN" ]; then
   TOKEN="admintoken-$(openssl rand -hex 16)"

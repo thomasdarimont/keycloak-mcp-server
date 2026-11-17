@@ -1,37 +1,146 @@
 #!/usr/bin/env python3
-"""Call a tool on an MCP entry: mcp-call.py [--login user:password[@realm]] <entry-url> <tool> [json-arguments]
+"""Call a tool on an MCP entry:
+mcp-call.py [--login user:password[@realm]] [--scope "..."] [--print-token] <entry-url> <tool> [json-arguments]
 
     ./mcp-call.py http://localhost:8091/mcp/systems/tenant-a whoami
     ./mcp-call.py http://localhost:8091/mcp/systems/tenant-a keycloak_user_search '{"search": "alice"}'
     ./mcp-call.py --login alice:alice-demo http://localhost:8092/mcp/systems/tenant-a/realm-a-1 whoami
+    ./mcp-call.py --login alice:alice-demo --scope openid http://localhost:8092/mcp/systems/tenant-a/realm-a-1 whoami
+                                                                          # a login without the delegation scope
+    ./mcp-call.py --token <access token> http://localhost:8092/mcp/systems/tenant-a/realm-a-1 whoami
+    ./mcp-call.py --login alice:alice-demo@realm-a-1 --scope "openid delegation:client:keycloak-mcp-server-tenant-a" \
+        --print-token                                                     # only the login: the access token on stdout
 
---login fetches a token for the user from Keycloak (http://localhost:8090, public client mcp-consumer, password
-grant) in the realm given after @, else the realm of the entry URL, and sends it as a Bearer token: what an MCP
-client does after the browser login.
+--login walks Keycloak's browser flow the way an MCP client's browser does ($KEYCLOAK_URL, default
+http://localhost:8090; the realm given after @, else the realm of the entry URL): authorization request for the
+public client mcp-consumer, login form, consent page (Keycloak asks every session whether the tenant's client may act
+on the user's behalf), authorization code for an access token, sent as a Bearer token. The scope is what the entry's
+protected resource metadata lists (RFC 9728; the entry's 401 answer names its address), as an MCP client does:
+"openid delegation:client:keycloak-mcp-server-<tenant>" for a tenant's entry. The password grant cannot do
+this: a client that requires consent refuses it. The steps of the login are printed to stderr (MCP_CALL_QUIET=1: not).
 """
+import base64
+import hashlib
 import json
+import os
+import re
+import secrets
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
-from urllib.parse import urlencode
 
+KEYCLOAK = os.environ.get("KEYCLOAK_URL", "http://localhost:8090")
+REALM = os.environ.get("REALM", "master")                                   # replaced by the realm of the login
+CLIENT = "mcp-consumer"
+# registered on mcp-consumer; nothing listens there, the code is read from the redirect
+REDIRECT = os.environ.get("REDIRECT_URI", "http://127.0.0.1:33389/mcp-oauth-callback")
 
 BEARER = None
 
 
-def login(spec, url):
-    user, _, realm = spec.partition("@")
-    username, _, password = user.partition(":")
+def realm_of(spec, url):
+    """The realm to log in at: the one after @ in the login, else the realm of an entry /mcp/systems/<system>/<realm>."""
+    realm = spec.rpartition("@")[2] if "@" in spec else ""
     if not realm:
         parts = url.rstrip("/").split("/")
-        realm = parts[-1] if "/systems/" in url and len(parts) >= 2 and parts[-3] == "systems" else "master"
-    # kc-admin-api: the scope Keycloak 26.8.2+ wants on Admin API tokens (older servers ignore it)
-    form = urlencode({"grant_type": "password", "client_id": "mcp-consumer", "scope": "kc-admin-api",
-                      "username": username, "password": password})
-    request = urllib.request.Request(f"http://localhost:8090/realms/{realm}/protocol/openid-connect/token",
-                                     form.encode(), {"content-type": "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(request) as response:
-        return json.loads(response.read())["access_token"]
+        realm = parts[-1] if "/systems/" in url and len(parts) >= 3 and parts[-3] == "systems" else REALM
+    return realm
+
+
+def scope_of(url):
+    """The scopes the entry asks MCP clients to request: the entry answers a call without a token with 401 and the
+    address of its protected resource metadata (RFC 9728), whose scopes_supported names them."""
+    request = urllib.request.Request(url, b"{}", {"content-type": "application/json",
+                                                  "accept": "application/json, text/event-stream"})
+    try:
+        urllib.request.urlopen(request).close()
+        return "openid"                                                     # the entry asks for no login
+    except urllib.error.HTTPError as e:
+        metadata = re.search(r'resource_metadata="([^"]+)"', e.headers.get("WWW-Authenticate") or "")
+    if not metadata:
+        sys.exit(f"{url} names no protected resource metadata: pass --scope")
+    try:
+        with urllib.request.urlopen(metadata.group(1)) as r:
+            scopes = json.loads(r.read().decode()).get("scopes_supported") or []
+    except (urllib.error.URLError, ValueError) as e:
+        sys.exit(f"cannot read {metadata.group(1)} ({e}): pass --scope")
+    return " ".join(scopes) or "openid"
+
+
+def note(text):
+    """Progress of the login, on stderr so that stdout stays the tool result; MCP_CALL_QUIET=1 silences it."""
+    if not os.environ.get("MCP_CALL_QUIET"):
+        print(text, file=sys.stderr)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def login(username, password, scope):
+    opener = urllib.request.build_opener(_NoRedirect)
+    # Keycloak marks its cookies Secure; browsers accept that on localhost, Python's cookie jar does not: by hand
+    cookies = {}
+
+    def send(url, form=None):
+        data = urllib.parse.urlencode(form).encode() if form is not None else None
+        headers = {"content-type": "application/x-www-form-urlencoded"} if form is not None else {}
+        if cookies:
+            headers["cookie"] = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        try:
+            with opener.open(urllib.request.Request(url, data, headers)) as r:
+                status, body, response_headers = r.status, r.read().decode(), r.headers
+        except urllib.error.HTTPError as e:
+            status, body, response_headers = e.code, e.read().decode(), e.headers
+        for header in response_headers.get_all("set-cookie") or []:
+            name, _, value = header.split(";", 1)[0].partition("=")
+            cookies[name.strip()] = value.strip()
+        return status, body, response_headers
+
+    verifier = secrets.token_urlsafe(48)                                   # PKCE, as mcp-consumer demands
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    query = urllib.parse.urlencode({"client_id": CLIENT, "response_type": "code", "redirect_uri": REDIRECT,
+                                    "scope": scope, "state": "demo", "code_challenge": challenge,
+                                    "code_challenge_method": "S256"})
+    status, html, headers = send(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/auth?{query}")
+    for _ in range(10):
+        if status in (302, 303):
+            location = headers.get("Location")
+            if location.startswith(REDIRECT):
+                answer = urllib.parse.parse_qs(urllib.parse.urlparse(location).query)
+                if "code" not in answer:
+                    sys.exit(f"Keycloak answered {answer.get('error')}: {answer.get('error_description')}")
+                code = answer["code"][0]
+                form = {"grant_type": "authorization_code", "client_id": CLIENT, "code": code, "redirect_uri": REDIRECT,
+                        "code_verifier": verifier}
+                status, body, _ = send(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/token", form)
+                if status != 200:
+                    sys.exit(f"token request failed: HTTP {status} {body}")
+                token = json.loads(body)
+                note(f"logged in as {username} at {REALM}, token scope: {token.get('scope')}")
+                return token["access_token"]
+            status, html, headers = send(location)
+            continue
+        action = re.search(r'action="([^"]+)"', html)
+        if not action:
+            sys.exit("unexpected Keycloak page: " + re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()[:400])
+        target = action.group(1).replace("&amp;", "&")
+        if not target.startswith("http"):
+            target = KEYCLOAK + target
+        if 'name="username"' in html:
+            status, html, headers = send(target, {"username": username, "password": password, "credentialId": ""})
+        elif 'name="password"' in html:                                    # username first, then the password page
+            status, html, headers = send(target, {"password": password, "credentialId": ""})
+        elif 'name="accept"' in html:
+            asked = re.findall(r"<li>\s*<span>\s*([^<]+?)\s*</span>", html)
+            note("consent page: " + "; ".join(asked))
+            code = re.search(r'name="code" value="([^"]+)"', html).group(1)
+            status, html, headers = send(target, {"code": code, "accept": "Yes"})
+        else:
+            sys.exit("unexpected Keycloak page: " + re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()[:400])
+    sys.exit("login did not finish")
 
 
 def post(url, body, session=None):
@@ -58,14 +167,37 @@ def post(url, body, session=None):
 
 
 def main():
-    global BEARER
+    global BEARER, REALM
     args = sys.argv[1:]
-    if args[:1] == ["--login"]:
-        spec, args = args[1], args[2:]
-        BEARER = login(spec, args[0] if args else "")
-    if len(args) < 2:
+    scope = None
+    credentials = None
+    print_token = False
+    while args and args[0].startswith("--"):
+        if args[0] == "--print-token":
+            print_token, args = True, args[1:]
+            continue
+        flag, value, args = args[0], args[1] if len(args) > 1 else None, args[2:]
+        if flag == "--login":
+            credentials = value
+        elif flag == "--scope":
+            scope = value
+        elif flag == "--token":
+            BEARER = value
+        else:
+            sys.exit(__doc__)
+    if len(args) < 2 and not (print_token and credentials):
         print(__doc__)
         sys.exit(2)
+    if credentials:
+        REALM = realm_of(credentials, args[0] if args else "")
+        username, _, password = credentials.rpartition("@")[0].partition(":") if "@" in credentials \
+            else credentials.partition(":")
+        if scope is None:
+            scope = scope_of(args[0]) if args else "openid"
+        BEARER = login(username, password, scope)
+    if print_token:
+        print(BEARER)
+        return
     url, tool = args[0], args[1]
     arguments = json.loads(args[2]) if len(args) > 2 else {}
     session, _ = post(url, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {

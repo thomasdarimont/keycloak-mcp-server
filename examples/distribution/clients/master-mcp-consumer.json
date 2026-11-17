@@ -1,12 +1,13 @@
 {
   "clientId": "mcp-consumer",
   "name": "MCP consumer (LM Studio, Claude, ...)",
-  "description": "Public PKCE client the MCP clients log the user in with; tokens carry aud=keycloak-mcp-server. Full scope off: the role scope lists what a token may carry. Direct access grants only for mcp-call.py.",
+  "description": "Public PKCE client the MCP clients log the user in with; tokens carry aud=keycloak-mcp-server and no admin roles. Consent required: the user is asked whether keycloak-mcp-server may act on their behalf.",
   "enabled": true,
   "protocol": "openid-connect",
   "publicClient": true,
+  "consentRequired": true,
   "standardFlowEnabled": true,
-  "directAccessGrantsEnabled": true,
+  "directAccessGrantsEnabled": false,
   "implicitFlowEnabled": false,
   "serviceAccountsEnabled": false,
   "redirectUris": [
@@ -26,10 +27,9 @@
     "roles",
     "profile",
     "basic",
-    "email",
-    "kc-admin-api"
+    "email"
   ],
-  "optionalClientScopes": ["offline_access"],
+  "optionalClientScopes": ["delegation:client", "offline_access"],
   "attributes": {
     "pkce.code.challenge.method": "S256",
     "access.token.lifespan": "1800"
@@ -41,7 +41,7 @@
       "protocolMapper": "oidc-audience-mapper",
       "consentRequired": false,
       "config": {
-        "included.custom.audience": "keycloak-mcp-server",
+        "included.client.audience": "keycloak-mcp-server",
         "access.token.claim": "true",
         "id.token.claim": "false",
         "introspection.token.claim": "true"

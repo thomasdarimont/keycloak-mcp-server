@@ -25,6 +25,12 @@ import io.vertx.core.json.JsonObject;
  * it has no refresh token and dies with the caller's session. Keycloak's audit shows the
  * exchange ({@code TOKEN_EXCHANGE}) and every admin call made with the token as the
  * caller's.
+ * <p>
+ * The exchange happens in the realm that issued the caller's token. That is the system's
+ * auth realm, or another realm of the same Keycloak when the caller logged in at a realm
+ * entry: Keycloak accepts a token only at the realm that issued it. The client then has
+ * to exist in that realm too, with the same id and credentials, and logs in there for its
+ * actor token. A token of another Keycloak (a trusted issuer) goes to the auth realm.
  */
 public class TokenExchange {
 
@@ -39,7 +45,11 @@ public class TokenExchange {
     private final String tokenEndpoint;
     private final String clientId;
     private final String clientSecret;
-    private final Supplier<String> clientAssertion;
+    private final java.util.function.Function<String, String> clientAssertion;
+    private final String base;
+    private final String authRealm;
+    private final String authAudience;
+    private final java.util.Set<String> ownBases;
     private final Supplier<String> actorToken;
 
     /**
@@ -55,6 +65,10 @@ public class TokenExchange {
         }
         this.client = client;
         String base = system.url().endsWith("/") ? system.url().substring(0, system.url().length() - 1) : system.url();
+        this.base = base;
+        this.authRealm = system.authRealm();
+        this.authAudience = system.assertionAudience();
+        this.ownBases = DefaultKeycloakAdmin.callerIssuerBases(system, java.util.List.of());
         this.tokenEndpoint = base + "/realms/" + system.authRealm() + "/protocol/openid-connect/token";
         this.clientId = system.clientId()
             .filter(v -> !v.isBlank())
@@ -62,8 +76,8 @@ public class TokenExchange {
         this.actorToken = actorToken;
         if (system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT) {
             this.clientSecret = null;
-            this.clientAssertion = () -> ClientAssertionTokenManager.clientAssertion(clientId,
-                    system.assertionAudience(), keys.signerFor(system), keys.assertionLifespan());
+            this.clientAssertion = audience -> ClientAssertionTokenManager.clientAssertion(clientId, audience,
+                    keys.signerFor(system), keys.assertionLifespan());
         }
         else {
             this.clientSecret = system.clientSecret()
@@ -96,20 +110,44 @@ public class TokenExchange {
      * or an administrator has to change
      */
     public String exchange(String subjectToken) {
+        // the realm that issued the caller's token, when it is another realm of this
+        // system's Keycloak than the one the server logs in to
+        String issuer = DefaultKeycloakAdmin.issuerOf(subjectToken);
+        String realm = otherRealm(issuer);
+        String endpoint = realm == null ? tokenEndpoint : base + "/realms/" + realm + "/protocol/openid-connect/token";
+        String audience = realm == null ? authAudience : issuer;
+        String actor;
+        try {
+            actor = realm == null ? actorToken.get() : actorTokenAt(realm, endpoint, audience);
+        }
+        catch (ToolException e) {
+            throw e;
+        }
+        catch (RuntimeException e) {
+            // wrong or missing credentials of the server's own client: an answer the
+            // model can pass on, not a failed tool call
+            LOG.debugf(e, "Client %s cannot obtain its own token", clientId);
+            throw new ToolException(ERROR,
+                    "The server's client '" + clientId + "' could not obtain its own token at"
+                            + " Keycloak, so no delegated token can be issued for the caller (" + e.getMessage()
+                            + "). An administrator has to check the client and its credentials in the server's"
+                            + " configuration.");
+        }
         Form form = new Form().param("grant_type", GRANT)
             .param("client_id", clientId)
             .param("subject_token", subjectToken)
             .param("subject_token_type", ACCESS_TOKEN_TYPE)
-            .param("actor_token", actorToken.get())
+            .param("actor_token", actor)
             .param("actor_token_type", ACCESS_TOKEN_TYPE)
             .param("requested_token_type", ACCESS_TOKEN_TYPE);
         if (clientSecret != null) {
             form.param("client_secret", clientSecret);
         }
         else {
-            form.param("client_assertion_type", ASSERTION_TYPE).param("client_assertion", clientAssertion.get());
+            form.param("client_assertion_type", ASSERTION_TYPE)
+                .param("client_assertion", clientAssertion.apply(audience));
         }
-        try (Response response = client.target(tokenEndpoint)
+        try (Response response = client.target(endpoint)
             .request(MediaType.APPLICATION_JSON_TYPE)
             .post(Entity.form(form))) {
             String body = response.hasEntity() ? response.readEntity(String.class) : "";
@@ -120,6 +158,57 @@ public class TokenExchange {
             String token = new JsonObject(body).getString("access_token");
             if (token == null || token.isBlank()) {
                 throw new ToolException(ERROR, "Keycloak answered the token exchange without an access token.");
+            }
+            return token;
+        }
+    }
+
+    /**
+     * The realm segment of an issuer of this system's own Keycloak when it is not the
+     * auth realm; {@code null} for the auth realm, another Keycloak or no issuer.
+     */
+    private String otherRealm(String issuer) {
+        if (issuer == null) {
+            return null;
+        }
+        int at = issuer.indexOf("/realms/");
+        if (at < 0 || !ownBases.contains(issuer.substring(0, at))) {
+            return null;
+        }
+        String realm = issuer.substring(at + "/realms/".length());
+        if (realm.endsWith("/")) {
+            realm = realm.substring(0, realm.length() - 1);
+        }
+        return realm.isEmpty() || realm.contains("/") || realm.equals(authRealm) ? null : realm;
+    }
+
+    /**
+     * The client's own token of a realm other than the auth realm: the actor of an
+     * exchange has to be of the realm the exchange happens in.
+     */
+    private String actorTokenAt(String realm, String endpoint, String audience) {
+        Form form = new Form().param("grant_type", "client_credentials").param("client_id", clientId);
+        if (clientSecret != null) {
+            form.param("client_secret", clientSecret);
+        }
+        else {
+            form.param("client_assertion_type", ASSERTION_TYPE)
+                .param("client_assertion", clientAssertion.apply(audience));
+        }
+        try (Response response = client.target(endpoint)
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .post(Entity.form(form))) {
+            String body = response.hasEntity() ? response.readEntity(String.class) : "";
+            String token = response.getStatus() == 200 ? new JsonObject(body).getString("access_token") : null;
+            if (token == null || token.isBlank()) {
+                LOG.debugf("Client %s cannot log in at realm %s: HTTP %d %s", clientId, realm, response.getStatus(),
+                        body);
+                throw new ToolException(ERROR, "The caller logged in at realm '" + realm
+                        + "', and the server's client '" + clientId + "' cannot log in there (HTTP "
+                        + response.getStatus() + "), so no delegated"
+                        + " token can be issued. An administrator has to create the client in that realm with the"
+                        + " same credentials, token exchange and the delegate permission, as in the realm '" + authRealm
+                        + "'.");
             }
             return token;
         }

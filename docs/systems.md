@@ -257,7 +257,7 @@ Same server, bound to one system or realm.
 - `search_tools` and `whoami` judge roles and capabilities against that system; `whoami` reports `entry`.
 - Global tools ignore the realm part.
 - With OIDC on, entry requests are verified against the system's auth realm (`<url>/realms/<auth-realm>`): tenant A's
-  users log in at tenant A's Keycloak; forward delegation works across systems. Systems sharing the default tenant's
+  users log in at tenant A's Keycloak; exchange delegation works across systems. Systems sharing the default tenant's
   realm keep the default tenant.
 - Each such entry has its own protected resource metadata, at the well-known path plus the entry's path:
   `/mcp/systems/acme` answers 401 with `resource_metadata="…/.well-known/oauth-protected-resource/mcp/systems/acme"`,
@@ -265,6 +265,19 @@ Same server, bound to one system or realm.
   `…/mcp/systems/acme/sales`). An entry on the default tenant's realm shares the root document
   `/.well-known/oauth-protected-resource`. MCP clients follow the link from the 401, so they log in at the right realm
   without further configuration.
+- A client that derives the address itself, as RFC 9728 describes (the well-known path followed by the resource's
+  path), finds a document for every resource: `…/oauth-protected-resource/mcp` for the endpoint,
+  `…/oauth-protected-resource/mcp/systems/acme/sales` for an entry, also one on the default tenant's realm, each
+  naming the resource it was asked for. An entry's document is served before the entry got its first request, so
+  it does not matter which instance behind a load balancer answers. With `quarkus.http.root-path` the documents
+  are under that prefix, where the 401 points; a document at the host's root needs the proxy in front to route it.
+- With `KC_MCP_DELEGATION=exchange` the caller's token is exchanged in the realm that issued it. For a realm entry
+  whose realm is not the system's auth realm that is the entry's realm: the server's client logs in there and
+  exchanges there. So the system's client has to exist in every realm users log in at, with the same client id and
+  credentials (with `private_key_jwt`, the same JWKS URL), *Standard Token Exchange*, a role scope and the `delegate`
+  permission, next to a login client with consent and the delegation scope
+  ([what a realm needs](../examples/delegated-auth/README.md)). Where it is missing the call answers
+  `delegation_failed` and names the realm.
 - Unknown system: `unknown_system` on every call. `/mcp/*` permission policy covers entries.
 - In delegation mode a caller's token never crosses to another Keycloak: a call that names a system whose Keycloak
   did not issue the token answers `caller_foreign_system` ([Security](security.md#callers)).

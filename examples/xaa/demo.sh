@@ -7,9 +7,11 @@
 #   3. bob is realm-admin in Keycloak, yet the IdP's policy refuses him the ID-JAG: he never reaches the MCP server
 #   4. dave may connect by policy but has no linked account in realm acme: Keycloak refuses the ID-JAG
 #   5. a replayed ID-JAG is refused
-#   6. Keycloak's audit: JWT_AUTHORIZATION_GRANT events name the IdP, its user id and the client
+#   6. Keycloak's audit: JWT_AUTHORIZATION_GRANT events name the IdP, its user id and the client, TOKEN_EXCHANGE
+#      events name the MCP server's client as the actor, the admin event names alice
 #
-# SHOW_TOKENS=1 ./demo.sh also prints the tokens of step 1: ID token, ID-JAG and access token.
+# SHOW_TOKENS=1 ./demo.sh also prints the tokens of step 1: ID token, ID-JAG, access token, and the two the MCP server
+# gets for it (the actor's and the delegated one).
 set -euo pipefail
 cd "$(dirname "$0")"
 export MCP_URL=${MCP_URL:-http://localhost:8103/mcp}
@@ -20,7 +22,7 @@ call() { ./xaa-call.py "$@" 2>/dev/null; }
 
 step "1. alice: the whole chain, progress on stderr"
 ./xaa-call.py --login alice:alice-demo ${SHOW_TOKENS:+--show-tokens} whoami \
-  | jq -c '{caller: .caller.username, keycloakCallsRunAs, roles: (.roles.acme | length | tostring + " realm-management roles")}'
+  | jq -c '{caller: .caller.username, keycloakCallsRunAs, delegation, roles: (.roles.acme | length | tostring + " realm-management roles")}'
 
 step "2. what each user may do is Keycloak's call: alice (realm-admin), carol (view-users, view-events)"
 call --login alice:alice-demo keycloak_user_search '{"search": "*"}' | jq -c '[.items[]?.username] // .'
@@ -62,5 +64,13 @@ $KCADM config credentials --server http://keycloak:8080 --realm master --user ad
 # kcadm keeps only the last of repeated -q type=...: filter in jq
 $KCADM get events -r acme -q max=50 2>/dev/null \
   | jq -c '[.[] | select(.type | startswith("JWT_AUTHORIZATION_GRANT"))][:5][] | {time: (.time / 1000 | todate), type, client: .clientId, user: .details.username, idp: .details.identity_provider, idpUser: .details.identity_provider_user_id, error: .details.reason}'
+echo "TOKEN_EXCHANGE events (the MCP server's client keycloak-mcp exchanges the user's token, actor = its service account):"
+$KCADM get events -r acme -q type=TOKEN_EXCHANGE -q max=3 2>/dev/null \
+  | jq -c '.[] | {time: (.time / 1000 | todate), user: .userId, client: .clientId, details: (.details | with_entries(select(.key | test("actor|subject|token_type"; "i"))))}'
+echo "admin events: the UPDATE of erin was made by alice (authDetails.userId = her id), not by a service account:"
+$KCADM get admin-events -r acme -q operationTypes=UPDATE -q resourceTypes=USER -q max=1 2>/dev/null \
+  | jq -c '.[] | {time: (.time / 1000 | todate), operation: .operationType, resource: .resourcePath, authUser: .authDetails.userId, authClient: .authDetails.clientId}'
+ALICE=$($KCADM get users -r acme -q username=alice -q exact=true --fields id --format csv --noquotes | head -1)
+echo "alice's id: $ALICE"
 echo "the IdP's decisions (docker compose logs idp):"
 docker compose logs --no-log-prefix idp 2>/dev/null | grep -E 'ID-JAG for' | tail -4

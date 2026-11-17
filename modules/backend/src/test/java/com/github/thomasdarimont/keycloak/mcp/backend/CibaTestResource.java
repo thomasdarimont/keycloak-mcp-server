@@ -18,13 +18,13 @@ import com.sun.net.httpserver.HttpServer;
 import io.vertx.core.json.JsonObject;
 
 /**
- * The forward setup plus CIBA: a confidential client {@code mcp-ciba} with the CIBA
- * grant, a one second polling interval, and Keycloak's HTTP authentication channel
- * pointing at {@link Entity}, a stand-in for the user's device running in the test JVM:
- * it records every request Keycloak delivers and answers it the way {@link Entity#mode}
- * says, by calling Keycloak's callback with the bearer token it was given.
+ * The caller setup plus CIBA: a confidential client {@code mcp-ciba} with the CIBA grant,
+ * a one second polling interval, and Keycloak's HTTP authentication channel pointing at
+ * {@link Entity}, a stand-in for the user's device running in the test JVM: it records
+ * every request Keycloak delivers and answers it the way {@link Entity#mode} says, by
+ * calling Keycloak's callback with the bearer token it was given.
  */
-public class CibaTestResource extends ForwardTestResource {
+public class CibaTestResource extends CallerTestResource {
 
     public static final String CLIENT_SECRET = "ciba-secret";
 
@@ -105,7 +105,7 @@ public class CibaTestResource extends ForwardTestResource {
         catch (IOException e) {
             throw new IllegalStateException(e);
         }
-        // the container reaches the test JVM through the host gateway the forward
+        // the container reaches the test JVM through the host gateway the caller
         // resource already maps
         container.withEnv("KC_SPI_CIBA_AUTH_CHANNEL__CIBA_HTTP_AUTH_CHANNEL__HTTP_AUTHENTICATION_CHANNEL_URI",
                 "http://host.docker.internal:" + Entity.port + "/auth");

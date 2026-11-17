@@ -195,7 +195,6 @@ measured with [`examples/split-deployment/db-outage.sh`](../examples/split-deplo
 | | while the database is away |
 |---|---|
 | systems | the last snapshot is served. Callers do not wait: one background reload retries after 1 s, doubling up to `cache-seconds`, and the first that succeeds ends it. One WARN when it starts, one INFO when it recovers. Before the first load ever succeeded, the instance knows no systems |
-| tool calls with `forward` | keep working: the caller brings the token, the instance needs no credentials of its own |
 | service account and `exchange` calls | keep working with the tokens the instance holds; a new token request fails once they expire, as the signing key and stored secrets are read from the database on each request |
 | audit | the console line is written, the row is not; the listener is left out until a probe every 2 s can insert a row again (rolled back, so it leaves none), so calls do not wait for it. Changes are refused with `kc-mcp.audit-on-failure=refuse-changes` (default in `shared`) ([the audit gap](#the-audit-gap)) |
 | admin API, management UI, UI logins, CIBA approvals, JWKS | fail; Keycloak keeps the JWKS it fetched until its keys cache expires |

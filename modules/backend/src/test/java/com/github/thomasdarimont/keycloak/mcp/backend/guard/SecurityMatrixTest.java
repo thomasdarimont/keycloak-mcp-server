@@ -144,11 +144,7 @@ class SecurityMatrixTest {
     @Test
     void delegatingServersRefuseAnonymousCallers() {
         AccessPolicy policy = new AccessPolicy(false, List.of());
-        ToolInvoker forward = new ToolInvoker(catalog, policy, req -> Decision.CONFIRMED, 50, null,
-                DelegationMode.FORWARD);
         ToolSpec spec = catalog.get("keycloak_user_search").orElseThrow();
-        Map<String, Object> r = payload(forward.invoke(spec, Map.of("realm", "demo"), false, TransportContext.none()));
-        assertEquals("caller_required", r.get("error"), r.toString());
         ToolInvoker exchange = new ToolInvoker(catalog, policy, req -> Decision.CONFIRMED, 50, null,
                 DelegationMode.EXCHANGE);
         assertEquals("caller_required",

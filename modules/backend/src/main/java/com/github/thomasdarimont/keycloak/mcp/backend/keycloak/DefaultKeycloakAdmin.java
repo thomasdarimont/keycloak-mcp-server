@@ -36,9 +36,10 @@ import io.vertx.core.json.JsonObject;
 /**
  * The server's {@link KeycloakAdmin}: a lazily built admin client for one
  * {@link KeycloakSystem} (password, client secret or private_key_jwt) plus the per-caller
- * clients of the delegation modes: {@code forward} sends the caller's token as is,
- * {@code exchange} first turns it into a delegated token at Keycloak's token endpoint
- * ({@link TokenExchange}). Instances are managed by {@link DefaultKeycloakSystems}.
+ * clients of delegation mode {@code exchange}, which act with the delegated token
+ * Keycloak's token endpoint issues for a caller's token ({@link TokenExchange}). A
+ * caller's own token is never sent to the Admin API. Instances are managed by
+ * {@link DefaultKeycloakSystems}.
  */
 public class DefaultKeycloakAdmin implements KeycloakAdmin {
 
@@ -65,7 +66,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
      * Set on instances returned by {@link #forToken}: the token sent on behalf of the
      * caller (their own, or the delegated one Keycloak exchanged it for).
      */
-    private final String forwardedToken;
+    private final String delegatedToken;
     private final DelegationMode delegation;
     private volatile TokenExchange exchange;
     private final Map<String, Delegate> delegates = new ConcurrentHashMap<>();
@@ -82,28 +83,27 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
     }
 
     /**
-     * @param delegation what {@link #forToken} does with a caller's token: forward it, or
-     * exchange it for a delegated token first
+     * @param delegation whether {@link #forToken} may act for callers: only in mode
+     * {@code exchange}
      */
     public DefaultKeycloakAdmin(KeycloakSystem system, SigningKeys jwtKeys, DelegationMode delegation) {
         this(system, jwtKeys, null, null, delegation);
     }
 
-    private DefaultKeycloakAdmin(KeycloakSystem system, SigningKeys jwtKeys, Keycloak prebuilt, String forwardedToken,
+    private DefaultKeycloakAdmin(KeycloakSystem system, SigningKeys jwtKeys, Keycloak prebuilt, String delegatedToken,
             DelegationMode delegation) {
         this.system = system;
         this.jwtKeys = jwtKeys;
         this.keycloak = prebuilt;
-        this.forwardedToken = forwardedToken;
+        this.delegatedToken = delegatedToken;
         this.delegation = delegation == null ? DelegationMode.OFF : delegation;
     }
 
     /**
      * An admin client of the same system that acts for the caller of the given token
-     * instead of with the server's credentials: delegation mode {@code forward} sends the
-     * token itself, {@code exchange} the delegated token Keycloak issues for it (actor =
-     * this system's client). Instances are cached per caller token until it, or the
-     * delegated token, expires.
+     * instead of with the server's credentials: it sends the delegated token Keycloak
+     * issues for it (actor = this system's client), never the caller's token itself.
+     * Instances are cached per caller token until it, or the delegated token, expires.
      *
      * @throws com.github.thomasdarimont.keycloak.mcp.catalog.ToolException
      * {@value TokenExchange#ERROR} when Keycloak refuses the exchange
@@ -113,8 +113,13 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
         if (bearerToken == null || bearerToken.isBlank()) {
             throw new IllegalArgumentException("caller token required");
         }
-        if (forwardedToken != null) {
+        if (delegatedToken != null) {
             throw new IllegalStateException("this client already acts for a caller");
+        }
+        if (delegation != DelegationMode.EXCHANGE) {
+            // the caller's own token is never sent to the Admin API (MCP authorization:
+            // no token passthrough)
+            throw new IllegalStateException("kc-mcp.delegation is off: no admin call runs for a caller");
         }
         // the token stays within the trust domain that issued it: a token of Keycloak A
         // is never sent to
@@ -146,7 +151,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
             purgeDelegates(now, false);
         }
         // the exchange is a network call: outside the map's lock
-        String token = delegation == DelegationMode.EXCHANGE ? exchange().exchange(bearerToken) : bearerToken;
+        String token = exchange().exchange(bearerToken);
         long expiresAt = Math.min(expiryOf(bearerToken, now), expiryOf(token, now));
         return delegates.compute(bearerToken, (k, old) -> {
             if (old != null && old.expiresAt() > now) {
@@ -189,12 +194,12 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
     }
 
     /**
-     * Whether this instance forwards a caller's token rather than using the server's
-     * credentials.
+     * Whether this instance acts for a caller, with a delegated token, rather than with
+     * the server's credentials.
      */
     @Override
     public boolean isDelegated() {
-        return forwardedToken != null;
+        return delegatedToken != null;
     }
 
     private void purgeDelegates(long now, boolean all) {
@@ -208,7 +213,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
     }
 
     /**
-     * Which issuers' tokens this client forwards: the system's own URL and public URL,
+     * Which issuers' tokens this client exchanges: the system's own URL and public URL,
      * plus {@code extraIssuers} (the OIDC tenant's configured issuer for the default
      * system). Compared by base, the part before {@code /realms/}, so every realm of that
      * Keycloak counts.
@@ -362,7 +367,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
      * token requests.
      */
     private boolean asksForScope() {
-        return forwardedToken == null && !scopeRefused && jwtKeys != null && jwtKeys.adminApiScope() != null
+        return delegatedToken == null && !scopeRefused && jwtKeys != null && jwtKeys.adminApiScope() != null
                 && system.clientAuth() != ClientAuth.PRIVATE_KEY_JWT;
     }
 
@@ -463,8 +468,8 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
      */
     @Override
     public String accessToken() {
-        if (forwardedToken != null) {
-            return forwardedToken;
+        if (delegatedToken != null) {
+            return delegatedToken;
         }
         Keycloak k = client();
         ClientAssertionTokenManager jwt = jwtTokens;
@@ -498,7 +503,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
         purgeDelegates(Long.MAX_VALUE, true);
         Keycloak k = keycloak;
         if (k != null) {
-            if (forwardedToken == null && jwtTokens == null && system.grantType() == GrantType.PASSWORD) {
+            if (delegatedToken == null && jwtTokens == null && system.grantType() == GrantType.PASSWORD) {
                 // the password grant's user session would stay in Keycloak until its idle
                 // timeout; client_credentials has no refresh token to log out with
                 try {

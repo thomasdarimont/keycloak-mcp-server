@@ -6,7 +6,7 @@ The same server in two instance roles on one PostgreSQL database
 | service | port | `kc-mcp.instance-role` | serves | database user |
 |---|---|---|---|---|
 | `admin` | 127.0.0.1:8094 | `admin` | admin API (and the management UI, when enabled); `/mcp` answers 404 | `kcmcp_admin`: owns the schema, runs the migrations, purges old audit rows |
-| `mcp` | 8095 | `mcp` | the MCP endpoint for people (forward delegation); `/admin` answers 404 | `kcmcp_mcp`: reads systems, realms, secrets, keys; appends audit rows; keeps CIBA approvals |
+| `mcp` | 8095 | `mcp` | the MCP endpoint for people (delegation mode `exchange`); `/admin` answers 404 | `kcmcp_mcp`: reads systems, realms, secrets, keys; appends audit rows; keeps CIBA approvals |
 
 Keycloak runs on :8093 (`admin`/`admin`), PostgreSQL on :5491. In a real deployment `mcp` sits behind the public
 ingress and `admin` on the internal network only. The MCP clients, and the models behind them, never reach the admin
@@ -22,16 +22,23 @@ docker compose down -v                                           # drops the dat
 Iterating on the server without an image build: `docker-compose.dev.yml` mounts `target/quarkus-app`
 (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`, then `restart admin mcp` after the next package).
 
-The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client and `mcp-call.py` of
-[dynamic-systems](../dynamic-systems/).
+The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client, the delegation grant
+(`init/grant-delegation.sh`) and `mcp-call.py` of [dynamic-systems](../dynamic-systems/).
+
+People log in at the realm `acme-dev` and consent to the client `keycloak-mcp-server` acting on their behalf. The MCP
+instance exchanges the user's token at Keycloak for a delegated one (`sub` the user, `act` the client) and sends that
+to the Admin API. The user's own token never leaves the MCP instance. The client lives in `acme-dev`, the system's
+`authRealm`, because Keycloak exchanges a token only in the realm that issued it. What Keycloak needs for this:
+[dynamic-systems](../dynamic-systems/README.md), steps 2 and 3.
 
 ## What `demo.sh` shows
 
 1. `acme` is registered on the admin instance, and its key pair is generated there. Keycloak fetches the JWKS from
    the admin instance (`http://admin:8081/auth/keys/<id>/jwks.json`, `signingKey.jwksPath` of the registration). The MCP instance signs with the same key,
    which it reads from the database.
-2. The MCP instance knows `acme` only through the database, within `cache-seconds` (10). alice and sam call tools with
-   their own tokens; sam's write is `forbidden` by Keycloak.
+2. The MCP instance knows `acme` only through the database, within `cache-seconds` (10). alice and sam log in and
+   call tools; `whoami` shows `delegation: {mode: exchange, consented: true, actor: keycloak-mcp-server}`. The calls
+   run with their delegated tokens, so sam's write is `forbidden`: he lacks `manage-users`.
 3. What each side cannot do:
 
    | attempt | answer |
@@ -74,7 +81,8 @@ The example reuses the `acme-dev` realm, the `keycloak-mcp-server` client and `m
 - **What has to happen on the admin side**, because the MCP side cannot write it:
   - signing keys: register with `"signingKey": "generate"`, and rotate with `POST /admin/systems/<alias>/signing-key`.
     An MCP instance that meets a `private_key_jwt` system without a key would have to create one, which its
-    database user may not: the key has to exist before the MCP side uses the system.
+    database user may not: the key has to exist before the MCP side uses the system. In delegation mode `exchange`
+    the MCP instance signs two requests with that key, the client's own token and the token exchange.
   - the audit retention (`KC_MCP_SPI_AUDIT_LISTENER_DB_RETENTION_DAYS`): set it on the admin instance only.
 - **The management UI** would run on the admin instance as well (`KC_MCP_UI_ENABLED=true`, with HTTPS and its client).
   Its session rows are the admin user's alone. See [management-ui](../management-ui/).

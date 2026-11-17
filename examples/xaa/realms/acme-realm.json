@@ -3,10 +3,14 @@
   "displayName": "ACME (Cross-App Access)",
   "enabled": true,
   "sslRequired": "none",
+  "adminPermissionsEnabled": true,
   "accessTokenLifespan": 300,
   "eventsEnabled": true,
   "eventsExpiration": 86400,
-  "enabledEventTypes": ["JWT_AUTHORIZATION_GRANT", "JWT_AUTHORIZATION_GRANT_ERROR", "LOGIN", "LOGIN_ERROR"],
+  "enabledEventTypes": [
+    "JWT_AUTHORIZATION_GRANT", "JWT_AUTHORIZATION_GRANT_ERROR", "TOKEN_EXCHANGE", "TOKEN_EXCHANGE_ERROR",
+    "CLIENT_LOGIN", "CLIENT_LOGIN_ERROR", "LOGIN", "LOGIN_ERROR"
+  ],
   "adminEventsEnabled": true,
   "adminEventsDetailsEnabled": true,
   "identityProviders": [
@@ -40,7 +44,7 @@
     {
       "clientId": "agent",
       "name": "AI agent (MCP client), registered at the MCP authorization server",
-      "description": "Redeems ID-JAGs of the enterprise IdP (JWT authorization grant). No browser flow, no consent.",
+      "description": "Redeems ID-JAGs of the enterprise IdP (JWT authorization grant). No browser flow, no consent. Its tokens open the MCP server only and name keycloak-mcp as the client that may act for the user (may_act mappers below).",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
@@ -49,12 +53,12 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "fullScopeAllowed": true,
+      "fullScopeAllowed": false,
       "attributes": {
         "oauth2.jwt.authorization.grant.enabled": "true",
         "oauth2.jwt.authorization.grant.idp": "enterprise"
       },
-      "defaultClientScopes": ["basic", "acr", "roles", "profile", "email", "kc-admin-api"],
+      "defaultClientScopes": ["basic", "acr", "roles", "profile", "email"],
       "optionalClientScopes": [],
       "protocolMappers": [
         {
@@ -68,10 +72,104 @@
             "id.token.claim": "false",
             "introspection.token.claim": "true"
           }
+        },
+        {
+          "name": "keycloak-mcp audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "keycloak-mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "may_act sub (service account of keycloak-mcp)",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "may_act.sub",
+            "claim.value": "5d0c1f0e-6a52-4a3b-9c1e-2f7b8a94d3e1",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "may_act client_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "may_act.client_id",
+            "claim.value": "keycloak-mcp",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
         }
       ]
+    },
+    {
+      "clientId": "keycloak-mcp",
+      "name": "keycloak-mcp (the MCP server, actor)",
+      "description": "The MCP server's own client: a service account without any admin role, allowed to perform token exchange. Its role scope (clientScopeMappings below) caps what a delegated token may carry, whoever the user is.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "keycloak-mcp-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": ["acr", "basic", "roles", "profile", "kc-admin-api", "service_account"],
+      "optionalClientScopes": []
     }
   ],
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "keycloak-mcp",
+        "roles": ["realm-admin"]
+      }
+    ]
+  },
+  "clientProfiles": {
+    "profiles": [
+      {
+        "name": "may-act-without-consent",
+        "description": "Checks every may_act claim a token response carries: issuer, actor and the delegate permission (Admin Permissions). The consent check is off: with Cross-App Access there is no consent page, the enterprise IdP's policy decides instead.",
+        "executors": [
+          {
+            "executor": "may-act",
+            "configuration": { "reject-any": false, "avoid-permission-check": false, "avoid-consent-check": true }
+          }
+        ]
+      }
+    ]
+  },
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "validate-delegation-claims",
+        "description": "The may_act claim of the client agent comes from protocol mappers, which Keycloak does not check on its own. This policy has Keycloak refuse the token unless keycloak-mcp holds the delegate permission for the user.",
+        "enabled": true,
+        "conditions": [{ "condition": "any-client", "configuration": { "is-negative-logic": false } }],
+        "profiles": ["may-act-without-consent"]
+      }
+    ]
+  },
   "groups": [
     {"name": "keycloak-admins", "path": "/keycloak-admins", "clientRoles": {"realm-management": ["realm-admin"]}},
     {"name": "keycloak-support", "path": "/keycloak-support", "clientRoles": {"realm-management": ["view-users", "view-events"]}},
@@ -105,6 +203,12 @@
       "username": "frank", "enabled": false, "email": "frank@customer.test", "emailVerified": true,
       "firstName": "Frank", "lastName": "Customer",
       "realmRoles": ["default-roles-acme"], "groups": ["/customers"]
+    },
+    {
+      "id": "5d0c1f0e-6a52-4a3b-9c1e-2f7b8a94d3e1",
+      "username": "service-account-keycloak-mcp", "enabled": true,
+      "serviceAccountClientId": "keycloak-mcp",
+      "realmRoles": ["default-roles-acme"]
     }
   ]
 }

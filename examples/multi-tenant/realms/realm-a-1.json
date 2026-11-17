@@ -2,6 +2,7 @@
   "realm": "realm-a-1",
   "displayName": "Tenant A / employees",
   "enabled": true,
+  "adminPermissionsEnabled": true,
   "sslRequired": "external",
   "loginWithEmailAllowed": true,
   "bruteForceProtected": true,
@@ -9,7 +10,9 @@
   "enabledEventTypes": [
     "LOGIN",
     "LOGIN_ERROR",
-    "LOGOUT"
+    "LOGOUT",
+    "TOKEN_EXCHANGE",
+    "TOKEN_EXCHANGE_ERROR"
   ],
   "adminEventsEnabled": true,
   "roles": {
@@ -50,15 +53,16 @@
   "clients": [
     {
       "clientId": "mcp-consumer",
-      "optionalClientScopes": ["offline_access"],
-      "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "basic", "email", "kc-admin-api"],
+      "optionalClientScopes": ["delegation:client", "offline_access"],
+      "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "basic", "email"],
       "name": "MCP consumer (LLM client)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
+      "consentRequired": true,
       "serviceAccountsEnabled": false,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "redirectUris": [
         "http://127.0.0.1:33389/mcp-oauth-callback"
@@ -71,7 +75,7 @@
         "pkce.code.challenge.method": "S256",
         "access.token.lifespan": "1800"
       },
-      "description": "Public PKCE client MCP clients log the user in with (direct grants on for the demo script); tokens carry aud=keycloak-mcp-server",
+      "description": "Public PKCE client MCP clients log the user in with. Users consent to keycloak-mcp-server-tenant-a acting for them; tokens carry aud=keycloak-mcp-server and no Admin API audience",
       "protocolMappers": [
         {
           "name": "mcp server audience",
@@ -84,14 +88,50 @@
             "id.token.claim": "false",
             "introspection.token.claim": "true"
           }
+        },
+        {
+          "name": "actor audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "keycloak-mcp-server-tenant-a",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
         }
       ]
+    },
+    {
+      "clientId": "keycloak-mcp-server-tenant-a",
+      "name": "MCP server for tenant-a (actor)",
+      "description": "The MCP server's client for tenant-a in this realm, same id and key as in master: a service account without any admin role that may exchange tokens. Users consent to it acting for them; its role scope caps what a delegated token may carry.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-jwt",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "use.jwks.url": "true",
+        "jwks.url": "http://mcp:8081/auth/keys/tenant-a/jwks.json",
+        "token.endpoint.auth.signing.alg": "RS256",
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": ["acr", "basic", "roles", "profile", "kc-admin-api", "service_account"],
+      "optionalClientScopes": []
     }
   ],
   "clientScopeMappings": {
     "realm-management": [
       {
-        "client": "mcp-consumer",
+        "client": "keycloak-mcp-server-tenant-a",
         "roles": [
           "create-client",
           "impersonation",

@@ -2,6 +2,7 @@
   "realm": "acme-dev",
   "displayName": "ACME / development",
   "enabled": true,
+  "adminPermissionsEnabled": true,
   "sslRequired": "external",
   "loginWithEmailAllowed": true,
   "bruteForceProtected": true,
@@ -9,7 +10,14 @@
   "enabledEventTypes": [
     "LOGIN",
     "LOGIN_ERROR",
-    "LOGOUT"
+    "LOGOUT",
+    "CODE_TO_TOKEN",
+    "CLIENT_LOGIN",
+    "CLIENT_LOGIN_ERROR",
+    "TOKEN_EXCHANGE",
+    "TOKEN_EXCHANGE_ERROR",
+    "GRANT_CONSENT",
+    "REVOKE_GRANT"
   ],
   "adminEventsEnabled": true,
   "roles": {
@@ -74,15 +82,16 @@
   "clients": [
     {
       "clientId": "mcp-consumer",
-      "optionalClientScopes": ["offline_access"],
-      "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "basic", "email", "kc-admin-api"],
+      "optionalClientScopes": ["delegation:client", "offline_access"],
+      "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "basic", "email"],
       "name": "MCP consumer (LLM client)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
+      "consentRequired": true,
       "serviceAccountsEnabled": false,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "redirectUris": [
         "http://127.0.0.1:33389/mcp-oauth-callback"
@@ -95,7 +104,7 @@
         "pkce.code.challenge.method": "S256",
         "access.token.lifespan": "1800"
       },
-      "description": "Public PKCE client MCP clients log the user in with (direct grants on for the demo script); tokens carry aud=keycloak-mcp-server",
+      "description": "Public PKCE client MCP clients log the user in with. Consent required: the user is asked every session whether keycloak-mcp-server may act on their behalf. Its tokens carry aud=keycloak-mcp-server and no admin roles.",
       "protocolMappers": [
         {
           "name": "mcp server audience",
@@ -103,7 +112,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.custom.audience": "keycloak-mcp-server",
+            "included.client.audience": "keycloak-mcp-server",
             "access.token.claim": "true",
             "id.token.claim": "false",
             "introspection.token.claim": "true"
@@ -112,34 +121,6 @@
       ]
     }
   ],
-  "clientScopeMappings": {
-    "realm-management": [
-      {
-        "client": "mcp-consumer",
-        "roles": [
-          "create-client",
-          "impersonation",
-          "manage-authorization",
-          "manage-clients",
-          "manage-events",
-          "manage-identity-providers",
-          "manage-realm",
-          "manage-users",
-          "query-clients",
-          "query-groups",
-          "query-realms",
-          "query-users",
-          "realm-admin",
-          "view-authorization",
-          "view-clients",
-          "view-events",
-          "view-identity-providers",
-          "view-realm",
-          "view-users"
-        ]
-      }
-    ]
-  },
   "users": [
     {
       "username": "alice",

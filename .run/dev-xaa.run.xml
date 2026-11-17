@@ -9,10 +9,14 @@
             <map>
               <entry key="KC_MCP_SYSTEMS_DEFAULT_URL" value="http://localhost:8101" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM" value="acme" />
-              <entry key="KC_MCP_DELEGATION" value="forward" />
+              <entry key="KC_MCP_DELEGATION" value="exchange" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_GRANT_TYPE" value="client_credentials" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID" value="keycloak-mcp" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET" value="keycloak-mcp-secret" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="acme" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="acme" />
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
+              <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
               <entry key="QUARKUS_HTTP_PORT" value="8103" />
               <entry key="QUARKUS_OIDC_TENANT_ENABLED" value="true" />
               <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="http://localhost:8103" />

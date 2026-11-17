@@ -19,12 +19,13 @@ keycloak-mcp (the MCP server; confidential client, service account, Standard Tok
 Admin REST API with T_del → Keycloak enforces the user's realm-management roles; admin events name the user
 ```
 
-What that buys over `KC_MCP_DELEGATION=forward` (the user's token passed through, `examples/run-modes`):
+What that buys over passing the user's own token through to the Admin API, which the MCP authorization
+specification forbids and this server no longer does:
 
-| | forward | exchange (this example) |
+| | token passed through | exchange |
 |---|---|---|
 | Keycloak sees | the user | the user **and** the agent (`act`, `TOKEN_EXCHANGE` event with actor) |
-| the user's token | goes to the Admin API as is | stays with the MCP server; a transient delegated token (no refresh, no session) goes out |
+| the user's token | goes to the Admin API as is, and opens it without the server too | stays with the MCP server and opens nothing else; a transient delegated token (no refresh, no session) goes out |
 | narrowing | none: the user's full roles | the actor client's role scope caps every delegated token, whoever the user is |
 | consent | none | explicit, every login session (Keycloak never stores it) |
 | can be revoked | with the user's session | per client (Admin Permissions) or per client policy (`may-act` executor) |

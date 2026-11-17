@@ -210,7 +210,6 @@ The real boundary is the roles of the identity the server uses. Pick the level, 
 | full admin | client in `master` with `admin`, or an admin user via `admin-cli` | nothing |
 | realm admin | confidential client **in the realm** with `realm-admin` | `kc-mcp.systems.default.allowed-realms=<realm>`, `kc-mcp.systems.default.default-realm=<realm>` |
 | realm manager | client in the realm with only the `realm-management` roles needed | as realm admin; role filtering hides the rest. Narrow further: `KC_MCP_DENIED_TOOLS=keycloak_user_delete`, `KC_MCP_READ_ONLY=true` |
-| user (forward) | the human holds the roles; a public PKCE client whose tokens carry the server's audience | `KC_MCP_DELEGATION=forward` + `QUARKUS_OIDC_TENANT_ENABLED=true`; no server credentials ([Callers](#callers)) |
 | delegated agent (exchange) | the human holds the roles and consents to the server's client acting for them (Keycloak 26.8 token exchange delegation, preview); the client's role scope caps every delegated token | `KC_MCP_DELEGATION=exchange` + the client's `client_credentials` + `QUARKUS_OIDC_TENANT_ENABLED=true` ([Callers](#callers), `examples/delegated-auth`) |
 
 A `master` client may also manage realms through `<realm>-realm` client roles; the filter understands both.
@@ -239,7 +238,7 @@ tool("keycloak_user_delete")
   runs after the realm and role checks and before the confirmation. A denial answers `{"error": <code>, "message": ...}`.
 - Global checks come from `ToolProvider.accessChecks(...)` or any CDI bean implementing `AccessCheck`. Which of them
   run, in which order and with which settings can differ per system and realm ([Access checks](access-checks.md)).
-- `Delegation` says whether a tool may run with a delegated identity. Under `KC_MCP_DELEGATION=forward` every call is
+- `Delegation` says whether a tool may run with a delegated identity. Under `KC_MCP_DELEGATION=exchange` every call is
   delegated (`Caller.delegated()`): `FORBIDDEN` tools are refused, `REQUIRED` tools usable; service account mode is the
   reverse. `FORBIDDEN` by default: `client_get_secret`, `client_regenerate_secret`, `realm_update`, `auth_flow_bind`,
   `federation_sync`.
@@ -440,22 +439,29 @@ by default, so the endpoint is anonymous. `QUARKUS_OIDC_TENANT_ENABLED=true` ver
 the default system's auth realm, `<url>/realms/<auth-realm>` (`quarkus.oidc.auth-server-url` to change it, `QUARKUS_OIDC_TOKEN_AUDIENCE` to
 require an audience). `KC_MCP_DELEGATION` then decides whose identity reaches Keycloak:
 
-| | `off` (default) | `forward` | `exchange` |
-|---|---|---|---|
-| admin calls run as | the service account | the caller's own token | a delegated token Keycloak exchanges the caller's for: `sub` the caller, `act` the server's client |
-| roles that count | the service account's (role filter) | the caller's `realm-management` roles from their token, per call; Keycloak enforces again | the delegated token's: the caller's roles within the client's role scope; Keycloak enforces again |
-| anonymous requests | allowed unless `KC_MCP_REQUIRE_CALLER=true` or `KC_MCP_SECURITY_PROFILE=shared` | `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` | as forward |
-| server credentials | required | optional (the policies provider falls back to them for lookups) | the client's `client_credentials` (secret or `private_key_jwt`); no admin role on it |
-| Keycloak side | | a public client with an *Audience* mapper for the server | plus consent on that client, *Standard Token Exchange* on the server's client, an Admin Permissions `delegate` grant for it; Keycloak 26.8+ with `--features=token-exchange-delegation,parameterized-scopes` (preview) |
+| | `off` (default) | `exchange` |
+|---|---|---|
+| admin calls run as | the service account | a delegated token Keycloak exchanges the caller's for: `sub` the caller, `act` the server's client |
+| roles that count | the service account's (role filter) | the delegated token's: the caller's roles within the client's role scope; Keycloak enforces again |
+| anonymous requests | allowed unless `KC_MCP_REQUIRE_CALLER=true` or `KC_MCP_SECURITY_PROFILE=shared` | `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` |
+| server credentials | required | the client's `client_credentials` (secret or `private_key_jwt`); no admin role on it |
+| Keycloak side | | a public client with an *Audience* mapper for the server and consent required, *Standard Token Exchange* on the server's client, an Admin Permissions `delegate` grant for it; Keycloak 26.8+ with `--features=token-exchange-delegation,parameterized-scopes` (preview) |
 
+- **No token passthrough.** The token a caller presents is never sent to the Admin API. The MCP authorization
+  specification forbids it ("The MCP server MUST NOT pass through the token it received from the MCP client"): the
+  token used upstream is a separate one that Keycloak issued to the server as its client, the service account's or a
+  delegated one. An earlier mode that did forward it, `KC_MCP_DELEGATION=forward`, is gone, and the server refuses to
+  start with it. One consequence: the caller's token only has to open the MCP server, so it needs neither the Admin
+  API audience nor admin roles that work anywhere else, and nobody can take it to the Admin API to get around the
+  checks, confirmations and audit of this server.
 - **The login.** The `401` challenge drives OAuth-capable MCP clients: they discover the realm, log the user in in the
   browser with code and PKCE, and retry. Per client: [Integrations](integrations.md).
 - **Keycloak side.** A public client with an *Audience* mapper for the server (`mcp-consumer` in
-  `examples/run-modes/realms/demo-realm.json`); the humans hold the `realm-management` roles, groups preferred.
-- **One Keycloak per token.** A caller's token is forwarded only to the system whose Keycloak issued it, compared by
+  `examples/delegated-auth/realms/demo-realm.json`); the humans hold the `realm-management` roles, groups preferred.
+- **One Keycloak per token.** A caller's token is handed only to the token endpoint of the system whose Keycloak issued it (the realm that issued it, see [realm entries](systems.md)), compared by
   the issuer's base: the system's URL or its configured `issuer` (set it when the server reaches Keycloak at an
   internal address, as the tokens carry the public one). What the default OIDC tenant verifies does not count: it
-  may be another Keycloak. A token whose issuer cannot be read is not forwarded at all. A call that names another
+  may be another Keycloak. A token whose issuer cannot be read is not used at all. A call that names another
   system answers `caller_foreign_system` before anything is sent; the caller logs in at that system's entry instead. `kc-mcp.systems.<name>.trusted-issuers` names further issuers
   whose tokens the server may hand to that system, a realm's issuer URL for that realm alone or a Keycloak's base URL
   for all of its realms, and a `CallerIssuerPolicy` extension replaces the rule
@@ -497,7 +503,7 @@ So the Keycloak side decides what a stolen credential is worth:
   the realms they need them (`GET /admin/systems/<alias>/client-setup?roles=read|manage|admin` prints them).
 - **The user's identity instead of the service account's.** With `KC_MCP_DELEGATION=exchange` the server's client
   holds no admin role at all: its credentials alone get a token that cannot call the Admin API, so a stolen
-  credential is useless without a user's token. With `forward` the server needs no credentials for the calls.
+  credential is useless without a user's token.
 - **Short access token lifespans** for the service clients, so a token taken from memory is good for minutes, not
   hours.
 

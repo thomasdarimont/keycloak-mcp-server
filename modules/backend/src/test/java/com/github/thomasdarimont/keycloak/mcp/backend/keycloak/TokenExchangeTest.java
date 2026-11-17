@@ -52,10 +52,13 @@ class TokenExchangeTest {
     static final class StubKeycloak implements AutoCloseable {
         final HttpServer server;
         final List<String> exchanges = new ArrayList<>();
+        /** The request paths, in order: which realm's token endpoint was asked. */
+        final List<String> paths = new java.util.concurrent.CopyOnWriteArrayList<>();
 
         StubKeycloak() throws IOException {
             server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            server.createContext("/realms/demo/protocol/openid-connect/token", http -> {
+            server.createContext("/realms/", http -> {
+                paths.add(http.getRequestURI().getPath());
                 String body = URLDecoder.decode(
                         new String(http.getRequestBody().readAllBytes(), StandardCharsets.UTF_8),
                         StandardCharsets.UTF_8);
@@ -76,6 +79,13 @@ class TokenExchangeTest {
                     else {
                         answer = new JsonObject().put("access_token", delegatedJwt(n)).put("expires_in", 300).encode();
                     }
+                }
+                else if (body.contains("grant_type=client_credentials")) {
+                    // the actor's own token
+                    answer = new JsonObject().put("access_token", SA_TOKEN)
+                        .put("expires_in", 300)
+                        .put("token_type", "Bearer")
+                        .encode();
                 }
                 else {
                     status = 400;
@@ -185,6 +195,51 @@ class TokenExchangeTest {
     }
 
     @Test
+    void theExchangeHappensInTheRealmThatIssuedTheCallersToken() throws Exception {
+        try (StubKeycloak kc = new StubKeycloak()) {
+            KeycloakSystem system = system(kc.url(), ClientAuth.CLIENT_SECRET, GrantType.CLIENT_CREDENTIALS);
+            TokenExchange x = new TokenExchange(ClientBuilder.newClient(), system, null, () -> SA_TOKEN);
+            String token = "/protocol/openid-connect/token";
+
+            // a caller of the auth realm: its token endpoint, the actor token at hand
+            x.exchange(issuedBy(kc.url() + "/realms/demo"));
+            assertEquals(List.of("/realms/demo" + token), kc.paths);
+
+            // a caller of another realm of the same Keycloak (a realm entry): the client
+            // logs in there and exchanges there
+            kc.paths.clear();
+            x.exchange(issuedBy(kc.url() + "/realms/tenant-2"));
+            assertEquals(List.of("/realms/tenant-2" + token, "/realms/tenant-2" + token), kc.paths);
+            assertTrue(kc.exchanges.getLast().contains("actor_token=" + SA_TOKEN), kc.exchanges.getLast());
+
+            // a token of another Keycloak (a trusted issuer) is handed to the auth realm
+            kc.paths.clear();
+            x.exchange(issuedBy("https://elsewhere.example/realms/tenant-2"));
+            assertEquals(List.of("/realms/demo" + token), kc.paths);
+        }
+    }
+
+    private static String issuedBy(String issuer) {
+        JsonObject payload = new JsonObject().put("exp", System.currentTimeMillis() / 1000 + 600)
+            .put("sub", "alice-id")
+            .put("iss", issuer);
+        return "eyJhbGciOiJub25lIn0." + Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(payload.encode().getBytes(StandardCharsets.UTF_8)) + ".sig";
+    }
+
+    @Test
+    void anActorThatCannotLogInIsAnErrorTheModelCanExplain() {
+        TokenExchange x = new TokenExchange(ClientBuilder.newClient(),
+                system("http://127.0.0.1:1", ClientAuth.CLIENT_SECRET, GrantType.CLIENT_CREDENTIALS), null, () -> {
+                    throw new IllegalStateException("HTTP 401 Unauthorized");
+                });
+        ToolException e = assertThrows(ToolException.class, () -> x.exchange("subject"));
+        assertEquals(TokenExchange.ERROR, e.code());
+        assertTrue(e.getMessage().contains("keycloak-mcp") && e.getMessage().contains("HTTP 401"), e.getMessage());
+    }
+
+    @Test
     void needsAConfidentialClientAsActor() {
         assertThrows(IllegalStateException.class, () -> new TokenExchange(null,
                 system("http://127.0.0.1:1", ClientAuth.NONE, GrantType.PASSWORD), null, () -> "x"));
@@ -199,9 +254,13 @@ class TokenExchangeTest {
         assertEquals(DelegationMode.EXCHANGE, DelegationMode.parse("token-exchange"));
         assertEquals(DelegationMode.EXCHANGE, DelegationMode.parse("Delegation"));
         assertTrue(DelegationMode.EXCHANGE.delegating());
-        assertTrue(DelegationMode.FORWARD.delegating());
         assertFalse(DelegationMode.OFF.delegating());
         assertThrows(IllegalArgumentException.class, () -> DelegationMode.parse("proxy"));
+        // token passthrough is gone, and the refusal says what to use instead
+        IllegalArgumentException removed = assertThrows(IllegalArgumentException.class,
+                () -> DelegationMode.parse("forward"));
+        assertTrue(removed.getMessage().contains("was removed") && removed.getMessage().contains("exchange"),
+                removed.getMessage());
     }
 
     /**
@@ -303,11 +362,6 @@ class TokenExchangeTest {
             assertEquals(Set.of("view-users", "manage-users"), granted.byRealm().get("demo"));
             assertEquals(Set.of("manage-clients"), granted.missing("demo", Set.of("manage-clients", "view-users")));
             assertEquals(1, kc.exchanges.size());
-            // forward mode judges the caller's own token
-            AccessPolicy forward = new AccessPolicy(false, List.of(), List.of(), List.of(), List.of(), null, List.of(),
-                    name -> Set.of(), null, null, systems, DelegationMode.FORWARD);
-            assertTrue(forward.granted(null, ctx).byRealm().get("demo").contains("realm-admin"));
-            assertEquals(1, kc.exchanges.size(), "no exchange in forward mode");
             // a refused exchange surfaces as the delegation error
             TransportContext noConsent = TransportContext.none()
                 .withCaller(Caller.delegated("alice-id", "alice", "demo", Set.of()), NO_CONSENT);

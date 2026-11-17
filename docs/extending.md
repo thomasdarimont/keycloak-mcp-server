@@ -347,8 +347,8 @@ A policy decides what the server may send, nothing more: allowing a foreign issu
 accept its tokens. That is configured in Keycloak, where 26.5 introduced the JWT authorization grant (RFC 7523,
 preview) for exactly this, an identity provider that lets a client present the external token as `assertion` and get
 a local one, as the standard replacement for the external-to-internal token exchange
-(<https://www.keycloak.org/2026/01/jwt-authorization-grant>). The server does not perform that grant yet: in mode
-`forward` an allowed foreign token is sent as it is, and Keycloak refuses it unless configured to take it.
+(<https://www.keycloak.org/2026/01/jwt-authorization-grant>). The server does not perform that grant yet: an allowed
+foreign token is handed to the token exchange, and Keycloak refuses it unless configured to take it.
 
 ## Profile checks
 

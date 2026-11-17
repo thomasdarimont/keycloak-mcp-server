@@ -2,6 +2,7 @@
   "realm": "demo",
   "displayName": "Demo",
   "enabled": true,
+  "adminPermissionsEnabled": true,
   "sslRequired": "external",
   "loginWithEmailAllowed": true,
   "resetPasswordAllowed": true,
@@ -14,12 +15,13 @@
     {
       "clientId": "mcp-consumer",
       "name": "MCP consumer (LM Studio, Claude, ...)",
-      "description": "Public PKCE client the MCP clients log the user in with; tokens carry aud=keycloak-mcp-server. Full scope off: the role scope lists what a token may carry. Direct access grants only for mcp-call.py.",
+      "description": "Public PKCE client the MCP clients log the user in with; tokens carry aud=keycloak-mcp-server and no admin roles. Consent required: the user is asked whether keycloak-mcp-server may act on their behalf.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
+      "consentRequired": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
@@ -39,10 +41,9 @@
         "roles",
         "profile",
         "basic",
-        "email",
-        "kc-admin-api"
+        "email"
       ],
-      "optionalClientScopes": ["offline_access"],
+      "optionalClientScopes": ["delegation:client", "offline_access"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "access.token.lifespan": "1800"
@@ -54,7 +55,7 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.custom.audience": "keycloak-mcp-server",
+            "included.client.audience": "keycloak-mcp-server",
             "access.token.claim": "true",
             "id.token.claim": "false",
             "introspection.token.claim": "true"
@@ -65,7 +66,7 @@
     {
       "clientId": "keycloak-mcp-server",
       "name": "Keycloak MCP server",
-      "description": "The MCP server's own identity: a service account authenticating with a signed JWT (private_key_jwt); Keycloak fetches the public key from the server's JWKS.",
+      "description": "The MCP server's client, the actor of the token exchange: a service account without admin roles, authenticating with a signed JWT (private_key_jwt, key from the server's JWKS). Its role scope caps what a delegated token may carry.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -88,6 +89,7 @@
         "service_account"
       ],
       "attributes": {
+        "standard.token.exchange.enabled": "true",
         "use.jwks.url": "true",
         "jwks.url": "http://host.docker.internal:9080/.well-known/jwks.json",
         "token.endpoint.auth.signing.alg": "RS256"
@@ -213,44 +215,10 @@
           "temporary": false
         }
       ]
-    },
-    {
-      "username": "service-account-keycloak-mcp-server",
-      "enabled": true,
-      "serviceAccountClientId": "keycloak-mcp-server",
-      "clientRoles": {
-        "realm-management": [
-          "realm-admin"
-        ]
-      }
     }
   ],
   "clientScopeMappings": {
     "realm-management": [
-      {
-        "client": "mcp-consumer",
-        "roles": [
-          "create-client",
-          "impersonation",
-          "manage-authorization",
-          "manage-clients",
-          "manage-events",
-          "manage-identity-providers",
-          "manage-realm",
-          "manage-users",
-          "query-clients",
-          "query-groups",
-          "query-realms",
-          "query-users",
-          "realm-admin",
-          "view-authorization",
-          "view-clients",
-          "view-events",
-          "view-identity-providers",
-          "view-realm",
-          "view-users"
-        ]
-      },
       {
         "client": "keycloak-mcp-server",
         "roles": [

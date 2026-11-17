@@ -28,8 +28,7 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
  * connection to one {@link KeycloakSystem} plus the lookup helpers every tool area needs.
  * Identifier arguments are forgiving: a user may be given by id, username or email, a
  * client by id or clientId, a group by id, path or name. The server implements it once
- * per configured system and once more per caller token in delegation mode
- * {@code forward}.
+ * per configured system and once more per caller in delegation mode {@code exchange}.
  */
 public interface KeycloakAdmin extends AccessTokenSource {
 
@@ -45,14 +44,15 @@ public interface KeycloakAdmin extends AccessTokenSource {
     Keycloak client();
 
     /**
-     * An admin client of the same system that sends the given caller token instead of the
-     * server's credentials (delegation mode {@code forward}).
+     * An admin client of the same system that acts for the caller of the given token
+     * instead of with the server's credentials (delegation mode {@code exchange}): it
+     * sends the delegated token Keycloak issues for that token, never the token itself.
      */
     KeycloakAdmin forToken(String bearerToken);
 
     /**
-     * Whether this instance forwards a caller's token rather than using the server's
-     * credentials.
+     * Whether this instance acts for a caller, with a delegated token, rather than with
+     * the server's credentials.
      */
     boolean isDelegated();
 

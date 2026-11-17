@@ -44,9 +44,9 @@ What the demo shows:
 - **Per-tenant keys, provisioned**: the file vault is read-only; `keys/` is mounted at `KC_MCP_KEYS_DIR` and
   `docker compose logs mcp` shows `[tenant-a] private_key_jwt key loaded from ...`. A tenant only ever registers a
   public key; creating and rotating keys inside the server is the job of a database-backed `KeyVault`.
-- **`version` in `systems.json`**: the user-login server never uses its own credentials, so it cannot read the
-  server info; the configured version keeps the version checks on (`whoami` shows `server.version`). Edit the
-  file while the stack runs: it is re-read on the next call.
+- **`version` in `systems.json`**: the user-login server acts with delegated tokens of the realms' users and
+  does not read the server info; the configured version keeps the version checks on (`whoami` shows `server.version`).
+  Edit the file while the stack runs: it is re-read on the next call.
 - **`issuer` in `systems.json`**: the MCP server reaches Keycloak at the internal `http://keycloak:8080`, but
   Keycloak's issuer is its public hostname `http://localhost:8090/realms/master`, and that is the audience a
   client assertion must carry. Without it Keycloak answers "Invalid token audience".
@@ -57,12 +57,41 @@ What the demo shows:
 
 ## User login per realm (`mcp-users`, port 8092)
 
-The second server holds no admin credentials: its MCP endpoint requires an OAuth login and forwards the user's
-own token to the Admin API (`KC_MCP_DELEGATION=forward`, `QUARKUS_OIDC_TENANT_ENABLED=true`). A realm entry logs
-its users in at that realm: `/mcp/systems/tenant-a/realm-a-1` verifies tokens of `realm-a-1`, `/mcp/systems/tenant-b/realm-b-1`
-those of `realm-b-1`; the root `/mcp` uses the master realm. Each realm has the public PKCE client `mcp-consumer`
-whose tokens carry `aud=keycloak-mcp-server` (full scope off, the realm-management roles are in its role scope).
-Keycloak enforces the user's roles, and the audit line names the human.
+The second server requires an OAuth login at its MCP endpoint (`QUARKUS_OIDC_TENANT_ENABLED=true`) and makes
+every Admin API call with a delegated token (`KC_MCP_DELEGATION=exchange`): Keycloak issues it for the user and
+the tenant's client together (token exchange delegation, preview in Keycloak 26.8; `sub` is the user, `act` is
+`keycloak-mcp-server-<tenant>`). The user's own token opens the MCP server only and never reaches the Admin API.
+Keycloak enforces the user's roles, and both audits name the human.
+
+A realm entry logs its users in at that realm: `/mcp/systems/tenant-a/realm-a-1` verifies tokens of `realm-a-1`,
+`/mcp/systems/tenant-b/realm-b-1` those of `realm-b-1`. Keycloak accepts a token only at the realm that issued
+it, so the exchange happens in that realm too, not in the system's auth realm `master`. The system stays the
+tenant with its one client id and one key; what each realm that users log in at needs is:
+
+- **The tenant's client, once more**: `keycloak-mcp-server-<tenant>` exists in each of the tenant's realms
+  (`realms/*.json`) with the same client id and the same JWKS URL as in master, so the server logs in there with
+  the same key (the client assertion names that realm's issuer as audience). It has *Standard Token Exchange*
+  enabled and a service account without any admin role. Its role scope (`clientScopeMappings`) lists the
+  `realm-management` roles a delegated token may carry at most.
+- **`mcp-consumer`**: the public PKCE client MCP clients log the user in with requires consent, offers the
+  optional scope `delegation:client` and puts `keycloak-mcp-server` (what the server accepts,
+  `QUARKUS_OIDC_TOKEN_AUDIENCE`) and the tenant's client into the token's audience. It has no `kc-admin-api`
+  scope and no role scope.
+- **Admin Permissions**: the realm has them enabled, and the onboarding job grants the tenant's client the
+  permission *Users / delegate* (`init/grant-delegation.sh`, called by `init/onboard-tenants.sh`). A realm import
+  cannot carry that grant. Without it Keycloak drops the delegation scope silently.
+- **Keycloak features**: `token-exchange-delegation,parameterized-scopes` (see `docker-compose.yml`).
+
+The entry's protected resource metadata tells an MCP client which scope to ask for: `openid` and
+`delegation:client:keycloak-mcp-server-<tenant>`. At the login Keycloak asks the user whether that client may act
+on their behalf. `./mcp-call.py --login user:password` does what the MCP client's browser does: it reads the
+metadata, walks the login form and the consent page and sends the access token as a Bearer token. A password grant
+is not possible, because a client that requires consent refuses it.
+
+The tenant's client in master keeps its admin roles for the first server (`mcp`), and Keycloak fetches the public
+keys from that server, so `mcp-users` needs it running. The system entry `/mcp/systems/tenant-a` and the root
+`/mcp` verify tokens of the master realm; this example has no login client there, so users log in at the realm
+entries only.
 
 | user | realm | roles via group | what happens |
 |---|---|---|---|
@@ -74,19 +103,28 @@ Keycloak enforces the user's roles, and the audit line names the human.
 
 ```
 ./mcp-call.py http://localhost:8092/mcp/systems/tenant-a/realm-a-1 whoami          # 401 + WWW-Authenticate … resource_metadata
-curl -s localhost:8092/.well-known/oauth-protected-resource/mcp/systems/tenant-a/realm-a-1 | jq .   # names realm-a-1
+curl -s localhost:8092/.well-known/oauth-protected-resource/mcp/systems/tenant-a/realm-a-1 | jq .
+                                             # names realm-a-1 and the scope delegation:client:keycloak-mcp-server-tenant-a
 ./mcp-call.py --login alice:alice-demo http://localhost:8092/mcp/systems/tenant-a/realm-a-1 whoami
+                                             # delegation: mode exchange, consented, actor keycloak-mcp-server-tenant-a
 ./mcp-call.py --login alice:alice-demo http://localhost:8092/mcp/systems/tenant-a/realm-a-1 keycloak_user_search '{"search": "sam"}'
 ./mcp-call.py --login sam:sam-demo http://localhost:8092/mcp/systems/tenant-a/realm-a-1 keycloak_user_set_enabled '{"id": "bob", "enabled": true}'
                                                                                # -> forbidden: sam lacks manage-users
+./mcp-call.py --login anna:anna-demo http://localhost:8092/mcp/systems/tenant-a/realm-a-2 keycloak_user_search '{"search": "anna"}'
 ./mcp-call.py --login carol:carol-demo http://localhost:8092/mcp/systems/tenant-b/realm-b-1 keycloak_user_search '{"search": "dave"}'
 ./mcp-call.py --login alice:alice-demo@realm-a-1 http://localhost:8092/mcp/systems/tenant-b/realm-b-1 whoami
                                                                                # -> 401: a realm-a-1 token is no good for tenant B
+./mcp-call.py --login alice:alice-demo --scope openid http://localhost:8092/mcp/systems/tenant-a/realm-a-1 keycloak_user_search '{"search": "sam"}'
+                                                                               # -> delegation_failed: no consent, no may_act claim
 ```
 
+The realms record the events `TOKEN_EXCHANGE` and `TOKEN_EXCHANGE_ERROR`: the admin console of `realm-a-1`
+(Events, user events) shows one exchange per call, with the user, the client `keycloak-mcp-server-tenant-a` and
+the actor.
+
 `mcp-oauth.json` configures LM Studio with the three realm entries and `"auth": {"CLIENT_ID": "mcp-consumer"}`;
-LM Studio opens the browser at the right realm for each entry. To switch users, remove the server in LM Studio and
-add it again, or log out in the Keycloak account console.
+LM Studio opens the browser at the right realm for each entry and asks for the scope the entry's metadata names.
+To switch users, remove the server in LM Studio and add it again, or log out in the Keycloak account console.
 
 ```
 docker compose down -v             # drops the onboarded clients; the provisioned keys stay in keys/

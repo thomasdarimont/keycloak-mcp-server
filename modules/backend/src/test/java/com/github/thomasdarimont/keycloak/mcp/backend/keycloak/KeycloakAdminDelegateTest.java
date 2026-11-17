@@ -6,6 +6,8 @@ import java.util.Base64;
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.config.ClientAuth;
+import com.github.thomasdarimont.keycloak.mcp.config.DelegationMode;
+import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
 import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakSystem;
 
@@ -13,8 +15,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.vertx.core.json.JsonObject;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -47,18 +51,33 @@ class KeycloakAdminDelegateTest {
     }
 
     @Test
-    void delegateIsCachedPerTokenUntilExpiry() {
-        KeycloakAdmin base = admin();
-        String fresh = jwt(System.currentTimeMillis() / 1000 + 600);
-        KeycloakAdmin a = base.forToken(fresh);
-        assertTrue(a.isDelegated());
-        assertEquals(fresh, a.accessToken());
-        assertSame(a, base.forToken(fresh));
-        assertNotSame(a, base.forToken(jwt(System.currentTimeMillis() / 1000 + 601)));
+    void delegateIsCachedPerTokenUntilExpiry() throws Exception {
+        try (TokenExchangeTest.StubKeycloak kc = new TokenExchangeTest.StubKeycloak()) {
+            KeycloakAdmin base = new DefaultKeycloakAdmin(
+                    TokenExchangeTest.system(kc.url(), ClientAuth.CLIENT_SECRET, GrantType.CLIENT_CREDENTIALS), null,
+                    DelegationMode.EXCHANGE);
+            String fresh = jwt(System.currentTimeMillis() / 1000 + 600);
+            KeycloakAdmin a = base.forToken(fresh);
+            assertTrue(a.isDelegated());
+            // what reaches the Admin API is the delegated token, never the caller's own
+            assertNotEquals(fresh, a.accessToken());
+            assertSame(a, base.forToken(fresh));
+            assertEquals(1, kc.exchanges.size(), "one exchange per caller token");
+            assertNotSame(a, base.forToken(jwt(System.currentTimeMillis() / 1000 + 601)));
 
-        String expired = jwt(System.currentTimeMillis() / 1000 - 10);
-        KeycloakAdmin e1 = base.forToken(expired);
-        assertNotSame(e1, base.forToken(expired), "expired entries are rebuilt");
+            String expired = jwt(System.currentTimeMillis() / 1000 - 10);
+            KeycloakAdmin e1 = base.forToken(expired);
+            assertNotSame(e1, base.forToken(expired), "expired entries are rebuilt");
+            base.close();
+        }
+    }
+
+    @Test
+    void withoutDelegationNoClientActsForACaller() {
+        KeycloakAdmin base = admin();
+        String token = jwt(System.currentTimeMillis() / 1000 + 600);
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> base.forToken(token));
+        assertTrue(e.getMessage().contains("kc-mcp.delegation is off"), e.getMessage());
         base.close();
     }
 }

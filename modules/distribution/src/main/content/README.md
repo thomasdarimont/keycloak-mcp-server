@@ -21,7 +21,8 @@ Needs Java 21 or newer.
    ```
 
 3. Point an MCP client at `http://localhost:8081/mcp` (`docs/integrations.md` has the settings for LM Studio, Claude
-   Code, VS Code, Cursor and others). With a user login, the client opens the browser and the user signs in at Keycloak.
+   Code, VS Code, Cursor and others). With a user login, the client opens the browser and the user signs in at Keycloak
+   and consents to the server acting on their behalf.
 
 Any setting can go on the command line (`--kc-mcp.systems.default.url=https://sso.example.com`, `--quarkus.http.port=8082`)
 or into the environment (`KC_MCP_SYSTEMS_DEFAULT_URL`). `bin/kcmcp.sh --help` lists the options, `--debug [port]` opens a debugger port.
@@ -52,7 +53,7 @@ Templates in `conf/scenarios/`, each a complete configuration to copy and adjust
 | `read-only.conf.example` | a view-only service account plus the read-only switch |
 | `private-key-jwt.conf.example` | the service account authenticates with a signed JWT instead of a secret |
 | `several-systems.conf.example` | several Keycloak installations from one server, each tool with a `system` argument |
-| `user-login.conf.example` | users log in through their MCP client; every call runs with their own roles |
+| `user-login.conf.example` | users log in through their MCP client and consent to the server acting for them; every call runs with their own roles through a delegated token (Keycloak 26.8+ token exchange delegation) |
 | `shared-server.conf.example` | a server for a team or environment: user login plus the `shared` security profile |
 | `https.conf.example` | HTTPS for the server and a Keycloak behind a private CA, on top of another scenario |
 | `dynamic-systems.conf.example` | no Keycloak configured; systems are registered at runtime through the admin API or a systems file and kept in the database, each with a generated key and its own JWKS |

@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A caller's token is forwarded to the Keycloak that issued it, never to another one; the
+ * A caller's token is exchanged at the Keycloak that issued it, never to another one; the
  * positive path builds a real client and is covered by {@code TwoKeycloaksIT}.
  */
 class CallerIssuerTest {
@@ -66,7 +66,7 @@ class CallerIssuerTest {
     void aTokenOfAnotherKeycloakIsRefusedBeforeItIsSent() {
         KeycloakSystem other = KeycloakSystem.builder("other", "http://keycloak-b:8080").build();
         Set<String> own = DefaultKeycloakAdmin.callerIssuerBases(other, List.of());
-        DefaultKeycloakAdmin admin = new DefaultKeycloakAdmin(other, null, DelegationMode.FORWARD)
+        DefaultKeycloakAdmin admin = new DefaultKeycloakAdmin(other, null, DelegationMode.EXCHANGE)
             .callerIssuerCheck(issuer -> CallerIssuerPolicies.builtIn().refusal(issuer, other, own));
         ToolException e = assertThrows(ToolException.class,
                 () -> admin.forToken(jwt("http://keycloak-a:8080/realms/demo")));
@@ -82,7 +82,7 @@ class CallerIssuerTest {
         assertNull(DefaultKeycloakAdmin.issuerOf("a.b.c"));
         KeycloakSystem own = KeycloakSystem.builder("default", "http://keycloak-a:8080").build();
         Set<String> bases = DefaultKeycloakAdmin.callerIssuerBases(own, List.of());
-        DefaultKeycloakAdmin admin = new DefaultKeycloakAdmin(own, null, DelegationMode.FORWARD)
+        DefaultKeycloakAdmin admin = new DefaultKeycloakAdmin(own, null, DelegationMode.EXCHANGE)
             .callerIssuerCheck(issuer -> CallerIssuerPolicies.builtIn().refusal(issuer, own, bases));
         ToolException e = assertThrows(ToolException.class, () -> admin.forToken("opaque-token"));
         assertEquals("caller_foreign_system", e.code());

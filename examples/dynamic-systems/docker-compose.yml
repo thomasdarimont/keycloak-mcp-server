@@ -1,7 +1,8 @@
 # Dynamic systems with a database: the MCP server starts with no Keycloak system at all. ./demo.sh then registers
 # the system "acme" through the admin API (stored in PostgreSQL, key pair generated in the database vault), creates
-# the keycloak-mcp-server client in Keycloak's master realm with the JWKS URL the API answered, creates the realm
-# acme-dev with the public mcp-consumer client and demo users, and calls tools as service account and as users.
+# the realm acme-dev with the public mcp-consumer client and demo users, creates the keycloak-mcp-server client in
+# that realm with the JWKS URL the API answered, lets it act for the realm's users, and calls tools as service
+# account and as users.
 # Both MCP containers share the database, so a system registered once is known to both. See README.md.
 #
 #   ../../mvnw -f ../../pom.xml package -DskipTests -Ppostgresql    # the PostgreSQL build of the server
@@ -38,8 +39,9 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      # token exchange delegation (the user login of mcp-users) needs parameterized scopes, both preview.
       # 26.8 warns about its deprecated defaults: use the v2 brokering API, drop the Twitter (OAuth 1.0a) broker
-      KC_FEATURES: identity-brokering-api:v2
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
     ports:
       - "127.0.0.1:8090:8080"
@@ -91,8 +93,10 @@ services:
       keycloak:
         condition: service_healthy
 
-  # The same server for people: the MCP endpoint requires a login at the entry's realm and every call runs with
-  # the user's own token (forward delegation). Same database, so it knows the registered systems too.
+  # The same server for people: the MCP endpoint requires a login at the entry's realm, the user consents to the
+  # system's client acting on their behalf, and every call runs with the delegated token Keycloak exchanges the
+  # user's token for (sub = the user, act = keycloak-mcp-server). Same database, so it knows the registered
+  # systems too, and signs its token requests with the same key.
   mcp-users:
     build:
       context: ../..
@@ -109,11 +113,13 @@ services:
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
       KC_MCP_TOOL_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
-      KC_MCP_DELEGATION: forward
+      KC_MCP_DELEGATION: exchange
+      # the default OIDC tenant (root /mcp) is the master realm; an entry /mcp/systems/<system>[/<realm>] verifies
+      # tokens of that system's realm and asks for the scope delegation:client:<the system's client>
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       QUARKUS_OIDC_TENANT_ENABLED: "true"
-      # only tokens minted for the MCP server (audience mapper on mcp-consumer)
+      # only tokens minted for the MCP server (audience mapper on mcp-consumer, and the delegation scope)
       QUARKUS_OIDC_TOKEN_AUDIENCE: keycloak-mcp-server
       # personal data stays out of the console log; the database rows keep the full record
       KC_MCP_SPI_AUDIT_SCRUBBER_PII_MODE: pseudonymize

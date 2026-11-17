@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CibaIT {
 
     private static McpClient alice() {
-        return new McpClient().bearer(ForwardTestResource.token("mcp-consumer", "alice", "alice")).initialize(false);
+        return new McpClient().bearer(CallerTestResource.token("mcp-consumer", "alice", "alice")).initialize(false);
     }
 
     @BeforeEach
@@ -43,8 +43,8 @@ class CibaIT {
     /** A throw-away user of the demo realm; returns its id. */
     private static String user(String name) throws Exception {
         HttpResponse<String> r = HttpClient.newHttpClient()
-            .send(HttpRequest.newBuilder(URI.create(ForwardTestResource.base + "/admin/realms/demo/users"))
-                .header("Authorization", "Bearer " + ForwardTestResource.adminToken())
+            .send(HttpRequest.newBuilder(URI.create(CallerTestResource.base + "/admin/realms/demo/users"))
+                .header("Authorization", "Bearer " + CallerTestResource.adminToken())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(new JsonObject().put("username", name)
                     .put("enabled", true)

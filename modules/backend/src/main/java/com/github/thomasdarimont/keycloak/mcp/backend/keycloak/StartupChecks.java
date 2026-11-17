@@ -100,11 +100,6 @@ public class StartupChecks {
             problems.add("[" + sys + "] cannot read its signing key: " + root(e));
             return problems;
         }
-        if (config.delegation() == DelegationMode.FORWARD && !admin.system().hasCredentials()) {
-            LOG.infof("[%s] delegation=forward without server credentials: every admin call uses the caller's token,"
-                    + " startup check skipped", sys);
-            return problems;
-        }
         if (config.delegation() == DelegationMode.EXCHANGE) {
             return checkActor(admin);
         }
@@ -177,8 +172,9 @@ public class StartupChecks {
         try {
             admin.accessToken();
             LOG.infof("[%s] delegation=exchange: actor client '%s' logs in; admin calls run with the delegated tokens"
-                    + " Keycloak exchanges for the callers (they must consent to the scope '%s'), realm check skipped",
-                    sys, clientId, TokenExchange.delegationScope(clientId));
+                    + " Keycloak exchanges for the callers (their tokens must name it as the actor: they consent to"
+                    + " the scope '%s', or the realm sets the may_act claim), realm check skipped", sys, clientId,
+                    TokenExchange.delegationScope(clientId));
         }
         catch (RuntimeException e) {
             String msg = "[" + sys + "] actor client '" + clientId + "' cannot obtain a token: " + root(e);

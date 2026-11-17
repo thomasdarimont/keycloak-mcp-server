@@ -4,7 +4,7 @@ xaa-call.py --login user:password [--show-tokens] [<tool> [json-args]]
 
     ./xaa-call.py --login alice:alice-demo whoami
     ./xaa-call.py --login carol:carol-demo keycloak_user_search '{"search": "*"}'
-    ./xaa-call.py --login alice:alice-demo --show-tokens          # only the tokens: ID token, ID-JAG, access token
+    ./xaa-call.py --login alice:alice-demo --show-tokens          # only the tokens, see below
     MCP_URL=http://localhost:8103/mcp IDP_URL=http://localhost:8102 ./xaa-call.py ...
 
 What an MCP client with Enterprise-Managed Authorization does, step by step (progress on stderr, result on stdout):
@@ -15,10 +15,17 @@ What an MCP client with Enterprise-Managed Authorization does, step by step (pro
   3. token exchange at the IdP: ID token -> ID-JAG for audience = the authorization server's issuer, resource = the
      MCP server. The IdP's policy decides here whether this user may connect this client to this server
   4. JWT authorization grant (RFC 7523) at Keycloak: ID-JAG -> access token for the linked Keycloak user
-  5. MCP: initialize, tools/call with that access token
+  5. MCP: initialize, tools/call with that access token. The server exchanges it at Keycloak for a delegated token
+     (sub = the user, act = the server's client keycloak-mcp) and calls the Admin API with that one
 
 Client credentials: AGENT_IDP_SECRET (at the IdP, default agent-at-idp) and AGENT_AS_SECRET (at Keycloak, default
 agent-at-acme), both for client id "agent".
+
+--show-tokens prints to stderr each token raw (for jwt.io) and decoded: ID token, ID-JAG and the access token this
+script sends, then the actor's service-account token and the delegated token. The server keeps its own copies of
+those two to itself, so the script repeats its two requests with the actor's demo credentials (ACTOR_CLIENT_ID,
+ACTOR_CLIENT_SECRET, default keycloak-mcp / keycloak-mcp-secret): the same tokens apart from ids and timestamps,
+plus one more TOKEN_EXCHANGE event in Keycloak's log.
 """
 import base64
 import json
@@ -34,12 +41,15 @@ IDP_URL = os.environ.get("IDP_URL", "http://localhost:8102")
 CLIENT_ID = os.environ.get("AGENT_CLIENT_ID", "agent")
 IDP_SECRET = os.environ.get("AGENT_IDP_SECRET", "agent-at-idp")
 AS_SECRET = os.environ.get("AGENT_AS_SECRET", "agent-at-acme")
+ACTOR = os.environ.get("ACTOR_CLIENT_ID", "keycloak-mcp")
+ACTOR_SECRET = os.environ.get("ACTOR_CLIENT_SECRET", "keycloak-mcp-secret")
 
 TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
 JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 ID_JAG = "urn:ietf:params:oauth:token-type:id-jag"
 ID_TOKEN = "urn:ietf:params:oauth:token-type:id_token"
 ID_JAG_PROFILE = "urn:ietf:params:oauth:grant-profile:id-jag"
+ACCESS_TOKEN = "urn:ietf:params:oauth:token-type:access_token"
 
 
 def note(text):
@@ -149,7 +159,28 @@ def access_token(username, password, resource, asm, tokens):
          f"refresh token: {'yes' if answer.get('refresh_token') else 'no'})")
     if tokens:
         show("access token (authorization server -> MCP client -> MCP server)", answer["access_token"])
+        show_server_tokens(asm["token_endpoint"], answer["access_token"])
     return answer["access_token"]
+
+
+def show_server_tokens(endpoint, user_token):
+    """What the MCP server does with the user's token: its own token as the actor, then the token exchange."""
+    status, answer = token(endpoint, {"grant_type": "client_credentials", "scope": "kc-admin-api"},
+                           (ACTOR, ACTOR_SECRET))
+    if status != 200:
+        note(f"\nactor token refused: HTTP {status} {answer}")
+        return
+    actor_token = answer["access_token"]
+    show(f"the actor's token (client_credentials of {ACTOR}, repeated here as the MCP server requests it)", actor_token)
+    status, answer = token(endpoint, {
+        "grant_type": TOKEN_EXCHANGE, "subject_token": user_token, "subject_token_type": ACCESS_TOKEN,
+        "actor_token": actor_token, "actor_token_type": ACCESS_TOKEN, "requested_token_type": ACCESS_TOKEN},
+        (ACTOR, ACTOR_SECRET))
+    if status != 200:
+        note(f"\n--- no delegated token: Keycloak refused the exchange, HTTP {status} {answer}")
+        return
+    show("the delegated token (token exchange of the access token with the actor's; what the Admin API sees: "
+         "sub = the user, act = the actor)", answer["access_token"])
 
 
 def mcp(body, bearer, session=None):

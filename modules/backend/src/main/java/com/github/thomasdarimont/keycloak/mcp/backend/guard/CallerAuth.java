@@ -113,7 +113,7 @@ public class CallerAuth {
         return delegation;
     }
 
-    /** Admin calls run on behalf of the caller ({@code forward} or {@code exchange}). */
+    /** Admin calls run on behalf of the caller ({@code exchange}). */
     public boolean delegating() {
         return delegation.delegating();
     }

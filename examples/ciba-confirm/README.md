@@ -12,7 +12,8 @@ first, the MCP client answers the second. This example asks the user directly in
 ## How it works
 
 ```
-MCP client ──(OAuth 2.1 / PKCE)──▶ Keycloak            alice logs in, her token reaches the MCP server
+MCP client ──(OAuth 2.1 / PKCE)──▶ Keycloak            alice logs in and consents to keycloak-mcp acting on her
+   │                                                     behalf; her token opens the MCP server only
    │ tools/call keycloak_user_delete {id, username}                                   (first call)
    ▼
 MCP server (Confirmer chain: ciba confirmer)
@@ -24,8 +25,11 @@ MCP server (Confirmer chain: ciba confirmer)
    │                                                     who asks for what and asks the user for the number
    │ tools/call keycloak_user_delete {id, username}                                   (second call)
    │ 4. poll token endpoint (grant urn:openid:params:grant-type:ciba): approved / declined / still pending / expired
+   │        declined → cancelled; pending → call again
+   │ 5. approved: token exchange, alice's token + the server's client keycloak-mcp
+   │        → a delegated token (sub=alice, act=keycloak-mcp)
    ▼
-Admin REST API with alice's token (forward delegation)  → the user is deleted; declined → cancelled; pending → call again
+Admin REST API with the delegated token                 → the user is deleted
 ```
 
 - **Number matching**, as in Entra ID: the number is shown where the request starts (the chat) and asked for where
@@ -43,12 +47,22 @@ Admin REST API with alice's token (forward delegation)  → the user is deleted;
 
 The MCP server is what CIBA calls the consumption device; it has no user-facing part in this flow.
 
+**Whose token reaches the Admin API.** Not alice's own: the MCP specification forbids passing it through. The server
+exchanges it at Keycloak for a delegated token for alice and the server's client `keycloak-mcp` (token exchange
+delegation, a preview feature of Keycloak 26.8). Keycloak enforces alice's roles on it, and its events name both.
+For this, the login at Keycloak ends with a consent page that asks *Allow keycloak-mcp to act on your behalf?*.
+[Delegated authentication](../delegated-auth/README.md) explains the setup; the CIBA confirmation does not depend
+on it.
+
 ## Start
 
 ```shell
 cd examples/ciba-confirm
 docker compose up -d        # Keycloak 26.8.2 on http://localhost:8098 (admin / admin), the approver on http://localhost:8095
 ```
+
+The one-shot job `keycloak-init` then grants `keycloak-mcp` the permission to act for the realm's users
+(`init/grant-delegation.sh`), which a realm import cannot carry.
 
 Then run the MCP server on the host, **in a fresh shell** (see the note below):
 
@@ -64,9 +78,8 @@ Or let compose run it from the packaged jar (`./mvnw package -DskipTests` first)
 docker compose --profile mcp up -d --build
 ```
 
-> A shell that has sourced another example's env file keeps the variables this one does not set, such as
-> `QUARKUS_OIDC_RESOURCE_METADATA_SCOPES` from `delegated-auth`. The login then asks for scopes this realm does not
-> have.
+> A shell that has sourced another example's env file keeps the variables this one does not set, and the server then
+> runs with settings that belong to another realm.
 
 Users, all in realm `demo`:
 
@@ -84,13 +97,16 @@ Users, all in realm `demo`:
 
 | step | what happens |
 |---|---|
-| 1 | alice logs in; `whoami` shows her as the caller |
+| 1 | alice logs in and consents; `whoami` shows her as the caller and the delegation to `keycloak-mcp` |
 | 2 | alice creates a throw-away user and asks to delete it. The first call answers `confirmation_required` with a number. Her device shows the request: a wrong number is refused, the right one approves. The second call deletes the user |
 | 3 | the same with a decline: the second call answers `cancelled` and the user stays |
 | 4 | carol, signed in to the device as herself, sees none of alice's requests and cannot decide them |
 | 5 | `confirm: true` changes nothing: the request reaches the device all the same |
 
-The script plays alice's device with her access token, the way the browser holds her session.
+The script logs alice in to the MCP server once, the way an MCP client's browser does: it walks Keycloak's login
+form and the consent page (`./mcp-call.py --login alice:alice-demo --print-token`) and uses that token for all
+calls. It plays alice's device with an access token of the approver's client, the way the browser holds her session
+there.
 `./demo.sh --users=5` only creates five users with random names, so there is someone to delete.
 
 ## Try it yourself
@@ -130,13 +146,21 @@ Variations:
 - "Sign out" ends the session on the page and at Keycloak.
 
 `mcp-call.py` keeps the MCP session between runs, as a real client does, because an approval belongs to the session
-that asked for it. `--new-session` starts over.
+that asked for it. `--new-session` starts over. `--login` walks Keycloak's login form and consent page on each run
+and prints what the consent page asked for; the password grant is not available, because a client that requires
+consent refuses it. To log in once for several calls:
+
+```shell
+TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token)
+./mcp-call.py --token "$TOKEN" whoami
+```
 
 ### With an MCP client
 
 LM Studio or another OAuth-capable client:
 
-1. Add `mcp-oauth.json` and log in as `alice` / `alice-demo`.
+1. Add `mcp-oauth.json` and log in as `alice` / `alice-demo`. Keycloak asks whether `keycloak-mcp` may act on your
+   behalf; say yes.
 2. Ask it to delete a user (`./demo.sh --users=3` creates some).
 3. Approve or decline on the device page, signed in as alice. The model's answer names the binding message and the
    number, so you can tell which request belongs to which operation.
@@ -148,9 +172,9 @@ for your decision, so you need not write in the chat. A small model may still st
 
 | where | what |
 |---|---|
-| `env/ciba.env` | `KC_MCP_SPI_CONFIRMER_CIBA_*`: client, timeout, `when`, `login-hint`, `client-auth`, `flow`, `number-matching`. `KC_MCP_CONFIRM_FALLBACK=deny`, so a client without elicitation cannot fall back to `confirm: true` |
-| `realms/demo-realm.json` | the realm's CIBA policy (`cibaInterval`, `cibaExpiresIn`, `login_hint` as the user hint); the confidential client `mcp-ciba` with `oidc.ciba.grant.enabled`; the public client `mcp-consumer`, whose tokens carry `aud=mcp-admin`; the public client `ciba-approver` the device signs its users in with |
-| `docker-compose.yml` | Keycloak's `--spi-ciba-auth-channel--ciba-http-auth-channel--http-authentication-channel-uri`, pointing at the approver |
+| `env/ciba.env` | `KC_MCP_SPI_CONFIRMER_CIBA_*`: client, timeout, `when`, `login-hint`, `client-auth`, `flow`, `number-matching`. `KC_MCP_CONFIRM_FALLBACK=deny`, so a client without elicitation cannot fall back to `confirm: true`. `KC_MCP_DELEGATION=exchange` with the server's client `keycloak-mcp`, and the delegation scope in `QUARKUS_OIDC_RESOURCE_METADATA_SCOPES` |
+| `realms/demo-realm.json` | the realm's CIBA policy (`cibaInterval`, `cibaExpiresIn`, `login_hint` as the user hint); the confidential client `mcp-ciba` with `oidc.ciba.grant.enabled`; the public client `mcp-consumer` with consent, whose tokens carry `aud=keycloak-mcp`; the server's client `keycloak-mcp` and its role scope (`clientScopeMappings`); the public client `ciba-approver` the device signs its users in with |
+| `docker-compose.yml` | Keycloak's `--spi-ciba-auth-channel--ciba-http-auth-channel--http-authentication-channel-uri`, pointing at the approver; the preview features `token-exchange-delegation` and `parameterized-scopes`; the job `keycloak-init` |
 | `approver/Approver.java` | the device, plain JDK, no build (below) |
 | the server log | `CIBA request …<id> for alice: keycloak_user_delete realm demo (binding message kc-mcp-…, code 42, up to 90 s)`, then `approved by alice` or `declined by alice`, then the audit line of the tool call |
 

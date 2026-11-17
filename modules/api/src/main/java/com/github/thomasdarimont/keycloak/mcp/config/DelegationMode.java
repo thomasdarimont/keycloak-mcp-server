@@ -3,17 +3,14 @@ package com.github.thomasdarimont.keycloak.mcp.config;
 import java.util.Locale;
 
 /**
- * Whose credentials reach the Keycloak Admin API.
+ * Whose credentials reach the Keycloak Admin API. There is no mode that sends the
+ * caller's own token there: the MCP authorization specification forbids passing the token
+ * received from the MCP client through to an upstream API. The token used at Keycloak is
+ * always one Keycloak issued to this server as its client.
  */
 public enum DelegationMode {
     /** The server's own service account / admin user. Default. */
     OFF,
-    /**
-     * The caller's access token is forwarded unchanged: the MCP endpoint requires an
-     * OAuth login and every admin call runs with that user's realm-management roles.
-     * Needs {@code quarkus.oidc.tenant-enabled=true}.
-     */
-    FORWARD,
     /**
      * The caller's access token is exchanged for a delegated token (RFC 8693 delegation,
      * Keycloak 26.8 feature {@code token-exchange-delegation}): the server's own client
@@ -31,14 +28,16 @@ public enum DelegationMode {
         String v = value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
         return switch (v) {
             case "OFF", "NONE", "SERVICE_ACCOUNT" -> OFF;
-            case "FORWARD" -> FORWARD;
+            case "FORWARD" -> throw new IllegalArgumentException("Delegation mode 'forward' was removed: the MCP"
+                    + " specification forbids passing the caller's token through to the Admin API. Use 'exchange'"
+                    + " (the caller's token is exchanged for a delegated one, see docs/security.md) or 'off'.");
             case "EXCHANGE", "TOKEN_EXCHANGE", "DELEGATION" -> EXCHANGE;
-            default -> throw new IllegalArgumentException(
-                    "Unknown delegation mode '" + value + "', expected off, forward or exchange");
+            default ->
+                throw new IllegalArgumentException("Unknown delegation mode '" + value + "', expected off or exchange");
         };
     }
 
-    /** The caller acts on their own behalf: {@link #FORWARD} or {@link #EXCHANGE}. */
+    /** The caller acts on their own behalf: {@link #EXCHANGE}. */
     public boolean delegating() {
         return this != OFF;
     }

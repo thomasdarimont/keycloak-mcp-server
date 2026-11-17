@@ -87,8 +87,8 @@ On the Keycloak side, as in `examples/ciba-confirm/realms/demo-realm.json`:
   Keycloak server, not per realm.
 - The device application behind that URL: it receives Keycloak's POST, lets the right user approve or decline, and
   answers Keycloak's callback. The example's `approver` shows the shape of it.
-- Callers must be authenticated at the MCP server, because the login hint is the caller's username: forward or
-  exchange delegation, or `kc-mcp.require-caller=true` ([Security](security.md#callers)).
+- Callers must be authenticated at the MCP server, because the login hint is the caller's username: exchange
+  delegation, or `kc-mcp.require-caller=true` ([Security](security.md#callers)).
 
 On the server side, the example's `env/ciba.env` is a template:
 

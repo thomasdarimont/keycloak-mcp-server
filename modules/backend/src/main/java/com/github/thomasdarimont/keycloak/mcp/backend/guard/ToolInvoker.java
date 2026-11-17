@@ -42,9 +42,8 @@ import io.vertx.core.json.JsonObject;
 /**
  * The single execution path for every tool, whether called directly or through
  * {@code execute_tool}: policy -> validation -> realm -> confirmation -> handler ->
- * audit. In the delegation modes the caller's token ({@code forward}), or the delegated
- * token exchanged for it ({@code exchange}), replaces the server's credentials for the
- * handler and the role checks.
+ * audit. In delegation mode {@code exchange} the delegated token exchanged for the
+ * caller's replaces the server's credentials for the handler and the role checks.
  */
 @ApplicationScoped
 public class ToolInvoker {

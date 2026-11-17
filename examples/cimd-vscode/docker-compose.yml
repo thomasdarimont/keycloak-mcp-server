@@ -1,9 +1,9 @@
-# Keycloak 26.8.2 on https://localhost:8100 (admin / admin) with Client ID Metadata Documents, the demo realm imported
-# from realms/ on the first start. The realm has no OAuth client for the MCP client: see README.md.
+# Keycloak 26.8.2 on https://localhost:8100 (admin / admin) with Client ID Metadata Documents and token exchange
+# delegation, the demo realm imported from realms/ on the first start. The realm has no OAuth client for the MCP
+# client, only the MCP server's own client keycloak-mcp: see README.md.
 #
 #   ../../etc/mkcert.sh           # once: the certificate for localhost, VS Code refuses a plain http login server
-#   docker compose up -d --wait   # start
-#   ./setup.sh                    # then: the two client scopes a client created from its metadata document gets
+#   docker compose up -d --wait   # start; the init job grants keycloak-mcp the permission to act for users
 #   docker compose down -v        # reset everything
 services:
   keycloak:
@@ -15,12 +15,13 @@ services:
       KC_HOSTNAME: https://localhost:8100
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/localhost.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/localhost-key.pem
-      # only inside the container, for kcadm in setup.sh and the health check
+      # only inside the compose network, for kcadm in the init job and the health check
       KC_HTTP_ENABLED: "true"
       KC_HTTP_MANAGEMENT_SCHEME: http
       KC_HEALTH_ENABLED: "true"
-      # Experimental in 26.8. Not resource-indicators: see "Why not resource indicators" in README.md.
-      KC_FEATURES: cimd
+      # cimd is experimental in 26.8; token exchange delegation needs parameterized scopes (both preview).
+      # Not resource-indicators: see "Why not resource indicators" in README.md.
+      KC_FEATURES: cimd,token-exchange-delegation,parameterized-scopes
       KC_LOG_LEVEL: info
     volumes:
       - ./realms:/opt/keycloak/data/import:ro
@@ -34,6 +35,19 @@ services:
       timeout: 5s
       retries: 40
       start_period: 20s
+
+  # The one setting a realm import cannot carry: the Admin Permissions grant that lets keycloak-mcp act for users.
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.8.2
+    entrypoint: ["/bin/bash", "/grant-delegation.sh"]
+    environment:
+      REALMS: demo
+      ACTOR: keycloak-mcp
+    volumes:
+      - ./init/grant-delegation.sh:/grant-delegation.sh:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
 
 networks:
   default:

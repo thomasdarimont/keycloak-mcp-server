@@ -437,9 +437,9 @@ public class MetaTools {
         }
         boolean delegated = caller.delegated() && ctx.callerToken() != null;
         boolean exchanged = delegated && delegation == DelegationMode.EXCHANGE;
-        out.put("keycloakCallsRunAs", exchanged
+        out.put("keycloakCallsRunAs", delegated
                 ? "the caller's own account through a delegated token (delegated; Keycloak's act claim names this server)"
-                : delegated ? "the caller's own account (delegated)" : "the server's service account");
+                : "the server's service account");
         if (system != null) {
             out.put("system", system);
         }

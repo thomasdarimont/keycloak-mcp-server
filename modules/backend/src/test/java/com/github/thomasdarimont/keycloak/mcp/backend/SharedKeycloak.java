@@ -11,7 +11,7 @@ import org.testcontainers.utility.DockerImageName;
  * by Testcontainers when the JVM ends (not reused across runs, so every build starts from
  * an empty Keycloak): a Keycloak start takes about 25 seconds, and most test resources
  * need the same one. The test resources that use it ({@link KeycloakTestResource},
- * {@link ForwardTestResource} and its subclasses that do not customize the container,
+ * {@link CallerTestResource} and its subclasses that do not customize the container,
  * {@link RealmManagerTestResource}) never stop it.
  * <p>
  * The rule for tests that use it: do not assume a fresh Keycloak. Earlier test classes
