@@ -94,7 +94,7 @@ class TwoKeycloaksIT {
     }
 
     @Test
-    void anEntrysMetadataIsServedBeforeTheEntryWasEverAskedFor() {
+    void theMetadataOfAnEntryIsServedBeforeTheEntryWasEverAskedFor() {
         // a system nobody has sent a request to: its tenant does not exist yet
         String alice = CallerTestResource.token("mcp-consumer", "alice", "alice");
         given().header("Authorization", "Bearer " + alice)
