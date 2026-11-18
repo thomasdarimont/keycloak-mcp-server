@@ -138,6 +138,17 @@ class PolicyChecksTest {
         assertTrue(deny.check(ctx(members, ROOT, Map.of("groupId", "/team-b"))).allowed(), "super role bypass");
         assertEquals("caller_foreign_realm",
                 deny.check(ctx(members, OTHER_REALM, Map.of("groupId", "/team-b"))).code());
+        // a master admin whose MCP token carries no roles: the delegated token decides
+        GrantedRoles master = new GrantedRoles(true, true, "master", Map.of(), Map.of(), Set.of("admin"));
+        Caller masterAdmin = Caller.delegated("id-admin", "admin", "master", Set.of());
+        Map<String, Object> teamB = Map.of("groupId", "/team-b");
+        assertTrue(deny.check(new AccessCheck.Context(members, "demo", teamB, master, masterAdmin)).allowed(),
+                "delegated master admin");
+        // not delegated: these are the server's roles, not the caller's
+        assertEquals("caller_foreign_realm", deny
+            .check(new AccessCheck.Context(members, "demo", teamB, master,
+                    Caller.of("id-admin", "admin", "master", Set.of())))
+            .code());
         Caller ghost = Caller.of("id-ghost", "ghost", "demo", Set.of());
         assertEquals("caller_unknown", deny.check(ctx(members, ghost, Map.of("groupId", "/team-b"))).code());
     }

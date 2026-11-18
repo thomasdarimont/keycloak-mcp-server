@@ -30,6 +30,11 @@ final class CallerContext {
                 return Optional.of(AccessCheck.Decision.allow());
             }
         }
+        // a master admin acting on their own behalf: the delegated token carries the role
+        // even where the token that opened the MCP server does not
+        if (caller.delegated() && ctx.roles() != null && ctx.roles().superAdmin()) {
+            return Optional.of(AccessCheck.Decision.allow());
+        }
         if (caller.realm() != null && ctx.realm() != null && !caller.realm().equals(ctx.realm())) {
             return Optional.of(AccessCheck.Decision.deny("caller_foreign_realm", "Caller '" + caller.name()
                     + "' belongs to realm '" + caller.realm() + "', not to '" + ctx.realm() + "'."));

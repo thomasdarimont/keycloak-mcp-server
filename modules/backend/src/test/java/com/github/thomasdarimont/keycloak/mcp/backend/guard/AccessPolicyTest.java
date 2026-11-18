@@ -292,6 +292,17 @@ class AccessPolicyTest {
         assertEquals(Explanations.USERS, auto.explanationsFor(auto.granted(null, asSupport), true));
         assertEquals(Explanations.ADMINS, auto.explanationsFor(auto.granted(null, asAdmin), true));
         assertEquals(Explanations.ADMINS, auto.explanationsFor(null, false));
+
+        // the roles belong to the realm that issued the delegated token: 'admin' from a
+        // realm other than master is no super admin, whatever realm the caller logged in
+        // to
+        JsonObject adminRole = new JsonObject().put("realm_access",
+                new JsonObject().put("roles", new JsonArray(List.of("admin"))));
+        String fromTenant = GrantedRolesTest.jwt(adminRole.copy().put("iss", "https://kc.example/realms/tenant"));
+        String fromMaster = GrantedRolesTest.jwt(adminRole.copy().put("iss", "https://kc.example/realms/master"));
+        Caller loggedInAtMaster = Caller.delegated("u3", "admin", "master", Set.of());
+        assertFalse(auto.granted(null, TransportContext.none().withCaller(loggedInAtMaster, fromTenant)).superAdmin());
+        assertTrue(auto.granted(null, TransportContext.none().withCaller(loggedInAtMaster, fromMaster)).superAdmin());
         Map<String, Object> forSupport = payload(auto.forbids(orgs, null, "demo", Map.of(), asSupport).orElseThrow());
         assertFalse(forSupport.containsKey("howToFix"), forSupport.toString());
         Map<String, Object> forAdmin = payload(auto.forbids(orgs, null, "demo", Map.of(), asAdmin).orElseThrow());

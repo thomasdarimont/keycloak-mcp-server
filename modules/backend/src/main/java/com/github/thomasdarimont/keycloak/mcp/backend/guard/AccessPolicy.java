@@ -1,6 +1,8 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.guard;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +38,7 @@ import com.github.thomasdarimont.keycloak.mcp.keycloak.ToolSettings;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
 
 import io.quarkus.runtime.Startup;
+import io.vertx.core.json.JsonObject;
 
 /**
  * Who may do what:
@@ -681,7 +684,8 @@ public class AccessPolicy {
      */
     public GrantedRoles granted(String system, TransportContext ctx) {
         if (ctx.caller().delegated() && ctx.callerToken() != null) {
-            return GrantedRoles.fromToken(decidingToken(system, ctx.callerToken()), ctx.caller().realm());
+            String token = decidingToken(system, ctx.callerToken());
+            return GrantedRoles.fromToken(token, issuerRealm(token).orElse(ctx.caller().realm()));
         }
         if (roles == null) {
             return null;
@@ -702,6 +706,30 @@ public class AccessPolicy {
             return callerToken;
         }
         return systems.find(name).map(admin -> admin.forToken(callerToken).accessToken()).orElse(callerToken);
+    }
+
+    /**
+     * The realm that issued the token, from its {@code iss}. The roles of a delegated
+     * token belong to the realm that issued it, which need not be the one the caller
+     * logged in to the MCP server with: a realm named master there says nothing about the
+     * {@code admin} role here.
+     */
+    static Optional<String> issuerRealm(String jwt) {
+        if (jwt == null) {
+            return Optional.empty();
+        }
+        String[] parts = jwt.split("\\.");
+        if (parts.length < 2) {
+            return Optional.empty();
+        }
+        try {
+            JsonObject payload = new JsonObject(
+                    new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8));
+            return Optional.ofNullable(SecurityIdentityCallerProvider.realmOf(payload.getString("iss")));
+        }
+        catch (RuntimeException e) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<ToolResult> evaluate(AccessCheck check, AccessCheck.Context context,
