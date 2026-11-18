@@ -73,6 +73,46 @@ class TwoKeycloaksIT {
         assertEquals(401, r.statusCode(), r.asString());
     }
 
+    /**
+     * A master admin is the admin of their own Keycloak only. The first Keycloak's admin,
+     * whose token carries the master {@code admin} role, logs in at a system of that
+     * Keycloak and gets nowhere near the second: not by naming it, not at its entry. That
+     * both realms are called master and both roles admin makes them no more alike.
+     */
+    @Test
+    void aMasterAdminOfOneKeycloakIsNoAdminOfTheOther() {
+        String alice = CallerTestResource.token("mcp-consumer", "alice", "alice");
+        given().header("Authorization", "Bearer " + alice)
+            .contentType("application/json")
+            .body(new JsonObject().put("url", CallerTestResource.base)
+                .put("authRealm", "master")
+                .put("defaultRealm", "master")
+                .put("clientAuth", "client_secret")
+                .put("clientId", "mcp-admin")
+                .put("clientSecret", "unused-here")
+                .encode())
+            .put("/admin/systems/first-master")
+            .then()
+            .statusCode(201);
+        String firstAdmin = TwoKeycloaksTestResource.firstMasterToken("mcp-consumer", "admin", "admin");
+
+        McpClient own = new McpClient().path("/mcp/systems/first-master").bearer(firstAdmin).initialize(false);
+        JsonObject who = McpClient.text(own.callTool("whoami", new JsonObject()));
+        assertEquals("admin", who.getJsonObject("caller").getString("username"), who.encode());
+        assertEquals("master", who.getJsonObject("caller").getString("realm"), who.encode());
+        JsonObject named = McpClient.text(own.callTool("keycloak_user_set_enabled",
+                new JsonObject().put("system", "other")
+                    .put("realm", "master")
+                    .put("id", "admin")
+                    .put("enabled", false)));
+        assertEquals("entry_mismatch", named.getString("error"), named.encode());
+
+        assertEquals(401, initialize("/mcp/systems/other", firstAdmin), "the other Keycloak's entry");
+        // and the other Keycloak's admin is untouched: he still logs in
+        assertEquals(200, initialize("/mcp/systems/other",
+                TwoKeycloaksTestResource.otherToken("mcp-consumer", "admin", "admin")));
+    }
+
     @Test
     void theOtherSystemsEntryDoesNotAcceptTheFirstKeycloaksTokens() {
         Response r = given().header("Accept", "application/json, text/event-stream")

@@ -32,6 +32,13 @@ import io.vertx.core.json.JsonObject;
  * permission that lets that client act for every user, {@code alice} with
  * {@code realm-admin}, {@code carol} with {@code view-users}, {@code bob} with nothing.
  * The server runs in delegation mode {@code exchange} as {@code keycloak-mcp}.
+ * <p>
+ * The master realm is set up the same way, shaped like {@code examples/distribution}, and
+ * is the login realm of a second system {@link #MASTER_SYSTEM} on the same Keycloak:
+ * {@code root} holds the master {@code admin} role, {@code helper} only
+ * {@code manage-users} of the demo realm. The tokens of {@code mcp-consumer} carry no
+ * roles there (full scope off), so what these callers may do is known from the delegated
+ * token alone. {@code erin} of the demo realm is theirs to act on.
  */
 public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager {
 
@@ -39,6 +46,8 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
     public static final String ACTOR_SECRET = "keycloak-mcp-secret";
     public static final String DELEGATION_SCOPE = "delegation:client:" + ACTOR;
     static final String REDIRECT = "http://localhost:9999/cb";
+    /** The system whose callers log in at the master realm. */
+    public static final String MASTER_SYSTEM = "root";
 
     static String base;
 
@@ -73,6 +82,14 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
                 Map.entry("kc-mcp.systems.default.username", ""), Map.entry("kc-mcp.systems.default.password", ""),
                 Map.entry("kc-mcp.systems.default.default-realm", "demo"),
                 Map.entry("kc-mcp.systems.default.allowed-realms", "demo"), Map.entry("kc-mcp.tool-exposure", "direct"),
+                // two systems: /mcp stays the demo realm's
+                Map.entry("kc-mcp.default-system", "default"),
+                Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".url", base),
+                Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".auth-realm", "master"),
+                Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".default-realm", "master"),
+                Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".grant-type", "client_credentials"),
+                Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".client-id", ACTOR),
+                Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".client-secret", ACTOR_SECRET),
                 Map.entry("quarkus.oidc.tenant-enabled", "true"),
                 Map.entry("quarkus.oidc.auth-server-url", base + "/realms/demo"),
                 Map.entry("quarkus.oidc.token.audience", ACTOR),
@@ -136,28 +153,93 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
         }
         post("/admin/realms/demo/clients/" + actor + "/scope-mappings/clients/" + rm, scope);
 
-        user("alice", rm, "realm-admin");
-        user("carol", rm, "view-users");
-        user("bob", rm);
+        user("demo", "alice", rm, "realm-admin");
+        user("demo", "carol", rm, "view-users");
+        user("demo", "bob", rm);
+        user("demo", "erin", rm);
+        mayActForUsers("demo", actor);
+        bootstrapMaster();
+    }
 
-        // Admin Permissions: the actor's service account may act for every user
-        String permissions = new JsonArray(get("/admin/realms/demo/clients?clientId=admin-permissions"))
+    /**
+     * The master realm as a login realm: the same two clients, with full scope off on
+     * both. The actor's role scope lets the {@code admin} role and the demo realm's user
+     * management into delegated tokens; the tokens of {@code mcp-consumer} carry no role.
+     */
+    private void bootstrapMaster() throws IOException, InterruptedException {
+        putJson("/admin/realms/master", new JsonObject().put("adminPermissionsEnabled", true));
+        post("/admin/realms/master/clients", new JsonObject().put("clientId", "mcp-consumer")
+            .put("publicClient", true)
+            .put("standardFlowEnabled", true)
+            .put("directAccessGrantsEnabled", false)
+            .put("consentRequired", true)
+            .put("fullScopeAllowed", false)
+            .put("redirectUris", new JsonArray().add("http://localhost:9999/*"))
+            .put("defaultClientScopes",
+                    new JsonArray().add("web-origins").add("acr").add("roles").add("profile").add("basic").add("email"))
+            .put("optionalClientScopes", new JsonArray().add("delegation:client"))
+            .put("protocolMappers", new JsonArray().add(new JsonObject().put("name", "mcp server audience")
+                .put("protocol", "openid-connect")
+                .put("protocolMapper", "oidc-audience-mapper")
+                .put("config",
+                        new JsonObject().put("included.client.audience", ACTOR).put("access.token.claim", "true")))));
+        String actor = post("/admin/realms/master/clients",
+                new JsonObject().put("clientId", ACTOR)
+                    .put("secret", ACTOR_SECRET)
+                    .put("publicClient", false)
+                    .put("serviceAccountsEnabled", true)
+                    .put("standardFlowEnabled", false)
+                    .put("fullScopeAllowed", false)
+                    .put("attributes", new JsonObject().put("standard.token.exchange.enabled", "true"))
+                    .put("defaultClientScopes",
+                            new JsonArray().add("acr")
+                                .add("basic")
+                                .add("roles")
+                                .add("profile")
+                                .add("kc-admin-api")
+                                .add("service_account")));
+        JsonObject admin = new JsonObject(get("/admin/realms/master/roles/admin"));
+        post("/admin/realms/master/clients/" + actor + "/scope-mappings/realm", new JsonArray().add(admin));
+        // the master realm's client for the demo realm carries that realm's management
+        // roles
+        String demoRealm = new JsonArray(get("/admin/realms/master/clients?clientId=demo-realm")).getJsonObject(0)
+            .getString("id");
+        JsonArray scope = new JsonArray();
+        for (String role : List.of("view-users", "manage-users", "query-users")) {
+            scope.add(new JsonObject(get("/admin/realms/master/clients/" + demoRealm + "/roles/" + role)));
+        }
+        post("/admin/realms/master/clients/" + actor + "/scope-mappings/clients/" + demoRealm, scope);
+
+        String root = user("master", "root", demoRealm);
+        post("/admin/realms/master/users/" + root + "/role-mappings/realm", new JsonArray().add(admin));
+        user("master", "helper", demoRealm, "view-users", "manage-users", "query-users");
+        mayActForUsers("master", actor);
+    }
+
+    /** Admin Permissions: the actor's service account may act for every user. */
+    private void mayActForUsers(String realm, String actor) throws IOException, InterruptedException {
+        String permissions = new JsonArray(get("/admin/realms/" + realm + "/clients?clientId=admin-permissions"))
             .getJsonObject(0)
             .getString("id");
-        post("/admin/realms/demo/clients/" + permissions + "/authz/resource-server/policy/client",
+        String authz = "/admin/realms/" + realm + "/clients/" + permissions + "/authz/resource-server";
+        post(authz + "/policy/client",
                 new JsonObject().put("name", "keycloak-mcp may act for users")
                     .put("clients", new JsonArray().add(actor))
                     .put("logic", "POSITIVE"));
-        post("/admin/realms/demo/clients/" + permissions + "/authz/resource-server/permission/scope",
+        post(authz + "/permission/scope",
                 new JsonObject().put("name", "delegate to keycloak-mcp")
                     .put("resourceType", "Users")
                     .put("scopes", new JsonArray().add("delegate"))
                     .put("policies", new JsonArray().add("keycloak-mcp may act for users")));
     }
 
-    private void user(String name, String realmManagementClientId, String... roles)
+    /**
+     * @param rolesClientId the client (its id) the roles are of
+     * @return the user's id
+     */
+    private String user(String realm, String name, String rolesClientId, String... roles)
             throws IOException, InterruptedException {
-        String id = post("/admin/realms/demo/users",
+        String id = post("/admin/realms/" + realm + "/users",
                 new JsonObject().put("username", name)
                     .put("enabled", true)
                     .put("email", name + "@example.com")
@@ -169,11 +251,12 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
         JsonArray mappings = new JsonArray();
         for (String role : roles) {
             mappings
-                .add(new JsonObject(get("/admin/realms/demo/clients/" + realmManagementClientId + "/roles/" + role)));
+                .add(new JsonObject(get("/admin/realms/" + realm + "/clients/" + rolesClientId + "/roles/" + role)));
         }
         if (!mappings.isEmpty()) {
-            post("/admin/realms/demo/users/" + id + "/role-mappings/clients/" + realmManagementClientId, mappings);
+            post("/admin/realms/" + realm + "/users/" + id + "/role-mappings/clients/" + rolesClientId, mappings);
         }
+        return id;
     }
 
     /**
@@ -184,8 +267,13 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
      * {@code openid delegation:client:keycloak-mcp}
      */
     public static String login(String user, String password, String scope) {
+        return login("demo", user, password, scope);
+    }
+
+    /** The same login at another realm of this Keycloak. */
+    public static String login(String realm, String user, String password, String scope) {
         try {
-            return new Browser().login(user, password, scope);
+            return new Browser().login(realm, user, password, scope);
         }
         catch (IOException | InterruptedException e) {
             throw new IllegalStateException(e);
@@ -199,16 +287,18 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
         private final HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
         private final Map<String, String> cookies = new LinkedHashMap<>();
 
-        String login(String user, String password, String scope) throws IOException, InterruptedException {
-            String url = base + "/realms/demo/protocol/openid-connect/auth?client_id=mcp-consumer&response_type=code"
-                    + "&redirect_uri=" + encode(REDIRECT) + "&scope=" + encode(scope) + "&state=x";
+        String login(String realm, String user, String password, String scope)
+                throws IOException, InterruptedException {
+            String url = base + "/realms/" + realm
+                    + "/protocol/openid-connect/auth?client_id=mcp-consumer&response_type=code" + "&redirect_uri="
+                    + encode(REDIRECT) + "&scope=" + encode(scope) + "&state=x";
             HttpResponse<String> r = send(HttpRequest.newBuilder(URI.create(url)).GET());
             for (int i = 0; i < 10; i++) {
                 if (r.statusCode() == 302 || r.statusCode() == 303) {
                     String location = r.headers().firstValue("Location").orElseThrow();
                     if (location.startsWith(REDIRECT)) {
                         String code = URI.create(location).getQuery().replaceAll(".*code=([^&]+).*", "$1");
-                        return new JsonObject(form("/realms/demo/protocol/openid-connect/token",
+                        return new JsonObject(form("/realms/" + realm + "/protocol/openid-connect/token",
                                 "grant_type=authorization_code&client_id=mcp-consumer&code=" + code + "&redirect_uri="
                                         + encode(REDIRECT)))
                             .getString("access_token");
@@ -317,6 +407,15 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
         HttpResponse<String> r = http.send(HttpRequest.newBuilder(URI.create(base + path))
             .header("Authorization", "Bearer " + adminToken)
             .PUT(HttpRequest.BodyPublishers.noBody())
+            .build(), HttpResponse.BodyHandlers.ofString());
+        check(r, path);
+    }
+
+    private void putJson(String path, JsonObject json) throws IOException, InterruptedException {
+        HttpResponse<String> r = http.send(HttpRequest.newBuilder(URI.create(base + path))
+            .header("Authorization", "Bearer " + adminToken)
+            .header("Content-Type", "application/json")
+            .PUT(HttpRequest.BodyPublishers.ofString(json.encode()))
             .build(), HttpResponse.BodyHandlers.ofString());
         check(r, path);
     }

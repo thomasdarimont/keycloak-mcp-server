@@ -144,6 +144,61 @@ class ExchangeIT {
         assertTrue(body.getString("message").contains(ExchangeTestResource.DELEGATION_SCOPE), body.encode());
     }
 
+    private static McpClient atMaster(String user) {
+        return new McpClient().path("/mcp/systems/" + ExchangeTestResource.MASTER_SYSTEM)
+            .bearer(ExchangeTestResource.login("master", user, user, "openid " + ExchangeTestResource.DELEGATION_SCOPE))
+            .initialize(false);
+    }
+
+    /**
+     * What whoami says and what the access checks enforce are decided by the same token:
+     * a master admin whose own token carries no roles is a super admin by the delegated
+     * one, and the checks that keep callers within their realm (no-escalation, on by
+     * default) let them act in every realm.
+     */
+    @Test
+    void masterAdminActsInAnotherRealm() {
+        McpClient root = atMaster("root");
+        JsonObject me = McpClient.text(root.callTool("whoami", new JsonObject()));
+        assertEquals("root", me.getJsonObject("caller").getString("username"), me.encode());
+        assertEquals("master", me.getJsonObject("caller").getString("realm"), me.encode());
+        assertEquals(true, me.getBoolean("superAdmin"), me.encode());
+
+        JsonObject disabled = McpClient.text(root.callTool("keycloak_user_set_enabled",
+                new JsonObject().put("realm", "demo").put("id", "erin").put("enabled", false)));
+        assertFalse(disabled.containsKey("error"), disabled.encode());
+        JsonObject found = McpClient
+            .text(root.callTool("keycloak_user_search", new JsonObject().put("realm", "demo").put("username", "erin")));
+        assertEquals(false, found.getJsonArray("items").getJsonObject(0).getBoolean("enabled"), found.encode());
+        JsonObject enabled = McpClient.text(root.callTool("keycloak_user_set_enabled",
+                new JsonObject().put("realm", "demo").put("id", "erin").put("enabled", true)));
+        assertFalse(enabled.containsKey("error"), enabled.encode());
+    }
+
+    /**
+     * The other side of it: a master realm user who is no admin stays a caller of another
+     * realm there, whatever Keycloak would let them do. Their roles for the demo realm
+     * reach the check, which refuses.
+     */
+    @Test
+    void masterUserWithoutTheAdminRoleStaysForeign() {
+        McpClient helper = atMaster("helper");
+        JsonObject me = McpClient.text(helper.callTool("whoami", new JsonObject()));
+        assertEquals("helper", me.getJsonObject("caller").getString("username"), me.encode());
+        assertFalse(me.getBoolean("superAdmin", false), me.encode());
+        assertEquals("manage", me.getJsonObject("can").getJsonObject("demo").getString("users"), me.encode());
+
+        JsonObject found = McpClient.text(
+                helper.callTool("keycloak_user_search", new JsonObject().put("realm", "demo").put("username", "erin")));
+        assertEquals("erin", found.getJsonArray("items").getJsonObject(0).getString("username"), found.encode());
+        JsonObject denied = McpClient.text(helper.callTool("keycloak_user_set_enabled",
+                new JsonObject().put("realm", "demo").put("id", "erin").put("enabled", false)));
+        assertEquals("caller_foreign_realm", denied.getString("error"), denied.encode());
+        JsonObject still = McpClient.text(
+                helper.callTool("keycloak_user_search", new JsonObject().put("realm", "demo").put("username", "erin")));
+        assertEquals(true, still.getJsonArray("items").getJsonObject(0).getBoolean("enabled"), still.encode());
+    }
+
     @Test
     void userWithoutAdminRolesIsRefused() {
         McpClient bob = delegating("bob");
