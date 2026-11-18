@@ -51,7 +51,7 @@ services:
   # The enterprise IdP: Keycloak cannot issue ID-JAGs yet (keycloak#48818), so a standard-library Python script does.
   # Its issuer is the public http://localhost:8102; Keycloak fetches the JWKS as http://idp:8102/jwks.
   idp:
-    image: python:3.13-slim
+    image: python:3.15-slim
     command: ["python3", "-I", "/idp/idp.py", "--host", "0.0.0.0", "--issuer", "http://localhost:8102"]
     environment:
       PYTHONUNBUFFERED: "1"
