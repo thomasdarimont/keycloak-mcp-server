@@ -97,7 +97,7 @@ public class AcmeToolProvider implements ToolProvider {
   serves them in the caller's language; what the model reads (tool and provider descriptions) and the logs stay as
   the methods say.
 - `ServerInfoContributor` (optional, on any extension): `contributeServerInfo(ServerInfo info)` adds what the
-  extension knows about how it runs to the server info (`GET /admin/server-info`, the UI's *Server info* page):
+  extension knows about how it runs to the server info (`GET /api/admin/server-info`, the UI's *Server info* page):
   `info.put("table", "acme_tickets")` for operational facts, `info.warn("...")` for something that works but should
   not stay as it is, in a sentence that says what to do. State, not settings (those are in the `configSpec()`), and
   no secrets. Asked on every read of the server info and only of extensions that take part, after `configure`: answer
@@ -123,7 +123,7 @@ public class AcmeToolProvider implements ToolProvider {
     (`config.client-secret.label`); a key no bundle has shows as the name and is logged once. `ConfigMessages` merges
     the bundles of every jar, the providers directory included, and resolves them per locale; `missingLabels(prefix,
     spec)` lets a test keep the bundle complete. The admin API serves an extension's spec, values (confidential ones
-    masked) and problems with these texts at `GET /admin/extensions/<spi>/<id>` ([Keycloak systems](systems.md)).
+    masked) and problems with these texts at `GET /api/admin/extensions/<spi>/<id>` ([Keycloak systems](systems.md)).
   - `spec.plus(other)` combines specs; the AuthZEN engine adds the client authentication methods' to its own (a
     `ClientAuthenticatorFactory` has `configSpec()` and `validate` too).
   - Read declared settings with `config.readString(P)`, `readBoolean`, `readInt`, `readLong`, `readNumber`,

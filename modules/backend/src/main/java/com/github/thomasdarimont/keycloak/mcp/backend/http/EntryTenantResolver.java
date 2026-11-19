@@ -32,8 +32,8 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 
 /**
- * With caller authentication on ({@code quarkus.oidc.tenant-enabled=true}), a request to
- * a bound entry ({@link EntryRoutes}) is verified against the realm that entry stands for
+ * With caller authentication on ({@code kc-mcp.mcp.oauth.enabled=true}), a request to a
+ * bound entry ({@link EntryRoutes}) is verified against the realm that entry stands for
  * instead of the default tenant: a realm entry {@code /mcp/systems/<system>/<realm>} logs
  * its users in at that realm, a system entry at the system's auth realm. The tenant
  * {@code kc-mcp-<system>[-<realm>]} copies the default tenant's settings (audience,
@@ -49,10 +49,10 @@ import io.vertx.ext.web.RoutingContext;
  * issuer's tokens stop being accepted with that request, the new issuer's start.
  * <p>
  * Requests to the admin API get the tenant {@code kc-mcp-admin} pointing at
- * {@code kc-mcp.admin.issuer}, whatever the default tenant is; one carrying the static
- * {@code kc-mcp.admin.token}, and every one when no issuer is configured, gets a disabled
- * tenant, so OIDC leaves it alone and the admin filter checks the token. The default
- * tenant, which verifies MCP callers, never verifies an admin request.
+ * {@code kc-mcp.admin.oauth.issuer}, whatever the default tenant is; one carrying the
+ * static {@code kc-mcp.admin.token}, and every one when no issuer is configured, gets a
+ * disabled tenant, so OIDC leaves it alone and the admin filter checks the token. The
+ * default tenant, which verifies MCP callers, never verifies an admin request.
  * <p>
  * Requests to the BFF of the management UI ({@code /bff/*}) get the web-app tenant of the
  * identity provider they belong to ({@code kc-mcp-ui-<alias>}, {@link UiTenant}):
@@ -115,7 +115,7 @@ public class EntryTenantResolver implements TenantConfigResolver {
      * callers'.
      */
     OidcTenantConfig adminTenant(String authorization) {
-        Optional<String> issuer = config.admin().issuer().filter(v -> !v.isBlank());
+        Optional<String> issuer = config.admin().oauth().issuer().filter(v -> !v.isBlank());
         if (issuer.isEmpty()
                 || AdminAccessFilter.staticTokenMatches(authorization, config.admin().token().orElse(null))) {
             return OidcTenantConfig.builder().tenantId("kc-mcp-admin-token").tenantEnabled(false).build();
@@ -124,7 +124,7 @@ public class EntryTenantResolver implements TenantConfigResolver {
             .tenantId(AdminAccessFilter.ADMIN_TENANT)
             .authServerUrl(issuer.get())
             .applicationType(io.quarkus.oidc.runtime.OidcTenantConfig.ApplicationType.SERVICE);
-        config.admin().audience().filter(v -> !v.isBlank()).ifPresent(a -> builder.token().audience(a).end());
+        config.admin().oauth().audience().filter(v -> !v.isBlank()).ifPresent(a -> builder.token().audience(a).end());
         return builder.build();
     }
 

@@ -27,16 +27,16 @@ import io.vertx.ext.web.RoutingContext;
 
 /**
  * The OIDC relying parties behind the management UI, one per identity provider the UI
- * offers ({@code kc-mcp.ui.idps.<alias>}, or the single {@link #DEFAULT_ALIAS} formed by
- * {@code kc-mcp.ui.issuer} and {@code client-id}). Each is a Quarkus {@code web-app}
- * tenant {@code kc-mcp-ui-<alias>} for the BFF paths: authorization code flow with PKCE
- * (S256), public client unless a secret is configured, the redirect URI is the login path
- * ({@code <server>/bff/login}, whatever query the sign-in button carried). The session
- * cookie is HttpOnly, Secure and holds only the id of a {@code UserSession}
+ * offers ({@code kc-mcp.ui.oidc.idps.<alias>}, or the single {@link #DEFAULT_ALIAS}
+ * formed by {@code kc-mcp.ui.oidc.issuer} and {@code client-id}). Each is a Quarkus
+ * {@code web-app} tenant {@code kc-mcp-ui-<alias>} for the BFF paths: authorization code
+ * flow with PKCE (S256), public client unless a secret is configured, the redirect URI is
+ * the login path ({@code <server>/bff/login}, whatever query the sign-in button carried).
+ * The session cookie is HttpOnly, Secure and holds only the id of a {@code UserSession}
  * ({@link UserSessionTokenStateManager}). Roles come from the access token, which is
  * verified too; expired ID tokens are renewed with the refresh token for up to the
- * provider's {@code session-age-extension} ({@code kc-mcp.ui.session-age-extension} by
- * default, the provider's SSO idle timeout); a browser request with
+ * provider's {@code session-age-extension} ({@code kc-mcp.ui.oidc.session-age-extension}
+ * by default, the provider's SSO idle timeout); a browser request with
  * {@code X-Requested-With: JavaScript} that finds no session gets 499 instead of a
  * redirect, so the UI can show its sign-in buttons.
  * <p>
@@ -273,13 +273,13 @@ public class UiTenant {
 
     /**
      * The configured providers in configuration order, hidden ones included; the single
-     * {@code default} one from the top-level settings when {@code kc-mcp.ui.idps} is
+     * {@code default} one from the top-level settings when {@code kc-mcp.ui.oidc.idps} is
      * empty.
      */
     public List<Idp> idps() {
-        Map<String, McpServerConfig.IdpSettings> named = config.ui().idps();
+        Map<String, McpServerConfig.IdpSettings> named = config.ui().oidc().idps();
         List<Idp> out = new ArrayList<>();
-        McpServerConfig.Ui ui = config.ui();
+        McpServerConfig.Ui.Oidc ui = config.ui().oidc();
         if (named.isEmpty()) {
             out.add(Idp.builder(DEFAULT_ALIAS)
                 .displayName("Sign in")
@@ -333,15 +333,15 @@ public class UiTenant {
 
     /**
      * The provider the UI's users log in at without named providers:
-     * {@code kc-mcp.ui.issuer}, else {@code kc-mcp.admin.issuer}, else the server's own
-     * auth realm.
+     * {@code kc-mcp.ui.oidc.issuer}, else {@code kc-mcp.admin.oauth.issuer}, else the
+     * server's own auth realm.
      */
     public String defaultIssuer() {
-        Optional<String> own = config.ui().issuer().filter(v -> !v.isBlank());
+        Optional<String> own = config.ui().oidc().issuer().filter(v -> !v.isBlank());
         if (own.isPresent()) {
             return own.get();
         }
-        Optional<String> admin = config.admin().issuer().filter(v -> !v.isBlank());
+        Optional<String> admin = config.admin().oauth().issuer().filter(v -> !v.isBlank());
         return admin.orElseGet(DefaultTenant::authServerUrl);
     }
 

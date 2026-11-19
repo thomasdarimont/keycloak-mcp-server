@@ -103,12 +103,11 @@ class CustomRootPathTest {
                     Map.entry("kc-mcp.systems.default.client-auth", "private_key_jwt"),
                     Map.entry("kc-mcp.systems.default.client-id", "mcp-admin"),
                     Map.entry("kc-mcp.jwt.key-file", PEM.toString()), Map.entry("kc-mcp.jwt.key-id", KID),
-                    Map.entry("kc-mcp.startup-check", "off"), Map.entry("quarkus.oidc.tenant-enabled", "true"),
-                    Map.entry("quarkus.oidc.auth-server-url", ISSUER),
-                    Map.entry("quarkus.oidc.discovery-enabled", "false"),
+                    Map.entry("kc-mcp.startup-check", "off"), Map.entry("kc-mcp.mcp.oauth.enabled", "true"),
+                    Map.entry("kc-mcp.mcp.oauth.issuer", ISSUER), Map.entry("quarkus.oidc.discovery-enabled", "false"),
                     Map.entry("quarkus.oidc.jwks-path",
                             "http://localhost:" + PORT + jwksRoot() + "/.well-known/jwks.json"),
-                    Map.entry("quarkus.oidc.token.audience", "mcp-admin"));
+                    Map.entry("kc-mcp.mcp.oauth.audience", "mcp-admin"));
         }
     }
 

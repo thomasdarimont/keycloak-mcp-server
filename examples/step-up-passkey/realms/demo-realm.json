@@ -251,7 +251,7 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "http://localhost:8109/step-up/callback"
+        "http://localhost:8109/auth/step-up/callback"
       ],
       "defaultClientScopes": [
         "acr",

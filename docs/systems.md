@@ -27,9 +27,9 @@ kc-mcp.default-system=prod
 - More than one system: every tool gains a `system` argument (enum; optional with a default system).
 - The default system: `kc-mcp.default-system`, else the only system. Several systems without the setting have no
   default, and every tool requires `system`; a system called `default` is not picked by its name. The OIDC default
-  tenant verifies callers against the default system's auth realm (`quarkus.oidc.auth-server-url` is derived from it
+  tenant verifies callers against the default system's auth realm (`kc-mcp.mcp.oauth.issuer` is derived from it
   unless set): with caller login, several static systems need `kc-mcp.default-system` or
-  `quarkus.oidc.auth-server-url`, or the server does not start.
+  `kc-mcp.mcp.oauth.issuer`, or the server does not start.
 - Roles, allowed realms, default realm, startup checks, audit: per system.
 - One `kc-mcp.jwt.key-file` serves all systems; without it each system gets its own key (see Dynamic systems below).
 - Environment form: `KC_MCP_SYSTEMS_PROD_URL`, `KC_MCP_SYSTEM_DEFAULTS_CLIENT_ID`; a system name given through the
@@ -97,19 +97,19 @@ public class TenantRegistryRepository implements KeycloakSystemRepository {
 
 ## Admin API: registering systems at runtime
 
-Needs database storage and `kc-mcp.admin.enabled=true`. JAX-RS under `/admin`. Full flow: `examples/dynamic-systems/`.
+Needs database storage and `kc-mcp.admin.enabled=true`. JAX-RS under `/api/admin`. Full flow: `examples/dynamic-systems/`.
 It can run on an instance of its own, with the MCP endpoint off there (`kc-mcp.mcp.enabled=false`), next to the MCP-facing
 instances on the same database ([Several instances](storage.md#several-instances-on-one-database)).
 
-- Bearer, preferably an access token of `kc-mcp.admin.issuer` (the admin API's authorization server: a realm URL,
+- Bearer, preferably an access token of `kc-mcp.admin.oauth.issuer` (the admin API's authorization server: a realm URL,
   not necessarily of a Keycloak the server administers; verified by Quarkus OIDC, optional
-  `kc-mcp.admin.audience`) carrying `kc-mcp.admin.role` (`realm:admin` default; `<client>.<role>` for client roles): a
+  `kc-mcp.admin.oauth.audience`) carrying `kc-mcp.admin.oauth.role` (`realm:admin` default; `<client>.<role>` for client roles): a
   person's token from the authorization code flow, or a service account's from the client credentials grant, so Keycloak
   governs who administers the server, with expiry and revocation. The static `kc-mcp.admin.token` is the alternative for
   bootstrapping and simple automation; it never expires and is only as safe as the file or variable holding it. One of
-  issuer and token is required. Only tokens of the admin issuer count: without `kc-mcp.admin.issuer` the API takes the
+  issuer and token is required. Only tokens of the admin issuer count: without `kc-mcp.admin.oauth.issuer` the API takes the
   static token alone, and an MCP caller's access token is refused whatever roles it carries.
-- `PUT /admin/systems/<alias>`: systems file fields (`displayName`, `description`, `url`, `issuer`, `authRealm`,
+- `PUT /api/admin/systems/<alias>`: systems file fields (`displayName`, `description`, `url`, `issuer`, `authRealm`,
   `clientId`, `clientAuth`, `defaultRealm`, `allowedRealms`, `trustedIssuers`, `version`, `clientSecret`,
   `access`, `tools`, `preset`, `presets` ([Access checks](access-checks.md))) into the first
   `MutableKeycloakSystemRepository`. Registered systems are service clients: `client_credentials` with
@@ -117,7 +117,7 @@ instances on the same database ([Several instances](storage.md#several-instances
   `url` must pass `kc-mcp.allowed-hosts`. `kc-mcp.admin.allow-new-systems=false` freezes the set: unknown aliases answer
   403 `registration_closed`, known systems stay changeable (reading stored systems only needs `kc-mcp.dynamic-systems`,
   not the admin API).
-- `GET|PUT|DELETE /admin/systems/<alias>/realms/<realm>`, `GET /admin/systems/<alias>/realms`: the settings of single
+- `GET|PUT|DELETE /api/admin/systems/<alias>/realms/<realm>`, `GET /api/admin/systems/<alias>/realms`: the settings of single
   realms of a registered system: `realmId` (Keycloak's id of the realm), `displayName`, `description`, and an
   `preset`, `access` and `tools` over the system's ([Presets](access-checks.md#presets)). A system's own `PUT` carries
   no `realms` (400 `realms_separately`) and keeps them; `DELETE` of the system removes them.
@@ -126,34 +126,34 @@ instances on the same database ([Several instances](storage.md#several-instances
   system change.
 - Response: no secrets; `kid`, `jwksPath` (`/auth/keys/<id>/jwks.json`), `jwksUrl`, entries, `createdAt` /
   `updatedAt` (ISO-8601, from repositories that keep them: the database, not the static configuration).
-- `GET /admin/systems[/<alias>]`: all systems with `source` repository (configured ones read-only). `DELETE`: removes a
-  registered system, keys stay. `POST /admin/systems/<alias>/signing-key`: rotates; JWKS lists the new key first, keeps
+- `GET /api/admin/systems[/<alias>]`: all systems with `source` repository (configured ones read-only). `DELETE`: removes a
+  registered system, keys stay. `POST /api/admin/systems/<alias>/signing-key`: rotates; JWKS lists the new key first, keeps
   the retired one for the grace period; Keycloak refetches on unknown `kid`.
-- `PUT /admin/secrets/<name>` `{"value": "..."}`: stores a secret in the database vault (file vault, secrets manager:
-  409 `vault_read_only`). Systems with `vault:<name>` pick it up on their next connection. `GET /admin/secrets[/<name>]`:
+- `PUT /api/admin/secrets/<name>` `{"value": "..."}`: stores a secret in the database vault (file vault, secrets manager:
+  409 `vault_read_only`). Systems with `vault:<name>` pick it up on their next connection. `GET /api/admin/secrets[/<name>]`:
   names + `usedBy`, never values. `DELETE`: 409 `secret_in_use` while referenced.
-- `GET /admin/storage`: encryption on/off, current key id, key ids in use per table. `POST /admin/storage/rekey`:
+- `GET /api/admin/storage`: encryption on/off, current key id, key ids in use per table. `POST /api/admin/storage/rekey`:
   re-encrypts under the current `kc-mcp.storage.secret-key` ([Database storage](storage.md), key rotation).
-- `GET /admin/audit`: the audit trail, newest first, 50 events a page (`limit` up to 500). Filters, combined with AND:
+- `GET /api/admin/audit`: the audit trail, newest first, 50 events a page (`limit` up to 500). Filters, combined with AND:
   `subject` (token `sub`), `caller` (name), `system`, `realm`, `tool`, `level` (`READ`, `WRITE`, `DESTRUCTIVE`),
   `outcome` (`ok`, `error` for every refusal and failure, or one error code), `from` / `to` (ISO-8601, `to`
   exclusive), `traceId` (the OpenTelemetry trace of the call), `anonymous=only` or `exclude` (calls without, or only with, a caller). `sort=when|took|caller` with
   `order=asc|desc` orders by time (the default, newest first), duration or caller name. An event says whether it has arguments (`hasArgs`); the
-  arguments themselves come with `args=true`, or one event at a time from `GET /admin/audit/<id>`, since they may hold
+  arguments themselves come with `args=true`, or one event at a time from `GET /api/admin/audit/<id>`, since they may hold
   personal data. `next` in the answer is the `cursor` of the following page; new events do not shift the pages. `total`
-  counts the matching events on all pages. `GET /admin/audit/values/{caller|system|realm|tool}?containing=`: up to 20
+  counts the matching events on all pages. `GET /api/admin/audit/values/{caller|system|realm|tool}?containing=`: up to 20
   recorded values containing a text, for completing the filters. The CIBA number-matching code never reaches the trail
   (it travels in `approval.code`, not the message); rows of older builds show it as `**`. 503
   `storage_disabled` without the database storage ([Audit retention and personal data](storage.md#audit-retention-and-personal-data)).
-- `GET /admin/extensions`: every installed extension (`spi`, `id`, name and description, status, origin, class, whether it declares
-  settings, how many errors and warnings its settings have). `GET /admin/extensions/<spi>/<id>`: its settings, read
+- `GET /api/admin/extensions`: every installed extension (`spi`, `id`, name and description, status, origin, class, whether it declares
+  settings, how many errors and warnings its settings have). `GET /api/admin/extensions/<spi>/<id>`: its settings, read
   only: the extension's help text if it has one (`helpText`), each declared setting with its full key and environment variable, type, default, options, conditions
   (`appliesWhen`), whether it is set and its value (confidential ones `******`), the groups, the keys the server
   handles itself (`enabled`, `required`, ...), undeclared keys (values always masked) and the problems the startup
   checks see, with code, named args and message. Labels, descriptions and messages are in the language of
   `Accept-Language`, English where no bundle has it, each with its message key ([Extending](extending.md),
   `configSpec()`).
-- `GET /admin/server-info`: the server at a glance. `server` (version, start, uptime, instance role, security profile, dev mode, tool exposure),
+- `GET /api/admin/server-info`: the server at a glance. `server` (version, start, uptime, instance role, security profile, dev mode, tool exposure),
   `runtime` (Java, operating system, processors, memory), `systems.count`, `extensionPoints` (every declared one with its name and description for people, the interface of its extensions and whether one extension serves it) and `providers`: every extension by
   extension point with its name, status, origin and what it reports about itself, `info` (names and values, such as
   `encryption: on` of the database stores) and `warnings` (such as values stored unencrypted); the warnings of all
@@ -179,7 +179,7 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
 2. **Register the system** and let the server generate its key:
 
    ```shell
-   curl -s -X PUT https://mcp.example.com/admin/systems/acme \
+   curl -s -X PUT https://mcp.example.com/api/admin/systems/acme \
      -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
      -d '{ "displayName": "ACME", "url": "https://sso.acme.example", "authRealm": "master",
            "clientId": "keycloak-mcp-server", "clientAuth": "private_key_jwt",
@@ -195,16 +195,16 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
    choose *Signed JWT*, switch *Use JWKS URL* on and enter `jwksUrl` from the answer (`https://mcp.example.com/auth/keys/<id>/jwks.json`). On
    Keycloak 26.8.2 and later add the client scope `kc-admin-api` as a default scope. Keycloak fetches the key on the
    first token request and again whenever it meets an unknown `kid`.
-4. **Check.** `GET /admin/systems/acme` shows the system with `source: db`; a call to
+4. **Check.** `GET /api/admin/systems/acme` shows the system with `source: db`; a call to
    `/mcp/systems/acme` (`whoami`) runs as the new service account. A failing token request answers
    `keycloak_unreachable` or `unauthorized` with the Keycloak error: `invalid_client` usually means the JWKS URL is
    not reachable from Keycloak or the `kid` is unknown, `Invalid token audience` that `issuer` is wrong or missing:
    it is the auth realm's issuer (`https://sso.example.com/realms/master`, not the base URL; a save refuses anything
    else with `invalid_issuer`), needed only when the server reaches Keycloak at an internal URL.
-5. **Rotate** with `POST /admin/systems/acme/signing-key`: the JWKS lists the new key first and keeps the retired one
+5. **Rotate** with `POST /api/admin/systems/acme/signing-key`: the JWKS lists the new key first and keeps the retired one
    for `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` (an hour by default), so Keycloak switches without a gap.
    After the grace period the retired key's private key is deleted; its row (kid, public key, timestamps) stays.
-6. **A leaked key:** `POST /admin/systems/acme/signing-key?dropPrevious=true` (UI: Keys → Rotate… → *The previous
+6. **A leaked key:** `POST /api/admin/systems/acme/signing-key?dropPrevious=true` (UI: Keys → Rotate… → *The previous
    key leaked*) rotates and takes the previous keys out of the JWKS at once, private keys deleted. Keycloak keeps the
    JWKS it fetched until its keys cache is cleared: *Realm settings → Action → Clear keys cache* in the client's realm,
    or `POST /admin/realms/<realm>/clear-keys-cache`.
@@ -213,7 +213,7 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
 
 Register the system first (step 2 above), then:
 
-- `GET /admin/systems/<alias>/client-setup[?roles=admin|read|manage&realms=a,b&credential=jwks-url|public-key&kcadm=installed|docker]`:
+- `GET /api/admin/systems/<alias>/client-setup[?roles=admin|read|manage&realms=a,b&credential=jwks-url|public-key&kcadm=installed|docker]`:
   the client for the system's `authRealm` as JSON (`POST /admin/realms/<realm>/clients`), the roles of its service
   account and a script doing both (role and role scope; full scope is off): `script` for Linux and macOS (bash,
   `kcadm.sh`), `powershellScript` for Windows (PowerShell 5.1 or 7, `kcadm.bat`). The server creates nothing in Keycloak.
@@ -227,22 +227,22 @@ Register the system first (step 2 above), then:
     `realm-management` roles of that realm.
   - `credential=public-key`: the current key copied into the client (`jwt.credential.public.key`), for a Keycloak that
     cannot reach the JWKS URL; a rotation needs a client update.
-- `GET /admin/systems/<alias>/keycloak-realms`: `GET /admin/realms` with the system's credentials, i.e. the realms the
+- `GET /api/admin/systems/<alias>/keycloak-realms`: `GET /admin/realms` with the system's credentials, i.e. the realms the
   account may see, with `adopted` (settings kept), `allowed` (reachable), `renamedFrom` (same realm id under another
   name); `notListed`: known here, not listed there. Keycloak failures answer 502: `token_refused`,
   `admin_api_unauthorized` (kc-admin-api scope), `admin_api_forbidden` (roles), `keycloak_unreachable`.
-- `POST /admin/systems/<alias>/adoption` `{"realms": [...], "restrict": true, "preset": "read-only"}`: realm id and
+- `POST /api/admin/systems/<alias>/adoption` `{"realms": [...], "restrict": true, "preset": "read-only"}`: realm id and
   display name become realm settings (`preset` for new ones). Existing settings keep theirs, gain the realm id. A
   system with an allowlist gets the realms added to it. A system without one keeps reaching every realm; with
   `restrict: true` its allowlist becomes the selected realms and the ones adopted before. `unreachable` in the answer
   names the listed realms the system no longer reaches. `{"allRealms": true}`: every listed realm, allowlist cleared
   (later realms reachable).
-- `DELETE /admin/systems/<alias>/adoption/<realm>[?restrict=true]`: gives a realm up. It leaves the allowlist (the
+- `DELETE /api/admin/systems/<alias>/adoption/<realm>[?restrict=true]`: gives a realm up. It leaves the allowlist (the
   access ends) and its realm settings go; Keycloak keeps the client and its roles. Without an allowlist the system
   reaches every realm, so leaving one out makes the allowlist the other listed realms: 409 `would_restrict` without
   `restrict=true`. Refused: the last realm on the allowlist (`last_realm`, an empty allowlist means every realm) and
   the default realm (`default_realm`).
-- `DELETE /admin/systems/<alias>/realms/<realm>` (UI: realm page → **Delete settings**) only removes the realm
+- `DELETE /api/admin/systems/<alias>/realms/<realm>` (UI: realm page → **Delete settings**) only removes the realm
   settings: the realm stays reachable (on the allowlist, or through no allowlist). Unadopt ends the access.
 - UI: system → **Adopt** tab, the same steps; **Unadopt** on an adopted or allowed realm.
 

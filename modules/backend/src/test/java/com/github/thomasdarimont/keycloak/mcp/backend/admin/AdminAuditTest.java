@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code GET /admin/audit} over the rows the database audit listener writes: filters,
+ * {@code GET /api/admin/audit} over the rows the database audit listener writes: filters,
  * newest first, keyset paging. The events carry a system of their own, so rows other
  * tests of the profile leave do not count.
  */
@@ -86,7 +86,7 @@ class AdminAuditTest {
     }
 
     static JsonPath audit(String query) {
-        return admin().get("/admin/audit?system=" + SYSTEM + query).then().statusCode(200).extract().jsonPath();
+        return admin().get("/api/admin/audit?system=" + SYSTEM + query).then().statusCode(200).extract().jsonPath();
     }
 
     @Test
@@ -116,10 +116,10 @@ class AdminAuditTest {
         assertFalse(listed.containsKey("args"), "a list does not carry arguments unasked");
 
         long id = page.getLong("events[0].id");
-        JsonPath one = admin().get("/admin/audit/" + id).then().statusCode(200).extract().jsonPath();
+        JsonPath one = admin().get("/api/admin/audit/" + id).then().statusCode(200).extract().jsonPath();
         assertEquals(Map.of("username", "dave", "password", "***"), one.getMap("args"));
         assertEquals("keycloak_user_delete", one.getString("tool"));
-        admin().get("/admin/audit/999999999").then().statusCode(404).body("error", equalTo("unknown_event"));
+        admin().get("/api/admin/audit/999999999").then().statusCode(404).body("error", equalTo("unknown_event"));
     }
 
     @Test
@@ -162,12 +162,12 @@ class AdminAuditTest {
         assertEquals(List.of("bob"), values("caller", "ob"));
         assertTrue(values("system", "audit-").contains(SYSTEM));
         assertEquals(List.of(), values("tool", "%"), "like wildcards are text");
-        admin().get("/admin/audit/values/message").then().statusCode(404).body("error", equalTo("unknown_field"));
+        admin().get("/api/admin/audit/values/message").then().statusCode(404).body("error", equalTo("unknown_field"));
     }
 
     static List<String> values(String field, String containing) {
         return admin().queryParam("containing", containing)
-            .get("/admin/audit/values/" + field)
+            .get("/api/admin/audit/values/" + field)
             .then()
             .statusCode(200)
             .extract()
@@ -211,12 +211,12 @@ class AdminAuditTest {
         // a cursor of the caller sort is no cursor of the time sort
         String callerCursor = audit("&sort=caller&limit=1").getString("next");
         admin().queryParam("cursor", callerCursor)
-            .get("/admin/audit?system=" + SYSTEM)
+            .get("/api/admin/audit?system=" + SYSTEM)
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_query"));
-        admin().get("/admin/audit?sort=tool").then().statusCode(400).body("error", equalTo("invalid_query"));
-        admin().get("/admin/audit?order=up").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?sort=tool").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?order=up").then().statusCode(400).body("error", equalTo("invalid_query"));
     }
 
     @Test
@@ -251,14 +251,17 @@ class AdminAuditTest {
                 .connectionId("conn-y")
                 .duration(Duration.ofMillis(1))
                 .build());
-        JsonPath all = admin().get("/admin/audit?system=audit-anon").then().statusCode(200).extract().jsonPath();
+        JsonPath all = admin().get("/api/admin/audit?system=audit-anon").then().statusCode(200).extract().jsonPath();
         assertEquals(2, all.getInt("total"));
-        JsonPath only = admin().get("/admin/audit?system=audit-anon&anonymous=only").then().extract().jsonPath();
+        JsonPath only = admin().get("/api/admin/audit?system=audit-anon&anonymous=only").then().extract().jsonPath();
         assertEquals(1, only.getInt("total"));
         assertNull(only.get("events[0].caller.name"));
-        JsonPath without = admin().get("/admin/audit?system=audit-anon&anonymous=exclude").then().extract().jsonPath();
+        JsonPath without = admin().get("/api/admin/audit?system=audit-anon&anonymous=exclude")
+            .then()
+            .extract()
+            .jsonPath();
         assertEquals(List.of("carol"), without.getList("events.caller.name"));
-        admin().get("/admin/audit?anonymous=maybe").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?anonymous=maybe").then().statusCode(400).body("error", equalTo("invalid_query"));
     }
 
     @Test
@@ -280,7 +283,7 @@ class AdminAuditTest {
                 .duration(Duration.ofMillis(1))
                 .build()
                 .withTrace(trace, "00f067aa0ba902b7"));
-        JsonPath found = admin().get("/admin/audit?traceId=" + trace).then().statusCode(200).extract().jsonPath();
+        JsonPath found = admin().get("/api/admin/audit?traceId=" + trace).then().statusCode(200).extract().jsonPath();
         assertEquals(1, found.getInt("total"));
         assertEquals(trace, found.getString("events[0].traceId"));
         assertEquals("00f067aa0ba902b7", found.getString("events[0].spanId"));
@@ -292,7 +295,7 @@ class AdminAuditTest {
         // values travel as bind parameters: SQL in one is text that matches no row
         for (String field : List.of("subject", "caller", "system", "realm", "tool", "outcome", "traceId")) {
             JsonPath page = admin().queryParam(field, "x' or '1'='1")
-                .get("/admin/audit")
+                .get("/api/admin/audit")
                 .then()
                 .statusCode(200)
                 .extract()
@@ -305,15 +308,15 @@ class AdminAuditTest {
 
     @Test
     void badParametersAnswer400() {
-        admin().get("/admin/audit?level=NOPE").then().statusCode(400).body("error", equalTo("invalid_query"));
-        admin().get("/admin/audit?from=yesterday").then().statusCode(400).body("error", equalTo("invalid_query"));
-        admin().get("/admin/audit?cursor=abc").then().statusCode(400).body("error", equalTo("invalid_query"));
-        admin().get("/admin/audit?limit=0").then().statusCode(400).body("error", equalTo("invalid_query"));
-        admin().get("/admin/audit?limit=501").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?level=NOPE").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?from=yesterday").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?cursor=abc").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?limit=0").then().statusCode(400).body("error", equalTo("invalid_query"));
+        admin().get("/api/admin/audit?limit=501").then().statusCode(400).body("error", equalTo("invalid_query"));
     }
 
     @Test
     void needsTheAdminToken() {
-        given().get("/admin/audit").then().statusCode(401);
+        given().get("/api/admin/audit").then().statusCode(401);
     }
 }

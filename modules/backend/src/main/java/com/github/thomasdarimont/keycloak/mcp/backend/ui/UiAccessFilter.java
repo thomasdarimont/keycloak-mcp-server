@@ -25,8 +25,8 @@ import io.quarkus.security.identity.SecurityIdentity;
  * form cannot add, so the cookie alone never authorizes a write (CSRF); the provider's
  * back-channel logout post is the exception. The API part ({@code /bff/api/*}) needs a
  * browser session ({@code quarkus.http.auth.permission.bff} already demands one; 401 here
- * is the fallback) whose access token carries {@code kc-mcp.admin.role} (operator, reads
- * and writes) or, when configured, {@code kc-mcp.ui.viewer-role} (reads only).
+ * is the fallback) whose access token carries {@code kc-mcp.admin.oauth.role} (operator,
+ * reads and writes) or, when configured, {@code kc-mcp.ui.viewer-role} (reads only).
  */
 public class UiAccessFilter {
 
@@ -69,27 +69,28 @@ public class UiAccessFilter {
         boolean safe = SAFE_METHODS.contains(ctx.getMethod());
         if (safe) {
             if (!UiCapabilities.canAccessApi(caller, config)) {
-                LOG.infof("UI: %s refused, lacks operator role %s%s", caller, config.admin().role(),
+                LOG.infof("UI: %s refused, lacks operator role %s%s", caller, UiCapabilities.operatorRole(config),
                         UiCapabilities.viewerRole(config).map(r -> " and viewer role " + r).orElse(""));
                 return Optional.of(error(403, "forbidden", accessDeniedMessage(caller)));
             }
             if (UiCapabilities.operatorOnly(path) && !UiCapabilities.isOperator(caller, config)) {
-                LOG.infof("UI: %s refused the server info, lacks operator role %s", caller, config.admin().role());
-                return Optional.of(error(403, "forbidden", "The server info needs the role " + config.admin().role()
-                        + ", which " + caller.name() + " lacks."));
+                LOG.infof("UI: %s refused the server info, lacks operator role %s", caller,
+                        UiCapabilities.operatorRole(config));
+                return Optional.of(error(403, "forbidden", "The server info needs the role "
+                        + UiCapabilities.operatorRole(config) + ", which " + caller.name() + " lacks."));
             }
             return Optional.empty();
         }
         if (!UiCapabilities.canWrite(caller, config)) {
-            LOG.infof("UI: %s refused write, lacks operator role %s", caller, config.admin().role());
-            return Optional.of(error(403, "forbidden", "Changing systems needs the role " + config.admin().role()
-                    + ", which " + caller.name() + " lacks."));
+            LOG.infof("UI: %s refused write, lacks operator role %s", caller, UiCapabilities.operatorRole(config));
+            return Optional.of(error(403, "forbidden", "Changing systems needs the role "
+                    + UiCapabilities.operatorRole(config) + ", which " + caller.name() + " lacks."));
         }
         return Optional.empty();
     }
 
     private String accessDeniedMessage(Caller caller) {
-        String admin = config.admin().role();
+        String admin = UiCapabilities.operatorRole(config);
         return UiCapabilities.viewerRole(config)
             .map(viewer -> "The management UI needs the role " + admin + " (operator) or " + viewer
                     + " (viewer), which " + caller.name() + " lacks.")

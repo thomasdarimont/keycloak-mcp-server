@@ -77,8 +77,8 @@ services:
       # inside the compose network Keycloak is reached as keycloak:8080; the tokens still name the public issuer
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_ISSUER: http://localhost:8101/realms/acme
-      QUARKUS_OIDC_TOKEN_ISSUER: http://localhost:8101/realms/acme
-      QUARKUS_OIDC_RESOURCE_METADATA_AUTHORIZATION_SERVER: http://localhost:8101/realms/acme
+      KC_MCP_MCP_OAUTH_TOKEN_ISSUER: http://localhost:8101/realms/acme
+      KC_MCP_MCP_OAUTH_RESOURCE_METADATA_AUTHORIZATION_SERVER: http://localhost:8101/realms/acme
       QUARKUS_HTTP_PORT: "8081"
       QUARKUS_HTTP_HOST: 0.0.0.0
     ports:

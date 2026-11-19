@@ -96,8 +96,9 @@ public class UiRoutes {
         }
         List<UiTenant.Idp> idps = tenant.idps();
         if (idps.isEmpty()) {
-            throw new IllegalStateException("kc-mcp.ui.enabled=true needs an identity provider: kc-mcp.ui.issuer or"
-                    + " kc-mcp.ui.idps.<alias>.issuer.");
+            throw new IllegalStateException(
+                    "kc-mcp.ui.enabled=true needs an identity provider: kc-mcp.ui.oidc.issuer or"
+                            + " kc-mcp.ui.oidc.idps.<alias>.issuer.");
         }
         for (UiTenant.Idp idp : idps) {
             for (String warning : UiTenant.warnings(idp)) {

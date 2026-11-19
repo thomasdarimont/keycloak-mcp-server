@@ -17,13 +17,13 @@
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
-              <entry key="QUARKUS_OIDC_TENANT_ENABLED" value="true" />
-              <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="keycloak-mcp" />
-              <entry key="QUARKUS_OIDC_RESOURCE_METADATA_SCOPES" value="openid,delegation:client:keycloak-mcp" />
+              <entry key="KC_MCP_MCP_OAUTH_ENABLED" value="true" />
+              <entry key="KC_MCP_MCP_OAUTH_AUDIENCE" value="keycloak-mcp" />
+              <entry key="KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES" value="openid,delegation:client:keycloak-mcp" />
               <entry key="KC_MCP_MODEL_CONFIRMATION_TRUSTED_ROLES" value="realm-management.realm-admin" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />
               <entry key="KC_MCP_DEV_MODE" value="true" />
-              <entry key="KC_MCP_ADMIN_ROLE" value="realm-management.realm-admin" />
+              <entry key="KC_MCP_UI_OPERATOR_ROLE" value="realm-management.realm-admin" />
               <entry key="KC_MCP_UI_VIEWER_ROLE" value="realm-management.view-users" />
               <entry key="KC_MCP_DYNAMIC_SYSTEMS" value="false" />
               <entry key="QUARKUS_DATASOURCE_JDBC_URL" value="jdbc:h2:file:./data/kc-mcp-run-modes" />

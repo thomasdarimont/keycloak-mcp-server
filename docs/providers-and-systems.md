@@ -16,7 +16,7 @@ page names them, as the rest of the documentation does.
 flowchart LR
     B[browser] -- "session cookie" --> UI["management UI<br/>/ui, /bff"]
     M[MCP client] -- "access token" --> MCP["MCP endpoint<br/>/mcp"]
-    A[script, pipeline] -- "access token" --> ADM["admin API<br/>/admin"]
+    A[script, pipeline] -- "access token" --> ADM["admin API<br/>/api/admin"]
     subgraph S[keycloak-mcp-server]
         UI
         MCP
@@ -36,10 +36,10 @@ provider itself: to refresh the tokens (the session check) and to verify back-ch
 
 | setting | meaning |
 |---|---|
-| `kc-mcp.ui.issuer` | the provider; default `kc-mcp.admin.issuer`, else the realm the MCP endpoint's tokens come from |
-| `kc-mcp.ui.client-id`, `kc-mcp.ui.client-secret` | the server's client there, `keycloak-mcp-ui` by default |
-| `kc-mcp.ui.idps.<alias>.*` | several providers, one sign-in button each |
-| `kc-mcp.admin.role`, `kc-mcp.ui.viewer-role` | the roles that open the UI: operator and viewer |
+| `kc-mcp.ui.oidc.issuer` | the provider; default `kc-mcp.admin.oauth.issuer`, else `kc-mcp.mcp.oauth.issuer` |
+| `kc-mcp.ui.oidc.client-id`, `kc-mcp.ui.oidc.client-secret` | the server's client there, `keycloak-mcp-ui` by default |
+| `kc-mcp.ui.oidc.idps.<alias>.*` | several providers, one sign-in button each |
+| `kc-mcp.ui.operator-role`, `kc-mcp.ui.viewer-role` | the roles that open the UI: operator and viewer, read from the provider's access token |
 
 - **What the provider has to offer:** OpenID Connect discovery, the code flow with PKCE, and an access token that is
   a JWT the server can verify with the provider's keys. The roles are read from that access token: Keycloak's
@@ -59,14 +59,15 @@ two are configured independently. A token for one never opens the other.
 
 ### The MCP endpoint
 
-Off by default: the endpoint is anonymous until `quarkus.oidc.tenant-enabled=true`
+Off by default: the endpoint is anonymous until `kc-mcp.mcp.oauth.enabled=true`
 ([Callers](security.md#callers)).
 
 | setting | meaning |
 |---|---|
-| `quarkus.oidc.auth-server-url` | the authorization server; default: the auth realm of the default system |
-| `quarkus.oidc.token.audience` | the audience a token must carry: only tokens issued for this server |
-| `quarkus.oidc.resource-metadata.authorization-server` | where MCP clients are sent to log in (protected resource metadata, RFC 9728) |
+| `kc-mcp.mcp.oauth.enabled` | `true`: callers need an access token |
+| `kc-mcp.mcp.oauth.issuer` | the authorization server; default: the auth realm of the default system |
+| `kc-mcp.mcp.oauth.audience` | the audience a token must carry: only tokens issued for this server |
+| `kc-mcp.mcp.oauth.resource-metadata.authorization-server` | where MCP clients are sent to log in (protected resource metadata, RFC 9728) |
 | `kc-mcp.systems.<name>.trusted-issuers` | further issuers whose tokens may be exchanged at that system |
 
 - An entry for one system or realm, `/mcp/systems/<system>[/<realm>]`, accepts the tokens of that system's realm
@@ -87,15 +88,17 @@ Off by default (`kc-mcp.admin.enabled`). [Admin API](systems.md#admin-api-regist
 
 | setting | meaning |
 |---|---|
-| `kc-mcp.admin.issuer` | the authorization server |
-| `kc-mcp.admin.audience` | the audience a token must carry |
-| `kc-mcp.admin.role` | the role it must carry, `realm:admin` by default |
+| `kc-mcp.admin.oauth.issuer` | the authorization server |
+| `kc-mcp.admin.oauth.audience` | the audience a token must carry |
+| `kc-mcp.admin.oauth.role` | the role it must carry, `realm:admin` by default |
 | `kc-mcp.admin.token` | a static token instead of, or besides, an authorization server |
 
 - It need not be a Keycloak system, nor the authorization server of the MCP endpoint. Roles are read as for the
   UI.
-- The management UI's backend calls the same operations with the session's access token, so `kc-mcp.admin.role`
-  counts for both. That is why the UI's sign-in provider defaults to `kc-mcp.admin.issuer`.
+- The management UI does not go through the admin API: its backend performs the same operations for the signed-in
+  person and has its own roles (`kc-mcp.ui.operator-role`, `kc-mcp.ui.viewer-role`). Two defaults tie them together
+  for the common case of one realm for both: the UI's sign-in provider defaults to `kc-mcp.admin.oauth.issuer`, its
+  operator role to `kc-mcp.admin.oauth.role`.
 - An access token of the MCP endpoint's authorization server is refused here whatever roles it carries, unless
   both are configured as the same issuer; then give the two different audiences.
 
@@ -134,9 +137,9 @@ server reaches the party through an internal address, as in a container network.
 
 | party | the server reaches it at | the issuer its tokens carry |
 |---|---|---|
-| sign-in provider | `kc-mcp.ui.issuer`, `kc-mcp.ui.idps.<alias>.issuer` | read from the provider's discovery document |
-| authorization server of the MCP endpoint | `quarkus.oidc.auth-server-url` | `quarkus.oidc.token.issuer`; `quarkus.oidc.resource-metadata.authorization-server` is what MCP clients are told |
-| authorization server of the admin API | `kc-mcp.admin.issuer` | read from its discovery document |
+| sign-in provider | `kc-mcp.ui.oidc.issuer`, `kc-mcp.ui.oidc.idps.<alias>.issuer` | read from the provider's discovery document |
+| authorization server of the MCP endpoint | `kc-mcp.mcp.oauth.issuer` | `kc-mcp.mcp.oauth.token-issuer`; `kc-mcp.mcp.oauth.resource-metadata.authorization-server` is what MCP clients are told |
+| authorization server of the admin API | `kc-mcp.admin.oauth.issuer` | read from its discovery document |
 | Keycloak system | `kc-mcp.systems.<name>.url` | `kc-mcp.systems.<name>.issuer` |
 
 The browser and the MCP client always use the public address. The server's own calls (discovery, keys, token

@@ -90,10 +90,10 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
                 Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".grant-type", "client_credentials"),
                 Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".client-id", ACTOR),
                 Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".client-secret", ACTOR_SECRET),
-                Map.entry("quarkus.oidc.tenant-enabled", "true"),
-                Map.entry("quarkus.oidc.auth-server-url", base + "/realms/demo"),
-                Map.entry("quarkus.oidc.token.audience", ACTOR),
-                Map.entry("quarkus.oidc.resource-metadata.scopes", "openid," + DELEGATION_SCOPE));
+                Map.entry("kc-mcp.mcp.oauth.enabled", "true"),
+                Map.entry("kc-mcp.mcp.oauth.issuer", base + "/realms/demo"),
+                Map.entry("kc-mcp.mcp.oauth.audience", ACTOR),
+                Map.entry("kc-mcp.mcp.oauth.resource-metadata.scopes", "openid," + DELEGATION_SCOPE));
     }
 
     private void bootstrap() throws IOException, InterruptedException {

@@ -1,6 +1,6 @@
 # Systems registered at runtime: no Keycloak in the configuration; systems come through the admin API (or a systems
 # file) and live in the embedded database with their signing keys. Register one with
-#   curl -X PUT http://localhost:8081/admin/systems/acme -H 'Authorization: Bearer change-me' \
+#   curl -X PUT http://localhost:8081/api/admin/systems/acme -H 'Authorization: Bearer change-me' \
 #     -H 'Content-Type: application/json' -d '{"url": "https://sso.acme.example", "authRealm": "master",
 #     "clientId": "keycloak-mcp-server", "clientAuth": "private_key_jwt", "defaultRealm": "acme", "signingKey": "generate"}'
 # then give the Keycloak client the JWKS URL http://<this server>:8081/auth/keys/acme/jwks.json (docs/systems.md,

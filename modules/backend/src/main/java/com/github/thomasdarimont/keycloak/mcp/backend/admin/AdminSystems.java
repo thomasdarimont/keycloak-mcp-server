@@ -94,12 +94,13 @@ public class AdminSystems {
             return;
         }
         boolean token = config.admin().token().filter(t -> !t.isBlank()).isPresent();
-        Optional<String> issuer = config.admin().issuer().filter(t -> !t.isBlank());
+        Optional<String> issuer = config.admin().oauth().issuer().filter(t -> !t.isBlank());
         if (!token && issuer.isEmpty()) {
             throw new IllegalStateException(
-                    "kc-mcp.admin.enabled=true needs kc-mcp.admin.token or kc-mcp.admin.issuer");
+                    "kc-mcp.admin.enabled=true needs kc-mcp.admin.token or kc-mcp.admin.oauth.issuer");
         }
-        String how = issuer.map(i -> "access tokens of " + i + " with role " + config.admin().role()).orElse("");
+        String how = issuer.map(i -> "access tokens of " + i + " with role " + config.admin().oauth().role())
+            .orElse("");
         how = token ? (how.isEmpty() ? "static token" : "static token or " + how) : how;
         LOG.infof("Admin API at %s/systems (%s), systems go to %s%s", AdminResource.PATH, how,
                 systems.mutableRepository().map(KeycloakSystemRepository::id).orElse("<no mutable repository>"),

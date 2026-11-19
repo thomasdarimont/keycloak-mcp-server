@@ -11,7 +11,7 @@ import {
   type SystemSave,
 } from '../../bff.js';
 import { navigate, systemHref, systemsHref } from '../../router.js';
-import { sessionCanWrite, sessionContext, type SessionState } from '../../session-context.js';
+import { operatorRoleHint, sessionCanWrite, sessionContext, type SessionState } from '../../session-context.js';
 
 type FormState = {
   alias: string;
@@ -283,8 +283,7 @@ export class SystemSettings extends LitElement {
         this.system = null;
         this.secretConfigured = false;
         if (!this.canWrite) {
-          this.createBlockedHint =
-            'Sign in with the operator role (kc-mcp.admin.role) to register systems. Viewers may only read.';
+          this.createBlockedHint = operatorRoleHint(this.session, 'Registering systems');
           this.form = null;
           return;
         }

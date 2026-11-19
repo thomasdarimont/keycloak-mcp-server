@@ -77,9 +77,9 @@ services:
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       # the issuer the users' tokens carry: the system's public address, so their tokens count as its own
       KC_MCP_SYSTEMS_DEFAULT_ISSUER: http://localhost:8098/realms/demo
-      QUARKUS_OIDC_TOKEN_ISSUER: http://localhost:8098/realms/demo
+      KC_MCP_MCP_OAUTH_TOKEN_ISSUER: http://localhost:8098/realms/demo
       # what the protected resource metadata sends MCP clients (LM Studio) to for the login: the public address
-      QUARKUS_OIDC_RESOURCE_METADATA_AUTHORIZATION_SERVER: http://localhost:8098/realms/demo
+      KC_MCP_MCP_OAUTH_RESOURCE_METADATA_AUTHORIZATION_SERVER: http://localhost:8098/realms/demo
       # the container reaches the realm as keycloak:8080, the tokens it issues name the public issuer
       KC_MCP_SPI_CONFIRMER_CIBA_ISSUER: http://keycloak:8080/realms/demo
       KC_MCP_SPI_CONFIRMER_CIBA_TOKEN_ISSUER: http://localhost:8098/realms/demo

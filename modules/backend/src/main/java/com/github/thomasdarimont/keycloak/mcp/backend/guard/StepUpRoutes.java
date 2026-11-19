@@ -18,11 +18,12 @@ import io.vertx.ext.web.RoutingContext;
  * The pages of the step-up login ({@link StepUpLogins}), open to the user's browser
  * without a session of its own:
  * <ul>
- * <li>{@code /step-up/<ticket>} says which tool asks for the sign-in and offers to go on,
- * so that nobody is sent to their provider without knowing why;</li>
- * <li>{@code /step-up/<ticket>/login} starts the login and redirects to the
+ * <li>{@code /auth/step-up/<ticket>} says which tool asks for the sign-in and offers to
+ * go on, so that nobody is sent to their provider without knowing why;</li>
+ * <li>{@code /auth/step-up/<ticket>/login} starts the login and redirects to the
  * provider;</li>
- * <li>{@code /step-up/callback} takes the provider's answer and says how it went.</li>
+ * <li>{@code /auth/step-up/callback} takes the provider's answer and says how it
+ * went.</li>
  * </ul>
  */
 @ApplicationScoped

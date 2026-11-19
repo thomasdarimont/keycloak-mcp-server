@@ -60,7 +60,7 @@ kc-mcp.systems.prod.access.group-scope.enabled=false
 kc-mcp.systems.prod.realms.sandbox.access.acme-ticket.enabled=false
 ```
 
-Systems file and admin API (`PUT /admin/systems/<alias>`, a realm's with `PUT /admin/systems/<alias>/realms/<realm>`):
+Systems file and admin API (`PUT /api/admin/systems/<alias>`, a realm's with `PUT /api/admin/systems/<alias>/realms/<realm>`):
 
 ```json
 {

@@ -29,9 +29,9 @@ import io.quarkus.runtime.StartupEvent;
  * decrypts what the current key did not write (a previous key, the old format, or plain
  * text from before encryption was on) and writes it back under the current key.
  * Idempotent; runs at startup while {@code kc-mcp.storage.previous-secret-keys} is set
- * and on demand through the admin API ({@code POST /admin/storage/rekey}). Values under a
- * key that is configured nowhere are left alone and reported, so the operator knows which
- * key is still needed.
+ * and on demand through the admin API ({@code POST /api/admin/storage/rekey}). Values
+ * under a key that is configured nowhere are left alone and reported, so the operator
+ * knows which key is still needed.
  */
 @ApplicationScoped
 public class StorageRekey {

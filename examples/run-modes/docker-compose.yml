@@ -88,7 +88,7 @@ services:
       KC_MCP_JWT_KEY_FILE: /keys/mcp-jwt.pem
       # the management UI signs people in at the demo realm; the container reaches it as keycloak:8080, the browser
       # is still sent to the public address (KC_HOSTNAME)
-      KC_MCP_UI_ISSUER: http://keycloak:8080/realms/demo
+      KC_MCP_UI_OIDC_ISSUER: http://keycloak:8080/realms/demo
       QUARKUS_HTTP_PORT: "8081"
       QUARKUS_HTTP_HOST: 0.0.0.0
     volumes:

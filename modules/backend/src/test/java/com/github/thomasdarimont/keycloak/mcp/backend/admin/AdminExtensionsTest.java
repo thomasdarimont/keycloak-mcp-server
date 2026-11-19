@@ -48,8 +48,8 @@ class AdminExtensionsTest {
 
     @Test
     void theListNeedsTheTokenAndNamesEveryExtension() {
-        given().get("/admin/extensions").then().statusCode(401);
-        admin().get("/admin/extensions")
+        given().get("/api/admin/extensions").then().statusCode(401);
+        admin().get("/api/admin/extensions")
             .then()
             .statusCode(200)
             .body("extensions.find { it.spi == 'audit-scrubber' && it.id == 'pii' }.configurable", equalTo(true))
@@ -61,7 +61,7 @@ class AdminExtensionsTest {
 
     @Test
     void anExtensionsSettingsComeWithTextsAndMaskedSecrets() {
-        String body = admin().get("/admin/extensions/audit-scrubber/pii")
+        String body = admin().get("/api/admin/extensions/audit-scrubber/pii")
             .then()
             .statusCode(200)
             .body("keyPrefix", equalTo("kc-mcp.spi.audit-scrubber.pii."))
@@ -92,11 +92,14 @@ class AdminExtensionsTest {
 
     @Test
     void nameAndDescriptionOfAnExtensionAreTranslatedWhereABundleHasThem() {
-        String english = admin().get("/admin/extensions/audit-scrubber/pii").then().extract().path("displayName");
-        String description = admin().get("/admin/extensions/audit-scrubber/pii").then().extract().path("description");
+        String english = admin().get("/api/admin/extensions/audit-scrubber/pii").then().extract().path("displayName");
+        String description = admin().get("/api/admin/extensions/audit-scrubber/pii")
+            .then()
+            .extract()
+            .path("description");
         assertFalse(english.isBlank());
         admin().header("Accept-Language", "de-CH, de;q=0.8")
-            .get("/admin/extensions/audit-scrubber/pii")
+            .get("/api/admin/extensions/audit-scrubber/pii")
             .then()
             .statusCode(200)
             .body("displayName", equalTo("Bereinigung personenbezogener Daten"))
@@ -105,7 +108,7 @@ class AdminExtensionsTest {
             .body("description", equalTo(description))
             .body("descriptionKey", equalTo("audit-scrubber.pii.description"));
         admin().header("Accept-Language", "de")
-            .get("/admin/extensions")
+            .get("/api/admin/extensions")
             .then()
             .statusCode(200)
             .body("extensions.find { it.spi == 'audit-scrubber' && it.id == 'pii' }.displayName",
@@ -116,7 +119,7 @@ class AdminExtensionsTest {
     @Test
     void groupsAndSharedTextsOfAnExtensionThatCombinesSpecs() {
         admin().header("Accept-Language", "de-CH, de;q=0.8")
-            .get("/admin/extensions/authorization-engine/authzen")
+            .get("/api/admin/extensions/authorization-engine/authzen")
             .then()
             .statusCode(200)
             .body("groups.id", hasItem("authentication"))
@@ -129,7 +132,7 @@ class AdminExtensionsTest {
 
     @Test
     void anUnknownExtensionIsNotFound() {
-        admin().get("/admin/extensions/confirmer/nope")
+        admin().get("/api/admin/extensions/confirmer/nope")
             .then()
             .statusCode(404)
             .body("error", equalTo("unknown_extension"))

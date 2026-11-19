@@ -50,9 +50,9 @@ class AdminResourceTest {
     @Test
     @Order(1)
     void theAdminApiNeedsTheToken() {
-        given().get("/admin/systems").then().statusCode(401).header("WWW-Authenticate", containsString("Bearer"));
-        given().header("Authorization", "Bearer nope").get("/admin/systems").then().statusCode(401);
-        admin().get("/admin/systems")
+        given().get("/api/admin/systems").then().statusCode(401).header("WWW-Authenticate", containsString("Bearer"));
+        given().header("Authorization", "Bearer nope").get("/api/admin/systems").then().statusCode(401);
+        admin().get("/api/admin/systems")
             .then()
             .statusCode(200)
             .body("systems.alias", hasItem("default"))
@@ -71,7 +71,7 @@ class AdminResourceTest {
             .put("allowedRealms", new JsonArray().add("acme-dev").add("acme-prod"))
             .put("version", "26.8.2");
         String response = admin().body(body.encode())
-            .put("/admin/systems/acme")
+            .put("/api/admin/systems/acme")
             .then()
             .statusCode(201)
             .body("alias", equalTo("acme"))
@@ -111,18 +111,18 @@ class AdminResourceTest {
         assertEquals("acme", who.getString("system"), who.encode());
 
         // and visible in the listing and alone
-        admin().get("/admin/systems").then().statusCode(200).body("systems.alias", hasItem("acme"));
-        admin().get("/admin/systems/acme").then().statusCode(200).body("defaultRealm", equalTo("acme-dev"));
+        admin().get("/api/admin/systems").then().statusCode(200).body("systems.alias", hasItem("acme"));
+        admin().get("/api/admin/systems/acme").then().statusCode(200).body("defaultRealm", equalTo("acme-dev"));
 
         // a second registration with generate is refused, a plain replace keeps the key
         admin().body(body.copy().put("signingKey", "generate").encode())
-            .put("/admin/systems/acme")
+            .put("/api/admin/systems/acme")
             .then()
             .statusCode(409)
             .body("error", equalTo("signing_key_exists"));
         String createdAt = new JsonObject(response).getString("createdAt");
         admin().body(body.copy().put("displayName", "ACME Inc.").encode())
-            .put("/admin/systems/acme")
+            .put("/api/admin/systems/acme")
             .then()
             .statusCode(200)
             .body("displayName", equalTo("ACME Inc."))
@@ -131,10 +131,10 @@ class AdminResourceTest {
             .body("signingKey.kid", equalTo(kid))
             .body("signingKey.jwksPath", equalTo(acmeJwks));
         // the static system has no record to date
-        admin().get("/admin/systems/default").then().statusCode(200).body("$", not(hasKey("createdAt")));
+        admin().get("/api/admin/systems/default").then().statusCode(200).body("$", not(hasKey("createdAt")));
 
         // rotation: new kid, new JWKS
-        String rotated = admin().post("/admin/systems/acme/signing-key")
+        String rotated = admin().post("/api/admin/systems/acme/signing-key")
             .then()
             .statusCode(200)
             .body("signingKey.retiredKeyGraceSeconds", equalTo(3600))
@@ -154,7 +154,7 @@ class AdminResourceTest {
 
         // a leaked key: the rotation takes the previous keys out of the JWKS at once
         String afterLeak = admin().queryParam("dropPrevious", true)
-            .post("/admin/systems/acme/signing-key")
+            .post("/api/admin/systems/acme/signing-key")
             .then()
             .statusCode(200)
             .extract()
@@ -171,64 +171,64 @@ class AdminResourceTest {
     @Order(3)
     void refusesWhatItCannotRegister() {
         admin().body("{\"displayName\": \"no url\"}")
-            .put("/admin/systems/broken")
+            .put("/api/admin/systems/broken")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_system"));
-        admin().body("not json").put("/admin/systems/broken").then().statusCode(400);
+        admin().body("not json").put("/api/admin/systems/broken").then().statusCode(400);
         admin().body("{\"url\": \"http://127.0.0.1:1\"}")
-            .put("/admin/systems/bad alias")
+            .put("/api/admin/systems/bad alias")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_alias"));
         admin()
             .body("{\"url\": \"http://127.0.0.1:1\", \"grantType\": \"password\", \"clientAuth\": \"none\","
                     + " \"username\": \"admin\", \"password\": \"admin\"}")
-            .put("/admin/systems/by-password")
+            .put("/api/admin/systems/by-password")
             .then()
             .statusCode(400)
             .body("error", equalTo("grant_not_supported"));
         admin().body("{\"url\": \"http://kc.evil.test\"}")
-            .put("/admin/systems/evil")
+            .put("/api/admin/systems/evil")
             .then()
             .statusCode(400)
             .body("error", equalTo("host_not_allowed"));
         admin().body("{\"url\": \"http://127.0.0.1:1\", \"signingKey\": \"existing\"}")
-            .put("/admin/systems/no-key")
+            .put("/api/admin/systems/no-key")
             .then()
             .statusCode(400)
             .body("error", equalTo("no_signing_key"));
         admin()
             .body("{\"url\": \"http://127.0.0.1:1\", \"clientAuth\": \"client_secret\","
                     + " \"clientSecret\": \"vault:acme/client-secret\"}")
-            .put("/admin/systems/by-secret")
+            .put("/api/admin/systems/by-secret")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_secret"));
         // the static configuration is not the admin API's to change
         admin().body("{\"url\": \"http://127.0.0.1:1\"}")
-            .put("/admin/systems/default")
+            .put("/api/admin/systems/default")
             .then()
             .statusCode(409)
             .body("error", equalTo("system_configured"));
-        admin().delete("/admin/systems/default").then().statusCode(409);
-        admin().delete("/admin/systems/nope").then().statusCode(404);
-        admin().post("/admin/systems/nope/signing-key").then().statusCode(404);
+        admin().delete("/api/admin/systems/default").then().statusCode(409);
+        admin().delete("/api/admin/systems/nope").then().statusCode(404);
+        admin().post("/api/admin/systems/nope/signing-key").then().statusCode(404);
     }
 
     @Test
     @Order(4)
     void deleteRemovesTheSystemAndItsKeys() {
-        String kid = admin().get("/admin/systems/acme").then().extract().path("signingKey.kid");
-        admin().delete("/admin/systems/acme").then().statusCode(204);
-        admin().get("/admin/systems/acme").then().statusCode(404);
+        String kid = admin().get("/api/admin/systems/acme").then().extract().path("signingKey.kid");
+        admin().delete("/api/admin/systems/acme").then().statusCode(204);
+        admin().get("/api/admin/systems/acme").then().statusCode(404);
         given().get(acmeJwks).then().statusCode(404);
-        admin().get("/admin/systems").then().statusCode(200).body("systems.alias", not(hasItem("acme")));
+        admin().get("/api/admin/systems").then().statusCode(200).body("systems.alias", not(hasItem("acme")));
 
         // a new 'acme' takes nothing over: neither the key nor the JWKS URL Keycloak
         // trusts
         String again = admin().body("{\"url\": \"http://127.0.0.1:1\", \"id\": \"" + acmeJwks.split("/")[3] + "\"}")
-            .put("/admin/systems/acme")
+            .put("/api/admin/systems/acme")
             .then()
             .statusCode(201)
             .extract()
@@ -238,37 +238,37 @@ class AdminResourceTest {
         assertNotEquals(kid, key.getString("kid"));
         given().get(acmeJwks).then().statusCode(404);
         given().get(key.getString("jwksPath")).then().statusCode(200).body("keys.size()", equalTo(1));
-        admin().delete("/admin/systems/acme").then().statusCode(204);
+        admin().delete("/api/admin/systems/acme").then().statusCode(204);
     }
 
     @Test
     @Order(5)
     void secretsAreStoredByNameAndNeverReadBack() {
-        admin().get("/admin/secrets")
+        admin().get("/api/admin/secrets")
             .then()
             .statusCode(200)
             .body("vault", equalTo("db"))
             .body("writable", equalTo(true))
             .body("secrets.name", not(hasItem("acme/client-secret")));
-        admin().get("/admin/secrets/acme/client-secret")
+        admin().get("/api/admin/secrets/acme/client-secret")
             .then()
             .statusCode(404)
             .body("error", equalTo("unknown_secret"));
-        admin().delete("/admin/secrets/acme/client-secret").then().statusCode(404);
+        admin().delete("/api/admin/secrets/acme/client-secret").then().statusCode(404);
 
         admin().body("{\"value\": \"\"}")
-            .put("/admin/secrets/acme/client-secret")
+            .put("/api/admin/secrets/acme/client-secret")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_secret"));
         admin().body("{\"value\": \"x\"}")
-            .put("/admin/secrets/acme/a..b")
+            .put("/api/admin/secrets/acme/a..b")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_secret_name"));
 
         admin().body("{\"value\": \"top-secret\"}")
-            .put("/admin/secrets/acme/client-secret")
+            .put("/api/admin/secrets/acme/client-secret")
             .then()
             .statusCode(201)
             .body("name", equalTo("acme/client-secret"))
@@ -276,28 +276,34 @@ class AdminResourceTest {
             .body("vault", equalTo("db"))
             .body("usedBy", empty())
             .body("$", not(hasKey("value")));
-        admin().body("{\"value\": \"top-secret-2\"}").put("/admin/secrets/acme/client-secret").then().statusCode(200);
-        admin().get("/admin/secrets/acme/client-secret").then().statusCode(200).body("$", not(hasKey("value")));
-        admin().get("/admin/secrets").then().statusCode(200).body("secrets.name", hasItem("acme/client-secret"));
+        admin().body("{\"value\": \"top-secret-2\"}")
+            .put("/api/admin/secrets/acme/client-secret")
+            .then()
+            .statusCode(200);
+        admin().get("/api/admin/secrets/acme/client-secret").then().statusCode(200).body("$", not(hasKey("value")));
+        admin().get("/api/admin/secrets").then().statusCode(200).body("secrets.name", hasItem("acme/client-secret"));
 
         // a system may now refer to it; the representation shows the reference, not the
         // value
         admin()
             .body("{\"url\": \"http://127.0.0.1:1\", \"clientAuth\": \"client_secret\","
                     + " \"clientSecret\": \"vault:acme/client-secret\"}")
-            .put("/admin/systems/by-secret")
+            .put("/api/admin/systems/by-secret")
             .then()
             .statusCode(201)
             .body("clientAuth", equalTo("client_secret"))
             .body("clientSecret", equalTo("vault:acme/client-secret"))
             .body("writable", equalTo(true));
-        admin().get("/admin/secrets/acme/client-secret").then().statusCode(200).body("usedBy", hasItem("by-secret"));
+        admin().get("/api/admin/secrets/acme/client-secret")
+            .then()
+            .statusCode(200)
+            .body("usedBy", hasItem("by-secret"));
 
         // UI / replace: omit or mask the secret so the stored vault reference stays
         admin()
             .body("{\"url\": \"http://127.0.0.1:1\", \"clientAuth\": \"client_secret\","
                     + " \"displayName\": \"by vault\"}")
-            .put("/admin/systems/by-secret")
+            .put("/api/admin/systems/by-secret")
             .then()
             .statusCode(200)
             .body("displayName", equalTo("by vault"))
@@ -305,26 +311,26 @@ class AdminResourceTest {
         admin()
             .body("{\"url\": \"http://127.0.0.1:1\", \"clientAuth\": \"client_secret\","
                     + " \"clientSecret\": \"***\"}")
-            .put("/admin/systems/by-secret")
+            .put("/api/admin/systems/by-secret")
             .then()
             .statusCode(200)
             .body("clientSecret", equalTo("vault:acme/client-secret"));
 
         // which protects the secret from removal until the system is gone
-        admin().delete("/admin/secrets/acme/client-secret")
+        admin().delete("/api/admin/secrets/acme/client-secret")
             .then()
             .statusCode(409)
             .body("error", equalTo("secret_in_use"))
             .body("message", containsString("by-secret"));
-        admin().delete("/admin/systems/by-secret").then().statusCode(204);
-        admin().delete("/admin/secrets/acme/client-secret").then().statusCode(204);
-        admin().get("/admin/secrets/acme/client-secret").then().statusCode(404);
+        admin().delete("/api/admin/systems/by-secret").then().statusCode(204);
+        admin().delete("/api/admin/secrets/acme/client-secret").then().statusCode(204);
+        admin().get("/api/admin/secrets/acme/client-secret").then().statusCode(404);
     }
 
     @Test
     @Order(6)
     void theStorageReportsItsKeysAndReencryptsOnDemand() {
-        String kid = admin().get("/admin/storage")
+        String kid = admin().get("/api/admin/storage")
             .then()
             .statusCode(200)
             .body("encryption", equalTo(true))
@@ -333,7 +339,7 @@ class AdminResourceTest {
             .extract()
             .path("currentKeyId");
         assertTrue(kid != null && kid.length() == 8, kid);
-        admin().post("/admin/storage/rekey")
+        admin().post("/api/admin/storage/rekey")
             .then()
             .statusCode(200)
             .body("currentKeyId", equalTo(kid))
@@ -344,35 +350,35 @@ class AdminResourceTest {
     @Test
     @Order(7)
     void systemsBringTheirOwnAuthorizationPolicy() {
-        admin().body("{\"value\": \"pdp-api-key\"}").put("/admin/secrets/gov/pdp-key").then().statusCode(201);
+        admin().body("{\"value\": \"pdp-api-key\"}").put("/api/admin/secrets/gov/pdp-key").then().statusCode(201);
         String body = """
                 {"url": "http://127.0.0.1:1", "access": {"authorization": {"enabled": true,
                  "authzen": {"url": "https://sso.example.com/pdp/access/v1/evaluation", "auth": "header",
                              "headerValue": "vault:gov/pdp-key"}}}}""";
         admin().body(body)
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(201)
             .body("access.authorization.enabled", equalTo(true))
             .body("access.authorization.authzen.url", equalTo("https://sso.example.com/pdp/access/v1/evaluation"))
             .body("access.authorization.authzen.headerValue", equalTo("vault:gov/pdp-key"));
-        admin().get("/admin/secrets/gov/pdp-key").then().statusCode(200).body("usedBy", hasItem("governed"));
+        admin().get("/api/admin/secrets/gov/pdp-key").then().statusCode(200).body("usedBy", hasItem("governed"));
 
         // a plain secret is stored, never shown
         admin().body(body.replace("vault:gov/pdp-key", "plain-key"))
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(200)
             .body("access.authorization.authzen.headerValue", equalTo("***"));
 
         // what a registered system may not ask for
         admin().body(body.replace("https://sso.example.com/pdp", "https://pdp.evil.test"))
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("host_not_allowed"));
         admin().body(body.replace("vault:gov/pdp-key", "vault:gov/missing"))
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_secret"));
@@ -381,33 +387,33 @@ class AdminResourceTest {
                  "url": "https://sso.example.com/pdp", "auth": "client-credentials",
                  "tokenUrl": "https://sso.example.com/token", "clientId": "c", "clientAuth": "private_key_jwt",
                  "jwtKeyFile": "/etc/passwd"}}}}""")
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("local_file_setting"));
         admin().body("""
                 {"url": "http://127.0.0.1:1", "access": {"authorization": {"authzen": {
                  "url": "https://sso.example.com/pdp", "auth": "header"}}}}""")
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_authorization"))
             .body("message", containsString("header-value"));
         admin().body("""
                 {"url": "http://127.0.0.1:1", "access": {"authorization": {"enabled": true, "acme-opa": {}}}}""")
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_authorization_engine"));
         admin().body("""
                 {"url": "http://127.0.0.1:1", "access": {"no-such-check": {"order": 1}}}""")
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_access_check"));
         admin().body("""
                 {"url": "http://127.0.0.1:1", "realms": {"acme": {"displayName": "ACME"}}}""")
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(400)
             .body("error", equalTo("realms_separately"));
@@ -420,7 +426,7 @@ class AdminResourceTest {
                 {"realmId": "4f2c", "displayName": "Sandbox", "description": "Where support tries things",
                  "access": {"authorization": {"enabled": false}, "group-scope": {"order": 1}}}""";
         admin().body(realm)
-            .put("/admin/systems/governed/realms/sandbox")
+            .put("/api/admin/systems/governed/realms/sandbox")
             .then()
             .statusCode(201)
             .body("name", equalTo("sandbox"))
@@ -429,9 +435,12 @@ class AdminResourceTest {
             .body("displayName", equalTo("Sandbox"))
             .body("access.authorization.enabled", equalTo(false))
             .body("entry", equalTo("/mcp/systems/governed/sandbox"));
-        admin().body(realm).put("/admin/systems/governed/realms/sandbox").then().statusCode(200);
-        admin().get("/admin/systems/governed/realms").then().statusCode(200).body("realms.name", hasItem("sandbox"));
-        admin().get("/admin/systems/governed")
+        admin().body(realm).put("/api/admin/systems/governed/realms/sandbox").then().statusCode(200);
+        admin().get("/api/admin/systems/governed/realms")
+            .then()
+            .statusCode(200)
+            .body("realms.name", hasItem("sandbox"));
+        admin().get("/api/admin/systems/governed")
             .then()
             .statusCode(200)
             .body("realms.sandbox.displayName", equalTo("Sandbox"));
@@ -439,7 +448,7 @@ class AdminResourceTest {
         // replacing the system keeps its realms
         admin().body("""
                 {"url": "http://127.0.0.1:1", "description": "replaced"}""")
-            .put("/admin/systems/governed")
+            .put("/api/admin/systems/governed")
             .then()
             .statusCode(200)
             .body("realms.sandbox.realmId", equalTo("4f2c"));
@@ -447,34 +456,34 @@ class AdminResourceTest {
         // a realm is held to the same rules as its system
         admin().body("""
                 {"access": {"authorization": {"authzen": {"url": "https://pdp.evil.test/e"}}}}""")
-            .put("/admin/systems/governed/realms/acme")
+            .put("/api/admin/systems/governed/realms/acme")
             .then()
             .statusCode(400)
             .body("error", equalTo("host_not_allowed"));
         admin().body("""
                 {"access": {"authorization": {"vendor": {}}}}""")
-            .put("/admin/systems/governed/realms/acme")
+            .put("/api/admin/systems/governed/realms/acme")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_authorization_engine"));
         admin().body("{\"color\": \"red\"}")
-            .put("/admin/systems/governed/realms/acme")
+            .put("/api/admin/systems/governed/realms/acme")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_realm"));
-        admin().body("{}").put("/admin/systems/governed/realms/acme").then().statusCode(400);
-        admin().get("/admin/systems/governed/realms/acme")
+        admin().body("{}").put("/api/admin/systems/governed/realms/acme").then().statusCode(400);
+        admin().get("/api/admin/systems/governed/realms/acme")
             .then()
             .statusCode(404)
             .body("error", equalTo("unknown_realm"));
-        admin().body(realm).put("/admin/systems/default/realms/acme").then().statusCode(409);
+        admin().body(realm).put("/api/admin/systems/default/realms/acme").then().statusCode(409);
 
-        admin().delete("/admin/systems/governed/realms/sandbox").then().statusCode(204);
-        admin().delete("/admin/systems/governed/realms/sandbox").then().statusCode(404);
-        admin().body(realm).put("/admin/systems/governed/realms/sandbox").then().statusCode(201);
-        admin().delete("/admin/systems/governed").then().statusCode(204);
-        admin().get("/admin/systems/governed/realms/sandbox").then().statusCode(404);
-        admin().delete("/admin/secrets/gov/pdp-key").then().statusCode(204);
+        admin().delete("/api/admin/systems/governed/realms/sandbox").then().statusCode(204);
+        admin().delete("/api/admin/systems/governed/realms/sandbox").then().statusCode(404);
+        admin().body(realm).put("/api/admin/systems/governed/realms/sandbox").then().statusCode(201);
+        admin().delete("/api/admin/systems/governed").then().statusCode(204);
+        admin().get("/api/admin/systems/governed/realms/sandbox").then().statusCode(404);
+        admin().delete("/api/admin/secrets/gov/pdp-key").then().statusCode(204);
     }
 
     @Test
@@ -485,26 +494,26 @@ class AdminResourceTest {
                  "presets": {
                    "tenant": {"access": {"self-protection": {"order": 3}}},
                    "lab": {"extends": "tenant", "access": {"group-scope": {"enabled": false}}}}}""")
-            .put("/admin/systems/with-presets")
+            .put("/api/admin/systems/with-presets")
             .then()
             .statusCode(201)
             .body("preset", equalTo("tenant"))
             .body("presets.lab.extends", equalTo("tenant"));
         admin().body("{\"preset\": \"lab\", \"displayName\": \"Lab\"}")
-            .put("/admin/systems/with-presets/realms/lab1")
+            .put("/api/admin/systems/with-presets/realms/lab1")
             .then()
             .statusCode(201)
             .body("preset", equalTo("lab"));
 
         admin().body("{\"preset\": \"nope\"}")
-            .put("/admin/systems/with-presets/realms/lab2")
+            .put("/api/admin/systems/with-presets/realms/lab2")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_preset"));
         admin().body("""
                 {"url": "http://127.0.0.1:1", "presets": {
                    "a": {"extends": "b"}, "b": {"extends": "a"}}}""")
-            .put("/admin/systems/with-presets")
+            .put("/api/admin/systems/with-presets")
             .then()
             .statusCode(400)
             .body("error", equalTo("preset_cycle"))
@@ -512,7 +521,7 @@ class AdminResourceTest {
         admin().body("""
                 {"url": "http://127.0.0.1:1", "presets": {"tenant": {}, "lab": {"extends": "tenant"}},
                  "access": {"authorization": {"authzen": {"url": "https://{realm.name}.example.com/e"}}}}""")
-            .put("/admin/systems/with-presets")
+            .put("/api/admin/systems/with-presets")
             .then()
             .statusCode(400)
             .body("error", equalTo("placeholder_in_host"));
@@ -521,13 +530,13 @@ class AdminResourceTest {
                 {"url": "http://127.0.0.1:1", "preset": "tenant",
                  "presets": {"tenant": {"access": {"authorization": {"authzen": {
                    "url": "https://sso.example.com/pdp/{realm.name}/access/v1/evaluation"}}}}}}""")
-            .put("/admin/systems/with-presets")
+            .put("/api/admin/systems/with-presets")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_preset"))
             .body("message", containsString("lab"));
 
-        admin().delete("/admin/systems/with-presets").then().statusCode(204);
+        admin().delete("/api/admin/systems/with-presets").then().statusCode(204);
     }
 
     @Test
@@ -536,34 +545,34 @@ class AdminResourceTest {
         admin().body("""
                 {"url": "http://127.0.0.1:1", "tools": {"denied": ["user_delete"]},
                  "presets": {"viewer": {"tools": {"readOnly": true, "categories": ["users", "groups"]}}}}""")
-            .put("/admin/systems/restricted")
+            .put("/api/admin/systems/restricted")
             .then()
             .statusCode(201)
             .body("tools.denied", hasItem("user_delete"))
             .body("presets.viewer.tools.readOnly", equalTo(true));
         admin().body("{\"preset\": \"viewer\", \"tools\": {\"allowed\": [\"keycloak_user_get\"]}}")
-            .put("/admin/systems/restricted/realms/support")
+            .put("/api/admin/systems/restricted/realms/support")
             .then()
             .statusCode(201)
             .body("tools.allowed", hasItem("keycloak_user_get"));
 
         admin().body("{\"url\": \"http://127.0.0.1:1\", \"tools\": {\"denied\": [\"user_delte\"]}}")
-            .put("/admin/systems/restricted")
+            .put("/api/admin/systems/restricted")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_tool"));
         admin().body("{\"tools\": {\"categories\": [\"wizards\"]}}")
-            .put("/admin/systems/restricted/realms/support")
+            .put("/api/admin/systems/restricted/realms/support")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_category"));
         admin().body("""
                 {"url": "http://127.0.0.1:1", "presets": {"viewer": {"tools": {"hidden": true}}}}""")
-            .put("/admin/systems/restricted")
+            .put("/api/admin/systems/restricted")
             .then()
             .statusCode(400)
             .body("error", equalTo("invalid_system"));
 
-        admin().delete("/admin/systems/restricted").then().statusCode(204);
+        admin().delete("/api/admin/systems/restricted").then().statusCode(204);
     }
 }

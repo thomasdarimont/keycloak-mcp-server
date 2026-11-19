@@ -91,7 +91,7 @@ class TwoKeycloaksIT {
                 .put("clientId", "mcp-admin")
                 .put("clientSecret", "unused-here")
                 .encode())
-            .put("/admin/systems/first-master")
+            .put("/api/admin/systems/first-master")
             .then()
             .statusCode(201);
         String firstAdmin = TwoKeycloaksTestResource.firstMasterToken("mcp-consumer", "admin", "admin");
@@ -146,7 +146,7 @@ class TwoKeycloaksIT {
                 .put("clientId", "mcp-admin")
                 .put("clientSecret", "unused-here")
                 .encode())
-            .put("/admin/systems/untouched")
+            .put("/api/admin/systems/untouched")
             .then()
             .statusCode(201);
         String wellKnown = "/.well-known/oauth-protected-resource/mcp/systems/untouched";
@@ -184,7 +184,7 @@ class TwoKeycloaksIT {
         given().header("Authorization", "Bearer " + alice)
             .contentType("application/json")
             .body(service.copy().put("url", TwoKeycloaksTestResource.otherBase).encode())
-            .put("/admin/systems/moved")
+            .put("/api/admin/systems/moved")
             .then()
             .statusCode(201);
         String otherAdmin = TwoKeycloaksTestResource.otherToken("mcp-consumer", "admin", "admin");
@@ -195,7 +195,7 @@ class TwoKeycloaksIT {
         given().header("Authorization", "Bearer " + alice)
             .contentType("application/json")
             .body(service.copy().put("url", CallerTestResource.base).encode())
-            .put("/admin/systems/moved")
+            .put("/api/admin/systems/moved")
             .then()
             .statusCode(200);
         assertEquals(401, initialize("/mcp/systems/moved", otherAdmin),

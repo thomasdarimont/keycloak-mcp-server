@@ -4,7 +4,14 @@
 
 Every property, its default and meaning. Which settings name the sign-in provider of the UI, the authorization
 servers of the MCP endpoint and the admin API, and the Keycloak systems:
-[Identity providers, authorization servers and Keycloak systems](providers-and-systems.md). Property → environment variable: `kc-mcp.systems.default.url` →
+[Identity providers, authorization servers and Keycloak systems](providers-and-systems.md).
+
+The names follow the surface and the server's part there: `kc-mcp.ui.oidc.*` (the UI, a relying party),
+`kc-mcp.mcp.oauth.*` and `kc-mcp.admin.oauth.*` (the MCP endpoint and the admin API, resource servers),
+`kc-mcp.systems.<name>.*` (the Keycloaks, where the server is a client). The `kc-mcp.mcp.oauth.*` settings stand for
+properties of Quarkus OIDC (`quarkus.oidc.tenant-enabled`, `auth-server-url`, `token.audience`, `token.issuer`,
+`resource-metadata.*`); with both set the `kc-mcp` one wins. Settings that were renamed stop the start with a message
+naming the new one. Property → environment variable: `kc-mcp.systems.default.url` →
 `KC_MCP_SYSTEMS_DEFAULT_URL` (a system name from the environment is lower-case letters and digits).
 
 Where a setting comes from, the first one found wins:
@@ -82,7 +89,7 @@ the database connection.
 | `kc-mcp.systems.<name>.user-agent` | `kc-mcp.http.user-agent` | `User-Agent` of the requests to this system (Admin API, tokens, token exchange): `{version}` is the server's version, `none` leaves the HTTP library's (`Quarkus REST Client`); configuration only, also in `system-defaults` |
 | `kc-mcp.systems.<name>.version` | read from server            | Keycloak version override / fallback ([Supported Keycloak versions](keycloak-versions.md)) |
 | `kc-mcp.system-defaults.*`      |                             | the same keys except `url`, shared by every system that does not set its own |
-| `kc-mcp.default-system`         | the only system | system when `system` is omitted; the OIDC default tenant verifies callers against its auth realm. Several systems have no default without it (a system called `default` is not picked by its name); with caller login they need it or `quarkus.oidc.auth-server-url` |
+| `kc-mcp.default-system`         | the only system | system when `system` is omitted; the OIDC default tenant verifies callers against its auth realm. Several systems have no default without it (a system called `default` is not picked by its name); with caller login they need it or `kc-mcp.mcp.oauth.issuer` |
 | `kc-mcp.jwt.key-file`           |                             | PKCS#8 PEM private key for `private_key_jwt` |
 | `kc-mcp.jwt.keystore-file` / `keystore-password` / `key-alias` / `key-password` / `keystore-type` | | keystore alternative |
 | `kc-mcp.jwt.algorithm`          | `RS256`                     | RS256/384/512, PS256/384/512, ES256/384/512 |
@@ -98,11 +105,12 @@ the database connection.
 | `quarkus.datasource.jdbc.url`   |                             | turns database storage on: `jdbc:h2:file:./data/kc-mcp`, or `jdbc:postgresql://...` after `bin/kcmcp.sh build --db=postgresql` (from source: `-Ppostgresql`); other databases: [Database storage](storage.md) (+ `quarkus.datasource.username`/`password`) |
 | `kc-mcp.storage.enabled`        | `true` with a jdbc url      | force storage on or off |
 | `kc-mcp.storage.secret-key`     |                             | AES-256-GCM key for stored private keys, client secrets, passwords; base64 of 32 bytes or passphrase (Argon2id) |
-| `kc-mcp.storage.previous-secret-keys` |                       | rotated-away keys (csv) that still decrypt; rows are rewritten under `secret-key` at startup and by `POST /admin/storage/rekey` |
+| `kc-mcp.storage.previous-secret-keys` |                       | rotated-away keys (csv) that still decrypt; rows are rewritten under `secret-key` at startup and by `POST /api/admin/storage/rekey` |
 | `kc-mcp.spi.audit-scrubber.pii.pseudonym-key` | `secret-key`   | HMAC key of the audit pseudonyms, independent of storage key rotation |
 | `kc-mcp.instance-role`          | `all`                       | what this instance serves: `all`, `mcp` (the MCP endpoint only: admin API and UI off) or `admin` (admin API on, MCP endpoint off, the UI as configured); a switch below set against the role stops the start ([Several instances](storage.md#several-instances-on-one-database)) |
 | `kc-mcp.mcp.enabled`            | `true`                      | `false`: the MCP endpoint and its entries answer a plain 404 (no hint at what else the instance serves); for an instance that serves only the admin API or the UI ([Several instances](storage.md#several-instances-on-one-database)) |
-| `kc-mcp.admin.enabled` / `token` / `issuer` / `audience` / `role` | `false` / / / / `realm:admin` | admin API at `/admin`: static token and/or trusted issuer (its authorization server) with role |
+| `kc-mcp.admin.enabled` / `token` | `false` /               | admin API at `/api/admin`; the static token is one way in, an authorization server the other |
+| `kc-mcp.admin.oauth.issuer` / `audience` / `role` | / / `realm:admin` | the admin API's authorization server (a realm URL), the audience and the role its access tokens must carry; the role also makes an operator of the management UI |
 | `kc-mcp.admin.allow-new-systems` | `true`                     | `false`: the admin API changes known systems only, new aliases answer 403 `registration_closed` |
 | `quarkus.mcp.server.http.root-path` | `/mcp`                  | where the MCP endpoint lives (build time); the entries, the caller authentication and the DNS rebinding protection follow it, as they do `quarkus.http.root-path` in front of everything. Known gap behind such a prefix: Quarkus writes the `resource` of an entry's protected resource metadata without the prefix, which a client that compares it with the URL it connected to may reject |
 | `kc-mcp.admin.openapi`          | `true`                      | `false`: the admin API's OpenAPI document (`/q/openapi`) and Swagger UI (`/q/swagger-ui`) answer 404 ([Several Keycloak systems](systems.md)) |
@@ -110,7 +118,7 @@ the database connection.
 | `kc-mcp.spi.audit-listener.db.retention-days` |                        | delete audit rows older than this (startup, then hourly); unset keeps all |
 | `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` | `3600`    | how long a rotated-away key stays in the JWKS; then its private key is deleted (hourly purge) |
 | `kc-mcp.spi.audit-scrubber.pii.mode` | `keep`                  | `keep`, `pseudonymize`, `drop`; `args` argument names, `targets` listeners (default `db`) |
-| `kc-mcp.delegation`             | `off`                       | `exchange`: calls run with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); needs `quarkus.oidc.tenant-enabled=true`. The caller's own token is never sent to the Admin API ([Security](security.md#callers)) |
+| `kc-mcp.delegation`             | `off`                       | `exchange`: calls run with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); needs `kc-mcp.mcp.oauth.enabled=true`. The caller's own token is never sent to the Admin API ([Security](security.md#callers)) |
 | `kc-mcp.admin-api-scope`        | `kc-admin-api`              | scope requested with Admin API tokens and advertised to MCP clients (Keycloak 26.8.2+ audience check); dropped on `invalid_scope`; blank: none |
 | `kc-mcp.dns-rebinding-protection` | `auto`                    | `auto` (on while anonymous), `on`, `off`: `Host`/`Origin` of MCP requests must be localhost or in `kc-mcp.dns-rebinding-allowed-hosts` |
 | `kc-mcp.dev-mode`               | `false`                     | what `bin/kcmcp.sh start-dev` sets; see [Development mode](#development-mode-start-dev) |
@@ -123,10 +131,13 @@ the database connection.
 | `kc-mcp.dynamic-private-hosts`  | `allow`, `shared`: `listed` | `listed`: a runtime-registered system on a private, loopback or link-local address needs its host named literally in `allowed-hosts` |
 | `kc-mcp.model-confirmation`     | `auto`                      | guidance to the model about destructive tools: `ask`, `server`, `auto` ([Guardrails](security.md#guardrails)) |
 | `kc-mcp.model-confirmation-trusted-roles` |                   | role refs whose holders are told to pass `confirm: true` right away in `ask` mode |
-| `quarkus.oidc.tenant-enabled`   | `false`                     | verify bearer tokens of the default system's auth realm (`quarkus.oidc.auth-server-url`, derived unless set) |
-| `quarkus.oidc.token.audience`   |                             | required `aud`: only tokens issued for this server are accepted (set it whenever callers log in) |
-| `quarkus.oidc.token.issuer`     |                             | public issuer when the system url is internal (Docker) |
-| `quarkus.oidc.resource-metadata.authorization-server` | `quarkus.oidc.auth-server-url` | login address MCP clients are sent to; the public issuer when the system url is internal |
+| `kc-mcp.mcp.oauth.enabled`      | `false`                     | authenticate callers of the MCP endpoint: requests need an access token of `kc-mcp.mcp.oauth.issuer` |
+| `kc-mcp.mcp.oauth.issuer`       | the default system's auth realm | the MCP endpoint's authorization server, a realm URL at the address the server reaches |
+| `kc-mcp.mcp.oauth.audience`     |                             | required `aud`: only tokens issued for this server are accepted (set it whenever callers log in) |
+| `kc-mcp.mcp.oauth.token-issuer` |                             | the issuer the tokens carry when `issuer` is an internal address (Docker) |
+| `kc-mcp.mcp.oauth.resource-metadata.authorization-server` | `kc-mcp.mcp.oauth.issuer` | login address MCP clients are sent to; the public issuer when `issuer` is internal |
+| `kc-mcp.mcp.oauth.resource-metadata.scopes` | `kc-mcp.admin-api-scope` | the scopes MCP clients are told to ask for; with `delegation=exchange` add `delegation:client:<client id>` |
+| `kc-mcp.mcp.oauth.resource-metadata.resource` | from the request, or `kc-mcp.hostname` | the address of the MCP endpoint as clients know it |
 | `kc-mcp.explanations`           | `auto`                      | refusal wording: `admins` (config details, `howToFix`), `users` (plain words), `auto` (by caller roles in delegation mode, else admins) |
 | `kc-mcp.allowed-hosts`          | any                         | `[scheme://]host[:port]` patterns with `*`, checked at startup |
 | `kc-mcp.tool-prefix`            |                             | prefix for all tool names (`prod_`) |
@@ -154,17 +165,18 @@ the database connection.
 | `kc-mcp.metrics.include-realm` | `false`                    | tool call metrics carry the realm |
 | `kc-mcp.ui.trace-url`           |                             | where the Audit page links an event's trace: a URL with `{traceId}` (and `{spanId}`), e.g. `https://jaeger.example.com/trace/{traceId}`; unset: the ids without a link |
 | `kc-mcp.ui.enabled`             | `false`, `start-dev`: `true` | the management UI at `/ui` with its backend under `/bff` ([Management UI](management-ui.md)) |
-| `kc-mcp.ui.issuer`              | `kc-mcp.admin.issuer`, else the default system's auth realm | the sign-in provider of the UI: a Keycloak realm or another OpenID Provider, at the address the server reaches it |
-| `kc-mcp.ui.client-id` / `client-secret` | `keycloak-mcp-ui` /  | the server's client at the sign-in provider; public with PKCE unless a secret is set |
-| `kc-mcp.ui.idps.<alias>.*`      |                             | several sign-in providers: `issuer`, `client-id`, `client-secret`, `display-name`, `hide-on-login-page`, `scopes`, `auth-params.<name>`, `session-age-extension` |
-| `kc-mcp.ui.viewer-role`         |                             | optional read-only management UI role (`realm:<role>` or `<client>.<role>`); unset: only `kc-mcp.admin.role` opens `/bff/api` |
-| `kc-mcp.ui.tls-configuration-name` |                        | named `quarkus.tls` configuration (trust store) for the server's own calls to the UI's identity providers: discovery, keys, session checks |
+| `kc-mcp.ui.oidc.issuer`              | `kc-mcp.admin.oauth.issuer`, else the default system's auth realm | the sign-in provider of the UI: a Keycloak realm or another OpenID Provider, at the address the server reaches it |
+| `kc-mcp.ui.oidc.client-id` / `client-secret` | `keycloak-mcp-ui` /  | the server's client at the sign-in provider; public with PKCE unless a secret is set |
+| `kc-mcp.ui.oidc.idps.<alias>.*`      |                             | several sign-in providers: `issuer`, `client-id`, `client-secret`, `display-name`, `hide-on-login-page`, `scopes`, `auth-params.<name>`, `session-age-extension` |
+| `kc-mcp.ui.operator-role`       | `kc-mcp.admin.oauth.role`   | the role that makes someone an operator of the management UI (`realm:<role>` or `<client>.<role>`, from the sign-in provider's access token) |
+| `kc-mcp.ui.viewer-role`         |                             | optional read-only management UI role, same notation; unset: only operators open `/bff/api` |
+| `kc-mcp.ui.oidc.tls-configuration-name` |                        | named `quarkus.tls` configuration (trust store) for the server's own calls to the UI's identity providers: discovery, keys, session checks |
 | `kc-mcp.truststore-paths`       |                             | additional trusted certificates for outbound TLS: PEM or unencrypted PKCS12 files, directories ([HTTPS and trusted certificates](tls.md)) |
 | `kc-mcp.hostname`               | from each request           | the address clients use, `scheme://host[:port]`: links in the login metadata and the 401 challenge, JWKS URLs ([The public address](tls.md#the-public-address)) |
 | `kc-mcp.https-*`, `kc-mcp.http-enabled` |                     | HTTPS for the server, Keycloak's option names ([HTTPS and trusted certificates](tls.md)) |
 | `kc-mcp.http.connect-timeout` / `read-timeout` | `10s` / `60s` | outbound HTTP of the server's own clients (`10s`, `500ms`, `2m`, `PT1M`): CIBA, the UI's provider calls, and the read timeout of the Keycloak admin client (its connect timeout is the client's built-in 15 s); the read default leaves room for long admin calls such as a directory sync |
 | `kc-mcp.http.user-agent`        | `keycloak-mcp-server/{version}` | `User-Agent` of every outgoing request: Keycloak, CIBA, AuthZEN, the UI's identity providers, IdP metadata the IdP check fetches. `{version}` is the server's version; `none` leaves the HTTP library's (`Quarkus REST Client`). A system can set its own (`kc-mcp.systems.<name>.user-agent`) |
-| `kc-mcp.ui.connect-timeout` / `read-timeout` | `kc-mcp.http.*` | the same for the UI's calls to its identity providers |
+| `kc-mcp.ui.oidc.connect-timeout` / `read-timeout` | `kc-mcp.http.*` | the same for the UI's calls to its identity providers |
 
 ```properties
 # one Keycloak, a service account with a secret (recommended)

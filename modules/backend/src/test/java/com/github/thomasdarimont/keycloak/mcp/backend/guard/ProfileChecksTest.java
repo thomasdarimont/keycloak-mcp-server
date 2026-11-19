@@ -93,10 +93,10 @@ class ProfileChecksTest {
         List<String> p = ProfileChecks
             .problems(settings(SecurityProfile.SHARED, false, false, false, true, true, false, true));
         assertEquals(4, p.size(), p.toString());
-        assertTrue(p.getFirst().contains("quarkus.oidc.tenant-enabled"));
-        assertTrue(p.get(1).contains("quarkus.oidc.token.audience"));
+        assertTrue(p.getFirst().contains("kc-mcp.mcp.oauth.enabled"));
+        assertTrue(p.get(1).contains("kc-mcp.mcp.oauth.audience"));
         assertTrue(p.get(2).contains("kc-mcp.allowed-hosts"));
-        assertTrue(p.get(3).contains("kc-mcp.admin.audience"));
+        assertTrue(p.get(3).contains("kc-mcp.admin.oauth.audience"));
     }
 
     @Test
@@ -152,11 +152,9 @@ class ProfileChecksTest {
                 List.of(check("acme", List.of("the ticket URL must be https"), List.of("w1"), false),
                         check("quiet", List.of(), List.of(), false)),
                 contexts(SecurityProfile.SHARED));
-        assertEquals(List
-            .of("kc-mcp.security-profile=shared needs authenticated callers: quarkus.oidc.tenant-enabled=true"
-                    + " (env QUARKUS_OIDC_TENANT_ENABLED) with quarkus.oidc.auth-server-url pointing at the realm that"
-                    + " issues the caller tokens", "[acme] the ticket URL must be https"),
-                findings.problems());
+        assertEquals(List.of("kc-mcp.security-profile=shared needs authenticated callers: kc-mcp.mcp.oauth.enabled=true"
+                + " (env KC_MCP_MCP_OAUTH_ENABLED) with kc-mcp.mcp.oauth.issuer pointing at the realm that"
+                + " issues the caller tokens", "[acme] the ticket URL must be https"), findings.problems());
         assertEquals(List.of("[acme] w1"), findings.warnings());
     }
 

@@ -48,7 +48,7 @@ public class AdminAudit {
     }
 
     /**
-     * One page of events for the query parameters of {@code GET /admin/audit}:
+     * One page of events for the query parameters of {@code GET /api/admin/audit}:
      * {@code subject}, {@code caller}, {@code anonymous} ({@code only}, {@code exclude}),
      * {@code system}, {@code realm}, {@code tool}, {@code level}, {@code outcome},
      * {@code traceId}, {@code from} and {@code to} (ISO-8601 instants, {@code to}

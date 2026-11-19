@@ -181,7 +181,7 @@ people in; `carol` reaches the login but not the API, which asks for `realm-admi
 
 | where | what |
 |---|---|
-| `env/ciba.env` | `KC_MCP_SPI_CONFIRMER_CIBA_*`: client, timeout, `when`, `login-hint`, `client-auth`, `flow`, `number-matching`. `KC_MCP_CONFIRM_FALLBACK=deny`, so a client without elicitation cannot fall back to `confirm: true`. `KC_MCP_DELEGATION=exchange` with the server's client `keycloak-mcp`, and the delegation scope in `QUARKUS_OIDC_RESOURCE_METADATA_SCOPES` |
+| `env/ciba.env` | `KC_MCP_SPI_CONFIRMER_CIBA_*`: client, timeout, `when`, `login-hint`, `client-auth`, `flow`, `number-matching`. `KC_MCP_CONFIRM_FALLBACK=deny`, so a client without elicitation cannot fall back to `confirm: true`. `KC_MCP_DELEGATION=exchange` with the server's client `keycloak-mcp`, and the delegation scope in `KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES` |
 | `realms/demo-realm.json` | the realm's CIBA policy (`cibaInterval`, `cibaExpiresIn`, `login_hint` as the user hint); the confidential client `mcp-ciba` with `oidc.ciba.grant.enabled`; the public client `mcp-consumer` with consent, whose tokens carry `aud=keycloak-mcp`; the server's client `keycloak-mcp` and its role scope (`clientScopeMappings`); the public client `ciba-approver` the device signs its users in with |
 | `docker-compose.yml` | Keycloak's `--spi-ciba-auth-channel--ciba-http-auth-channel--http-authentication-channel-uri`, pointing at the approver; the preview features `token-exchange-delegation` and `parameterized-scopes`; the job `keycloak-init` |
 | `approver/Approver.java` | the device, plain JDK, no build (below) |

@@ -17,9 +17,9 @@ open https://localhost:8443/ui/
 | `alice` | `alice-demo` | `/mcp-admins` → `realm-management.realm-admin` (operator): signs in, can list and edit mutable systems |
 | `carol` | `carol-demo` | `/mcp-support` → `realm-management.view-users` (viewer via `KC_MCP_UI_VIEWER_ROLE`): signs in, can read systems; writes answer 403 |
 
-- `env/ui.env`: one identity provider (`KC_MCP_UI_ISSUER`, the demo realm, client `keycloak-mcp-ui`), H2 file database,
+- `env/ui.env`: one identity provider (`KC_MCP_UI_OIDC_ISSUER`, the demo realm, client `keycloak-mcp-ui`), H2 file database,
   the mkcert certificate, admin API over bearer tokens too
-- `env/ui-two-idps.env`: two providers (`KC_MCP_UI_IDPS_DEMO_*`, `KC_MCP_UI_IDPS_MASTER_*`), one button each;
+- `env/ui-two-idps.env`: two providers (`KC_MCP_UI_OIDC_IDPS_DEMO_*`, `KC_MCP_UI_OIDC_IDPS_MASTER_*`), one button each;
   `master-client.sh` registers the client in the master realm first
 - IntelliJ: `.run/management-ui-mkcert`, `.run/dev-ui`, `.run/dev-ui-two-idps`
 - Live-reload: edit files under `modules/backend/src/main/resources/frontend` while `quarkus:dev` is running
@@ -33,11 +33,11 @@ open https://localhost:8443/ui/
   `aud=mcp-admin` like `mcp-consumer`
 - The cookie: `q_session_kc-mcp-ui-<alias>` with a 43 character id, `Secure; HttpOnly; SameSite=Lax`, no token in it
 - The row: `select id, idp, subject, substr(id_token, 1, 12), expires_at from kc_mcp_user_session` in `data/kc-mcp-ui`
-  (H2) shows `enc:v2:...`; `GET /admin/storage` counts the table's key ids; logout deletes the row
+  (H2) shows `enc:v2:...`; `GET /api/admin/storage` counts the table's key ids; logout deletes the row
 - Roles: `/bff/me` lists them from the access token (`realm:...`, `<client>.<role>`); `admin` / `viewer` and
-  `capabilities` (`systems:read`, `systems:write`, …) drive the sidebar. Operator = `KC_MCP_ADMIN_ROLE` (reads and
+  `capabilities` (`systems:read`, `systems:write`, …) drive the sidebar. Operator = `KC_MCP_UI_OPERATOR_ROLE`, else the admin API's `KC_MCP_ADMIN_OAUTH_ROLE` (reads and
   writes); optional viewer = `KC_MCP_UI_VIEWER_ROLE` (reads only). The bearer admin API still needs the operator role.
-- Expiry: the ID token lives 5 minutes (realm setting), Quarkus renews it for `KC_MCP_UI_SESSION_AGE_EXTENSION`
+- Expiry: the ID token lives 5 minutes (realm setting), Quarkus renews it for `KC_MCP_UI_OIDC_SESSION_AGE_EXTENSION`
   (default 30 minutes, Keycloak's SSO idle timeout) of idling; after that `/bff/api/*` answers 499 and the page shows
   the sign-in buttons again
 - Logout elsewhere: sign in to the UI, open http://localhost:8080/realms/demo/account in a second tab, sign out there,
@@ -51,12 +51,12 @@ open https://localhost:8443/ui/
 
 ## Several identity providers
 
-`kc-mcp.ui.idps.<alias>.issuer|client-id|client-secret|display-name|session-age-extension` make one OIDC tenant
+`kc-mcp.ui.oidc.idps.<alias>.issuer|client-id|client-secret|display-name|session-age-extension` make one OIDC tenant
 (`kc-mcp-ui-<alias>`) and one sign-in button each; `/bff/login?idp=<alias>` starts the flow there, the callback and every later request find the
 provider through the cookie. A logout returns to `/ui/?idp=<alias>`, so the page offers that provider first; nothing is remembered beyond that.
-`KC_MCP_UI_IDPS_<ALIAS>_HIDE_ON_LOGIN_PAGE=true` keeps a provider off the page: its users sign in through
+`KC_MCP_UI_OIDC_IDPS_<ALIAS>_HIDE_ON_LOGIN_PAGE=true` keeps a provider off the page: its users sign in through
 `/bff/login?idp=<alias>`.
 A session records its `idp`, `issuer`, `subject` and `sid`; a back-channel logout token
 is matched by issuer and `sid`, so one logout URL serves every provider. Which systems a provider's users may manage is
-not modelled yet: today `kc-mcp.admin.role` is the one gate for every provider (so a master admin in `ui-two-idps.env`
+not modelled yet: today `kc-mcp.ui.operator-role` is the one gate for every provider (so a master admin in `ui-two-idps.env`
 signs in but gets `forbidden`); a per-provider or per-system role mapping is the next step.

@@ -74,8 +74,8 @@ clients want the server on the host. IntelliJ: `.run/` has `quarkus:dev (delegat
 | events | `TOKEN_EXCHANGE`, `TOKEN_EXCHANGE_ERROR`, `GRANT_CONSENT`, logins; admin events |
 
 Server side (`env/delegation.env`): `KC_MCP_DELEGATION=exchange`, the actor's `client_credentials`,
-`QUARKUS_OIDC_TENANT_ENABLED=true`, `QUARKUS_OIDC_TOKEN_AUDIENCE=keycloak-mcp`, and
-`QUARKUS_OIDC_RESOURCE_METADATA_SCOPES=openid,delegation:client:keycloak-mcp` so the protected resource metadata
+`KC_MCP_MCP_OAUTH_ENABLED=true`, `KC_MCP_MCP_OAUTH_AUDIENCE=keycloak-mcp`, and
+`KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES=openid,delegation:client:keycloak-mcp` so the protected resource metadata
 tells MCP clients which scope to ask for. `env/delegation-policies.env` adds the server's policy layer on top
 (no `keycloak_user_delete`, group scope with `group-manager`, no escalation): the "support user with extra checks"
 scenario, where Keycloak limits the data and the server limits the tools.

@@ -67,7 +67,7 @@ class AdoptionIT {
                 .put("clientAuth", "private_key_jwt")
                 .put("clientId", clientId)
                 .encode())
-            .put("/admin/systems/" + alias)
+            .put("/api/admin/systems/" + alias)
             .then()
             .statusCode(201);
     }
@@ -103,7 +103,7 @@ class AdoptionIT {
     @Order(1)
     void withoutTheClientInKeycloakTheTokenRequestIsRefused() {
         register(ADMIN_SYSTEM, "kc-mcp-adopt-admin");
-        admin().get("/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")
+        admin().get("/api/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")
             .then()
             .statusCode(502)
             .body("error", equalTo("token_refused"))
@@ -114,7 +114,7 @@ class AdoptionIT {
     @Order(2)
     void theClientSetupCreatesAWorkingClient() {
         JsonPath setup = admin().queryParam("credential", "public-key")
-            .get("/admin/systems/" + ADMIN_SYSTEM + "/client-setup")
+            .get("/api/admin/systems/" + ADMIN_SYSTEM + "/client-setup")
             .then()
             .statusCode(200)
             .body("client.clientAuthenticatorType", equalTo("client-jwt"))
@@ -142,7 +142,7 @@ class AdoptionIT {
                     .keycloak("POST", "/admin/realms/master/clients/" + uuid + "/scope-mappings/realm", role.encode())
                     .statusCode());
 
-        JsonPath listed = admin().get("/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")
+        JsonPath listed = admin().get("/api/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")
             .then()
             .statusCode(200)
             .body("restricted", equalTo(false))
@@ -158,7 +158,7 @@ class AdoptionIT {
     void adoptingASelectionRestrictsOnlyWhenAskedTo() {
         // without an allowlist adopting only stores settings: every realm stays reachable
         admin().body("{\"realms\": [\"adopt-a\"]}")
-            .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
+            .post("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
             .statusCode(200)
             .body("adopted", equalTo(List.of("adopt-a")))
@@ -166,25 +166,25 @@ class AdoptionIT {
             .body("allowedRealms", equalTo(List.of()))
             .body("unreachable", equalTo(List.of()));
         admin().body("{\"realms\": [\"adopt-b\", \"nope\"], \"restrict\": true}")
-            .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
+            .post("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
             .statusCode(400)
             .body("error", equalTo("unknown_keycloak_realm"));
 
         // restricting keeps the realm adopted before on the allowlist
         admin().body("{\"realms\": [\"adopt-b\"], \"restrict\": true}")
-            .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
+            .post("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
             .statusCode(200)
             .body("adopted", equalTo(List.of("adopt-b")))
             .body("allowedRealms", equalTo(List.of("adopt-a", "adopt-b")))
             .body("unreachable", hasItems("adopt-c", "master"));
-        admin().get("/admin/systems/" + ADMIN_SYSTEM + "/realms/adopt-a")
+        admin().get("/api/admin/systems/" + ADMIN_SYSTEM + "/realms/adopt-a")
             .then()
             .statusCode(200)
             .body("realmId", equalTo(keycloakId("/admin/realms/adopt-a")))
             .body("displayName", equalTo("Realm A"));
-        admin().get("/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")
+        admin().get("/api/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")
             .then()
             .statusCode(200)
             .body("restricted", equalTo(true))
@@ -193,7 +193,7 @@ class AdoptionIT {
 
         // a second adoption adds to the allowlist; the adopted realm stays as it is
         admin().body("{\"realms\": [\"adopt-b\", \"adopt-c\"]}")
-            .post("/admin/systems/" + ADMIN_SYSTEM + "/adoption")
+            .post("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption")
             .then()
             .statusCode(200)
             .body("adopted", equalTo(List.of("adopt-c")))
@@ -214,7 +214,7 @@ class AdoptionIT {
         String script = admin().queryParam("credential", "public-key")
             .queryParam("roles", "read")
             .queryParam("realms", "adopt-a,adopt-b")
-            .get("/admin/systems/" + READER_SYSTEM + "/client-setup")
+            .get("/api/admin/systems/" + READER_SYSTEM + "/client-setup")
             .then()
             .statusCode(200)
             .body("roles.clientRoles.'adopt-a-realm'", hasItems("view-realm", "query-users"))
@@ -224,7 +224,7 @@ class AdoptionIT {
         Map.Entry<Integer, String> run = AdoptionTestResource.kcadm(script);
         assertEquals(0, run.getKey(), run.getValue());
 
-        JsonPath listed = admin().get("/admin/systems/" + READER_SYSTEM + "/keycloak-realms")
+        JsonPath listed = admin().get("/api/admin/systems/" + READER_SYSTEM + "/keycloak-realms")
             .then()
             .statusCode(200)
             .extract()
@@ -234,7 +234,7 @@ class AdoptionIT {
         assertTrue(!names.contains("adopt-c"), "the account has no role in adopt-c: " + names);
 
         admin().body("{\"allRealms\": true}")
-            .post("/admin/systems/" + READER_SYSTEM + "/adoption")
+            .post("/api/admin/systems/" + READER_SYSTEM + "/adoption")
             .then()
             .statusCode(200)
             .body("adopted", hasItems("adopt-a", "adopt-b"))
@@ -244,29 +244,29 @@ class AdoptionIT {
     @Test
     @Order(5)
     void unadoptingEndsTheAccessAndRemovesTheSettings() {
-        admin().delete("/admin/systems/" + ADMIN_SYSTEM + "/adoption/adopt-c")
+        admin().delete("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption/adopt-c")
             .then()
             .statusCode(200)
             .body("settingsRemoved", equalTo(true))
             .body("allowedRealms", equalTo(List.of("adopt-a", "adopt-b")));
-        admin().get("/admin/systems/" + ADMIN_SYSTEM + "/realms/adopt-c").then().statusCode(404);
+        admin().get("/api/admin/systems/" + ADMIN_SYSTEM + "/realms/adopt-c").then().statusCode(404);
         McpClient mcp = new McpClient().path("/mcp/systems/" + ADMIN_SYSTEM + "/adopt-c").initialize(false);
         JsonObject result = mcp.callTool("keycloak_realm_get_config", new JsonObject());
         assertTrue(result.getBoolean("isError", false), result.encode());
 
-        admin().delete("/admin/systems/" + ADMIN_SYSTEM + "/adoption/adopt-b").then().statusCode(200);
-        admin().delete("/admin/systems/" + ADMIN_SYSTEM + "/adoption/adopt-a")
+        admin().delete("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption/adopt-b").then().statusCode(200);
+        admin().delete("/api/admin/systems/" + ADMIN_SYSTEM + "/adoption/adopt-a")
             .then()
             .statusCode(409)
             .body("error", equalTo("last_realm"));
 
         // the reader reaches every realm: giving one up makes the others its allowlist
-        admin().delete("/admin/systems/" + READER_SYSTEM + "/adoption/adopt-a")
+        admin().delete("/api/admin/systems/" + READER_SYSTEM + "/adoption/adopt-a")
             .then()
             .statusCode(409)
             .body("error", equalTo("would_restrict"));
         admin().queryParam("restrict", true)
-            .delete("/admin/systems/" + READER_SYSTEM + "/adoption/adopt-a")
+            .delete("/api/admin/systems/" + READER_SYSTEM + "/adoption/adopt-a")
             .then()
             .statusCode(200)
             .body("restricted", equalTo(true))

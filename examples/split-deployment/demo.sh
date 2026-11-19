@@ -32,7 +32,7 @@ as_mcp_user() {
 }
 
 step "1. register the system 'acme' on the admin instance (stored by kcmcp_admin, key pair generated there)"
-SYSTEM=$(admin -X PUT "$ADMIN/admin/systems/acme" -d @- <<'JSON'
+SYSTEM=$(admin -X PUT "$ADMIN/api/admin/systems/acme" -d @- <<'JSON'
 {
   "displayName": "ACME Corp.",
   "url": "http://keycloak:8080",
@@ -49,7 +49,7 @@ JSON
 )
 if echo "$SYSTEM" | jq -e '.error == "signing_key_exists"' >/dev/null; then
   echo "(already registered with a key; keeping it)"
-  SYSTEM=$(admin "$ADMIN/admin/systems/acme")
+  SYSTEM=$(admin "$ADMIN/api/admin/systems/acme")
 fi
 echo "$SYSTEM" | jq -c '{alias, source, signingKey: .signingKey.kid}'
 JWKS_URL="$ADMIN_INTERNAL$(echo "$SYSTEM" | jq -r .signingKey.jwksPath)"
@@ -90,7 +90,7 @@ $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KCADM create "clients/$ADMIN_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
 ADMIN_AT=$(curl -s "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
-echo "admin API with a master admin's token: HTTP $(status -H "Authorization: Bearer $ADMIN_AT" "$ADMIN/admin/systems")"
+echo "admin API with a master admin's token: HTTP $(status -H "Authorization: Bearer $ADMIN_AT" "$ADMIN/api/admin/systems")"
 
 step "3b. the public client keycloak-mcp-ui: the management UI signs master realm admins in with it"
 UI_CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-ui --fields id --format csv --noquotes | head -1 || true)
@@ -101,7 +101,7 @@ if [ -z "$UI_CLIENT_ID" ]; then
 else
   echo "client keycloak-mcp-ui exists"
 fi
-# the only role the UI's API needs (kc-mcp.admin.role, realm:admin by default) in the client's role scope
+# the only role the UI needs (kc-mcp.ui.operator-role, by default the admin API's: realm:admin) in the client's role scope
 $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KCADM create "clients/$UI_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
 echo "management UI: $ADMIN/ui/ (admin / admin)"
@@ -119,18 +119,18 @@ export MCP_CALL_QUIET=1                             # the login steps (form, con
 "$SHARED/mcp-call.py" --login sam:sam-demo "$U" keycloak_user_set_enabled '{"id": "bob", "enabled": true}' | jq -c '{error}'
 
 step "5a. the admin API on the MCP instance, even with the right token"
-echo "GET $MCP/admin/systems: HTTP $(status -H "Authorization: Bearer $ADMIN_TOKEN" "$MCP/admin/systems")"
-echo "PUT $MCP/admin/systems/evil: HTTP $(status -X PUT -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' -d '{"url":"http://keycloak:8080"}' "$MCP/admin/systems/evil")"
+echo "GET $MCP/api/admin/systems: HTTP $(status -H "Authorization: Bearer $ADMIN_TOKEN" "$MCP/api/admin/systems")"
+echo "PUT $MCP/api/admin/systems/evil: HTTP $(status -X PUT -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' -d '{"url":"http://keycloak:8080"}' "$MCP/api/admin/systems/evil")"
 
 step "5b. the MCP endpoint on the admin instance"
 echo "POST $ADMIN/mcp/systems/acme/acme-dev: HTTP $(status -X POST -H 'Content-Type: application/json' -d '{}' "$ADMIN/mcp/systems/acme/acme-dev")"
 
 step "5c. the admin API with a token issued for the MCP endpoint (alice, realm admin of acme-dev)"
 MCP_AT=$("$SHARED/mcp-call.py" --login alice:alice-demo@acme-dev --print-token)
-echo "GET $ADMIN/admin/systems: HTTP $(status -H "Authorization: Bearer $MCP_AT" "$ADMIN/admin/systems")"
+echo "GET $ADMIN/api/admin/systems: HTTP $(status -H "Authorization: Bearer $MCP_AT" "$ADMIN/api/admin/systems")"
 MASTER_MCP_AT=$(curl -s "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' | jq -r .access_token)
-echo "the same with a master admin's token without the admin API audience: HTTP $(status -H "Authorization: Bearer $MASTER_MCP_AT" "$ADMIN/admin/systems")"
+echo "the same with a master admin's token without the admin API audience: HTTP $(status -H "Authorization: Bearer $MASTER_MCP_AT" "$ADMIN/api/admin/systems")"
 
 step "5d. the MCP instance's database user (kcmcp_mcp) cannot change what the admin side configured"
 echo "read systems:            $(as_mcp_user "select string_agg(alias, ',') from kc_mcp_system")"

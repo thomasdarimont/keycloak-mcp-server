@@ -28,7 +28,7 @@ class OptionCatalogueTest {
         assertTrue(OptionCatalogue.known("kc-mcp.admin.token"));
         assertTrue(OptionCatalogue.known("kc-mcp.systems.prod.client-secret"));
         assertTrue(OptionCatalogue.known("kc-mcp.systems.\"a.b\".url"));
-        assertTrue(OptionCatalogue.known("kc-mcp.ui.idps.corp.issuer"));
+        assertTrue(OptionCatalogue.known("kc-mcp.ui.oidc.idps.corp.issuer"));
         assertTrue(OptionCatalogue.known("kc-mcp.storage.secret-key"));
         assertTrue(OptionCatalogue.known("kc-mcp.hot-tools[0]"));
     }

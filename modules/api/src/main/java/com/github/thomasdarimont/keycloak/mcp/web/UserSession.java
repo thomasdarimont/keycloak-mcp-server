@@ -8,7 +8,7 @@ package com.github.thomasdarimont.keycloak.mcp.web;
  *
  * @param id opaque, unguessable session id (the cookie value)
  * @param idp alias of the identity provider the user signed in at
- * ({@code kc-mcp.ui.idps.<alias>}, {@code default} for the top-level one)
+ * ({@code kc-mcp.ui.oidc.idps.<alias>}, {@code default} for the top-level one)
  * @param issuer the provider's issuer URL ({@code iss} of the ID token), which with
  * {@link #sid()} or {@link #subject()} identifies the provider-side session a
  * back-channel logout names

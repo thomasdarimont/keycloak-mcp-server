@@ -55,8 +55,8 @@ services:
       # inside the compose network Keycloak is reached as keycloak:8080; the tokens still name the public issuer
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_ISSUER: http://localhost:8108/realms/demo
-      QUARKUS_OIDC_TOKEN_ISSUER: http://localhost:8108/realms/demo
-      QUARKUS_OIDC_RESOURCE_METADATA_AUTHORIZATION_SERVER: http://localhost:8108/realms/demo
+      KC_MCP_MCP_OAUTH_TOKEN_ISSUER: http://localhost:8108/realms/demo
+      KC_MCP_MCP_OAUTH_RESOURCE_METADATA_AUTHORIZATION_SERVER: http://localhost:8108/realms/demo
       # the step-up login: the server reaches the realm as keycloak:8080, the links it hands out and the tokens
       # name the public address (KC_HOSTNAME with a dynamic backchannel)
       KC_MCP_SPI_ACCESS_CHECK_STEP_UP_LOGIN_ISSUER: http://keycloak:8080/realms/demo

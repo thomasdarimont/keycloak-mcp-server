@@ -9,9 +9,9 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
 
 /**
  * What the management UI session may do. The BFF enforces; the Lit UI only hides.
- * Operators ({@code kc-mcp.admin.role}) get every capability; viewers
- * ({@code kc-mcp.ui.viewer-role}, when configured) get the read ones only. Neither role →
- * no API access.
+ * Operators ({@code kc-mcp.ui.operator-role}, else the admin API's role) get every
+ * capability; viewers ({@code kc-mcp.ui.viewer-role}, when configured) get the read ones
+ * only. Neither role → no API access.
  */
 public final class UiCapabilities {
 
@@ -26,7 +26,16 @@ public final class UiCapabilities {
     }
 
     public static boolean isOperator(Caller caller, McpServerConfig config) {
-        return caller.hasRole(config.admin().role());
+        return caller.hasRole(operatorRole(config));
+    }
+
+    /** {@code kc-mcp.ui.operator-role}, else the role of the admin API. */
+    public static String operatorRole(McpServerConfig config) {
+        return config.ui()
+            .operatorRole()
+            .map(String::trim)
+            .filter(r -> !r.isEmpty())
+            .orElseGet(() -> config.admin().oauth().role());
     }
 
     /**

@@ -33,9 +33,9 @@ class AdminServerInfoTest {
 
     @Test
     void theServerInfoNeedsTheTokenAndDescribesServerRuntimeAndExtensions() {
-        given().get("/admin/server-info").then().statusCode(401);
+        given().get("/api/admin/server-info").then().statusCode(401);
         given().header("Authorization", "Bearer " + AdminProfile.TOKEN)
-            .get("/admin/server-info")
+            .get("/api/admin/server-info")
             .then()
             .statusCode(200)
             .body("server.version", notNullValue())

@@ -117,12 +117,12 @@ services:
       KC_MCP_ADMIN_ENABLED: "true"
       # automation uses the static token, people an access token of a master realm admin (role "admin")
       KC_MCP_ADMIN_TOKEN: demo-admin-token
-      KC_MCP_ADMIN_ISSUER: http://keycloak:8080/realms/master
+      KC_MCP_ADMIN_OAUTH_ISSUER: http://keycloak:8080/realms/master
       # only tokens minted for the MCP server (the public client keycloak-mcp-admin); admin-cli tokens are lightweight
       # in Keycloak 26 and carry neither roles nor an audience
-      KC_MCP_ADMIN_AUDIENCE: keycloak-mcp-server
+      KC_MCP_ADMIN_OAUTH_AUDIENCE: keycloak-mcp-server
       # the management UI: http://localhost:8091/ui/ (admin / admin; the job keycloak-init creates its client
-      # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_ISSUER. Dev mode lets it run
+      # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_OAUTH_ISSUER. Dev mode lets it run
       # without HTTPS (its session cookie drops Secure; for one person's machine only). docs/management-ui.md
       KC_MCP_UI_ENABLED: "true"
       KC_MCP_DEV_MODE: "true"
@@ -163,9 +163,9 @@ services:
       # tokens of that system's realm and asks for the scope delegation:client:<the system's client>
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
-      QUARKUS_OIDC_TENANT_ENABLED: "true"
+      KC_MCP_MCP_OAUTH_ENABLED: "true"
       # only tokens minted for the MCP server (audience mapper on mcp-consumer, and the delegation scope)
-      QUARKUS_OIDC_TOKEN_AUDIENCE: keycloak-mcp-server
+      KC_MCP_MCP_OAUTH_AUDIENCE: keycloak-mcp-server
       # personal data stays out of the console log; the database rows keep the full record
       KC_MCP_SPI_AUDIT_SCRUBBER_PII_MODE: pseudonymize
       KC_MCP_SPI_AUDIT_SCRUBBER_PII_TARGETS: console

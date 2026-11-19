@@ -237,7 +237,7 @@ flowchart TB
     style mcp fill:transparent,stroke:#7c3aed,stroke-dasharray:5 4
 ```
 
-`/admin` answers 404 on an `mcp` instance and `/mcp` on the `admin` one; switching either back on explicitly stops the
+`/api/admin` answers 404 on an `mcp` instance and `/mcp` on the `admin` one; switching either back on explicitly stops the
 start instead of quietly winning. [Database storage](storage.md#several-instances-on-one-database),
 [Security](security.md#the-two-profiles) (security profile `shared`, instance roles).
 
@@ -256,7 +256,7 @@ sequenceDiagram
     participant DB as Database
     participant K as Keycloak acme
     rect rgba(127,127,127,0.10)
-    O->>S: PUT /admin/systems/acme {url, authRealm, clientAuth: private_key_jwt, signingKey: generate}
+    O->>S: PUT /api/admin/systems/acme {url, authRealm, clientAuth: private_key_jwt, signingKey: generate}
     S->>DB: store system, create key pair (encrypted)
     S-->>O: 201 {signingKey.kid, jwksUrl: .../auth/keys/<id>/jwks.json, entries}
     O->>K: client keycloak-mcp-server: Signed JWT, JWKS URL from the answer, service account roles
@@ -267,7 +267,7 @@ sequenceDiagram
     K->>S: GET /auth/keys/<id>/jwks.json
     K-->>S: service account token
     end
-    Note over O,S: POST /admin/systems/acme/signing-key rotates the key, the JWKS keeps the retired one for a grace period
+    Note over O,S: POST /api/admin/systems/acme/signing-key rotates the key, the JWKS keeps the retired one for a grace period
 ```
 
 [Several Keycloak systems](systems.md#admin-api-registering-systems-at-runtime), the OpenAPI document at `/q/openapi`.
@@ -278,7 +278,7 @@ sequenceDiagram
 
 `examples/management-ui/`: a browser UI at `/ui` for systems, their realms and signing keys, with a backend-for-frontend
 under `/bff`. The server is the OpenID Connect relying party; the browser holds only an HttpOnly cookie with an opaque
-id, and the tokens stay in the database, encrypted like the other secrets. The operator role (`kc-mcp.admin.role`) may
+id, and the tokens stay in the database, encrypted like the other secrets. The operator role (`kc-mcp.ui.operator-role`, by default the admin API's role) may
 read and write, an optional viewer role only read; the BFF enforces that, the UI only hides what the user may not do.
 
 ```mermaid
@@ -303,7 +303,7 @@ sequenceDiagram
     rect rgba(127,127,127,0.10)
     B->>S: PUT /bff/api/systems/acme (cookie, CSRF header)
     S->>S: operator role in the session's access token?
-    S->>DB: store the system, as PUT /admin/systems/acme
+    S->>DB: store the system, as PUT /api/admin/systems/acme
     S-->>B: the system, secrets masked
     end
     Note over K,S: logout in Keycloak: POST /bff/backchannel-logout deletes the session row

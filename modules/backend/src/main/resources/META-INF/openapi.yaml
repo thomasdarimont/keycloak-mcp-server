@@ -8,8 +8,8 @@ info:
     (`quarkus.datasource.jdbc.url`) with `kc-mcp.dynamic-systems=true` to have somewhere to register systems in.
     With the API off every request answers 404 `admin_api_disabled`.
 
-    Every request carries `Authorization: Bearer ...`. Preferably an access token of the trusted `kc-mcp.admin.issuer`
-    (optionally with `kc-mcp.admin.audience`) carrying `kc-mcp.admin.role` (`realm:admin` by default): a person's token
+    Every request carries `Authorization: Bearer ...`. Preferably an access token of the trusted `kc-mcp.admin.oauth.issuer`
+    (optionally with `kc-mcp.admin.oauth.audience`) carrying `kc-mcp.admin.oauth.role` (`realm:admin` by default): a person's token
     from the authorization code flow, or a service account's from the client credentials grant, so Keycloak governs
     who administers the server. The static `kc-mcp.admin.token` is the alternative for bootstrapping and simple
     automation. Anything else is 401 with a Bearer challenge, a verified token without the role 403.
@@ -35,7 +35,7 @@ tags:
 security:
   - bearer: []
 paths:
-  /admin/systems:
+  /api/admin/systems:
     get:
       tags: [systems]
       summary: Every known system
@@ -59,7 +59,7 @@ paths:
     post:
       tags: [systems]
       summary: Register or replace a system, alias in the body
-      description: The same as `PUT /admin/systems/{alias}` with the alias given as `alias` (or `name`) in the body.
+      description: The same as `PUT /api/admin/systems/{alias}` with the alias given as `alias` (or `name`) in the body.
       operationId: registerSystem
       requestBody:
         required: true
@@ -90,7 +90,7 @@ paths:
         "404": { $ref: "#/components/responses/Disabled" }
         "409": { $ref: "#/components/responses/SystemConflict" }
         "503": { $ref: "#/components/responses/NoMutableRepository" }
-  /admin/systems/{alias}:
+  /api/admin/systems/{alias}:
     parameters:
       - $ref: "#/components/parameters/alias"
     get:
@@ -167,7 +167,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/systems/{alias}/signing-key:
+  /api/admin/systems/{alias}/signing-key:
     parameters:
       - $ref: "#/components/parameters/alias"
     post:
@@ -191,7 +191,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/systems/{alias}/realms:
+  /api/admin/systems/{alias}/realms:
     parameters:
       - $ref: "#/components/parameters/alias"
     get:
@@ -213,7 +213,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/UnknownSystem" }
-  /admin/systems/{alias}/realms/{realm}:
+  /api/admin/systems/{alias}/realms/{realm}:
     parameters:
       - $ref: "#/components/parameters/alias"
       - $ref: "#/components/parameters/realm"
@@ -293,7 +293,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/systems/{alias}/client-setup:
+  /api/admin/systems/{alias}/client-setup:
     parameters:
       - $ref: "#/components/parameters/alias"
     get:
@@ -339,7 +339,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/systems/{alias}/keycloak-realms:
+  /api/admin/systems/{alias}/keycloak-realms:
     parameters:
       - $ref: "#/components/parameters/alias"
     get:
@@ -373,7 +373,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/systems/{alias}/adoption:
+  /api/admin/systems/{alias}/adoption:
     parameters:
       - $ref: "#/components/parameters/alias"
     post:
@@ -430,7 +430,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/systems/{alias}/adoption/{realm}:
+  /api/admin/systems/{alias}/adoption/{realm}:
     parameters:
       - $ref: "#/components/parameters/alias"
       - $ref: "#/components/parameters/realm"
@@ -478,7 +478,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/secrets:
+  /api/admin/secrets:
     get:
       tags: [secrets]
       summary: The names in the vault and the systems using each
@@ -505,7 +505,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Disabled" }
-  /admin/secrets/{name}:
+  /api/admin/secrets/{name}:
     parameters:
       - $ref: "#/components/parameters/secretName"
     get:
@@ -582,7 +582,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /admin/storage:
+  /api/admin/storage:
     get:
       tags: [storage]
       summary: Encryption state of the database storage
@@ -597,7 +597,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Disabled" }
         "503": { $ref: "#/components/responses/StorageDisabled" }
-  /admin/storage/rekey:
+  /api/admin/storage/rekey:
     post:
       tags: [storage]
       summary: Re-encrypt everything under the current key
@@ -620,7 +620,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "503": { $ref: "#/components/responses/StorageDisabled" }
-  /admin/audit:
+  /api/admin/audit:
     get:
       tags: [audit]
       summary: The audit trail, newest first unless sorted otherwise
@@ -722,7 +722,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Disabled" }
         "503": { $ref: "#/components/responses/StorageDisabled" }
-  /admin/audit/{id}:
+  /api/admin/audit/{id}:
     get:
       tags: [audit]
       summary: One audit event with its arguments
@@ -749,7 +749,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "503": { $ref: "#/components/responses/StorageDisabled" }
-  /admin/audit/values/{field}:
+  /api/admin/audit/values/{field}:
     get:
       tags: [audit]
       summary: Completions for the filters of the audit trail
@@ -785,7 +785,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "503": { $ref: "#/components/responses/StorageDisabled" }
-  /admin/extensions:
+  /api/admin/extensions:
     get:
       tags: [extensions]
       summary: The installed extensions
@@ -806,7 +806,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Disabled" }
-  /admin/server-info:
+  /api/admin/server-info:
     get:
       tags: [server]
       summary: The server, its runtime and its extensions
@@ -814,7 +814,7 @@ paths:
         Version and start of the server, the Java runtime, the number of systems, and every extension by extension
         point with its status and what it reports about itself (`ServerInfoContributor`): operational facts and
         warnings. Extension names are in the `Accept-Language`. Nothing in it is confidential; settings are under
-        `/admin/extensions`.
+        `/api/admin/extensions`.
       operationId: serverInfo
       parameters:
         - name: Accept-Language
@@ -829,7 +829,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/Disabled" }
-  /admin/extensions/{spi}/{id}:
+  /api/admin/extensions/{spi}/{id}:
     parameters:
       - name: spi
         in: path
@@ -872,7 +872,7 @@ components:
     bearer:
       type: http
       scheme: bearer
-      description: Preferably an access token of `kc-mcp.admin.issuer` carrying `kc-mcp.admin.role` (a user's by authorization code, a service account's by client credentials); the static `kc-mcp.admin.token` for bootstrapping and automation
+      description: Preferably an access token of `kc-mcp.admin.oauth.issuer` carrying `kc-mcp.admin.oauth.role` (a user's by authorization code, a service account's by client credentials); the static `kc-mcp.admin.token` for bootstrapping and automation
   parameters:
     alias:
       name: alias
@@ -1194,7 +1194,7 @@ components:
             $ref: "#/components/schemas/Preset"
         realms:
           type: object
-          description: The settings of the system's realms by name (`/admin/systems/{alias}/realms`)
+          description: The settings of the system's realms by name (`/api/admin/systems/{alias}/realms`)
           additionalProperties:
             $ref: "#/components/schemas/RealmSettings"
         source:
@@ -1598,7 +1598,7 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Forbidden:
-      description: "`forbidden`: a verified token without `kc-mcp.admin.role`"
+      description: "`forbidden`: a verified token without `kc-mcp.admin.oauth.role`"
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

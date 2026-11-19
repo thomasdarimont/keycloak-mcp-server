@@ -62,9 +62,9 @@ class StepUpLoginsTest {
 
     static final KeyPair KEYS = keys();
     static final String BASE = "https://mcp.example";
-    static final String CALLBACK = BASE + "/step-up/callback";
+    static final String CALLBACK = BASE + "/auth/step-up/callback";
     static final ToolSpec DELETE = RateLimitCheckTest.tool("keycloak_user_delete").destructive().build();
-    static final Pattern LINK = Pattern.compile(Pattern.quote(BASE) + "/step-up/([A-Za-z0-9_-]+)");
+    static final Pattern LINK = Pattern.compile(Pattern.quote(BASE) + "/auth/step-up/([A-Za-z0-9_-]+)");
 
     final AtomicLong now = new AtomicLong(System.currentTimeMillis());
     private HttpServer server;
@@ -658,7 +658,7 @@ class StepUpLoginsTest {
             .check(new AccessCheck.Context(DELETE, "prod", "demo", Map.of(), GrantedRoles.UNKNOWN, noIssuer, null)
                 .forCheck(passkey()));
         assertFalse(refused.allowed());
-        assertFalse(refused.message().contains("/step-up/"), refused.message());
+        assertFalse(refused.message().contains("/auth/step-up/"), refused.message());
 
         // login=browser needs its client
         Map<String, String> noClient = Map.of("acr", "passkey", "login", "browser");

@@ -18,8 +18,8 @@
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
               <entry key="QUARKUS_HTTP_PORT" value="8103" />
-              <entry key="QUARKUS_OIDC_TENANT_ENABLED" value="true" />
-              <entry key="QUARKUS_OIDC_TOKEN_AUDIENCE" value="http://localhost:8103" />
+              <entry key="KC_MCP_MCP_OAUTH_ENABLED" value="true" />
+              <entry key="KC_MCP_MCP_OAUTH_AUDIENCE" value="http://localhost:8103" />
             </map>
           </option>
           <option name="jreName" value="#USE_PROJECT_JDK" />

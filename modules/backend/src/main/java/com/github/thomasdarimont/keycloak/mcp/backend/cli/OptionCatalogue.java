@@ -94,9 +94,14 @@ final class OptionCatalogue {
         keys.add(key);
     }
 
-    /** A nested group is declared inside the configuration interface. */
+    /** A nested group is declared inside the configuration interface, at any depth. */
     private static String group(Class<?> c) {
-        return c.getEnclosingClass() == McpServerConfig.class ? McpServerConfig.class.getName() : "\0";
+        for (Class<?> outer = c.getEnclosingClass(); outer != null; outer = outer.getEnclosingClass()) {
+            if (outer == McpServerConfig.class) {
+                return McpServerConfig.class.getName();
+            }
+        }
+        return "\0";
     }
 
     private static String kebab(String accessor) {

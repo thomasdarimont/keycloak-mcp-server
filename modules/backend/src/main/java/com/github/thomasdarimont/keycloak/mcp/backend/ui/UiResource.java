@@ -56,22 +56,22 @@ import io.quarkus.vertx.http.runtime.CurrentVertxRequest;
  * POST /bff/check-session  is the session still alive at the provider (UserSessionCheck); 200 {"active": true, ...}
  *                       with a re-sent cookie, 401 {"active": false} when it ended elsewhere, 503 when the provider
  *                       cannot be asked
- * GET /bff/api/systems                     the known systems, as GET /admin/systems (operator or viewer role)
- * GET /bff/api/systems/{alias}             one system, as GET /admin/systems/{alias}
- * PUT /bff/api/systems/{alias}             replace a mutable system, as PUT /admin/systems/{alias} (operator + CSRF)
+ * GET /bff/api/systems                     the known systems, as GET /api/admin/systems (operator or viewer role)
+ * GET /bff/api/systems/{alias}             one system, as GET /api/admin/systems/{alias}
+ * PUT /bff/api/systems/{alias}             replace a mutable system, as PUT /api/admin/systems/{alias} (operator + CSRF)
  * DELETE /bff/api/systems/{alias}          remove a mutable system (operator + CSRF)
  * POST /bff/api/systems/{alias}/signing-key  rotate the signing key (operator + CSRF; ?dropPrevious=true)
  * GET /bff/api/systems/{alias}/realms      realm settings for the system
  * GET /bff/api/systems/{alias}/realms/{r}  one realm's settings
  * PUT /bff/api/systems/{alias}/realms/{r}  add or replace realm settings (operator + CSRF)
  * DELETE /bff/api/systems/{alias}/realms/{r}  remove realm settings (operator + CSRF)
- * GET /bff/api/systems/{alias}/client-setup     the Keycloak client to create, as GET /admin/systems/{alias}/client-setup
+ * GET /bff/api/systems/{alias}/client-setup     the Keycloak client to create, as GET /api/admin/systems/{alias}/client-setup
  * GET /bff/api/systems/{alias}/keycloak-realms  the realms Keycloak lists for the system's service account
  * POST /bff/api/systems/{alias}/adoption        register some of them (operator + CSRF)
  * DELETE /bff/api/systems/{alias}/adoption/{r}  give one up again (operator + CSRF)
- * GET /bff/api/audit                      the audit trail, as GET /admin/audit (operator or viewer role)
- * GET /bff/api/audit/{id}                 one event with its arguments, as GET /admin/audit/{id}
- * GET /bff/api/audit/values/{field}       completions for its filters, as GET /admin/audit/values/{field}
+ * GET /bff/api/audit                      the audit trail, as GET /api/admin/audit (operator or viewer role)
+ * GET /bff/api/audit/{id}                 one event with its arguments, as GET /api/admin/audit/{id}
+ * GET /bff/api/audit/values/{field}       completions for its filters, as GET /api/admin/audit/values/{field}
  * POST /bff/backchannel-logout   the provider ends sessions (OIDC back-channel logout, BackChannelLogoutResource)
  * </pre>
  */
@@ -142,7 +142,7 @@ public class UiResource {
         out.put("realm", caller.realm());
         out.put("issuer", caller.claim("iss"));
         out.put("roles", new TreeSet<>(caller.roles()));
-        out.put("adminRole", config.admin().role());
+        out.put("adminRole", UiCapabilities.operatorRole(config));
         boolean operator = UiCapabilities.isOperator(caller, config);
         boolean viewer = UiCapabilities.isViewer(caller, config);
         out.put("admin", operator);

@@ -173,10 +173,10 @@
                              reach a Keycloak that is not there. Every variable the examples define is kept out of the
                              forked test JVM; tests set what they need through their test resources. -->
                         <excludedEnvironmentVariables>
-                            <excludedEnvironmentVariable>KC_MCP_ADMIN_AUDIENCE</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_AUDIENCE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_ENABLED</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_ADMIN_ISSUER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_ADMIN_ROLE</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_ROLE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_TOKEN</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ALLOWED_HOSTS</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_CONFIRM_FALLBACK</excludedEnvironmentVariable>
@@ -234,25 +234,26 @@
                             <excludedEnvironmentVariable>KC_MCP_SYSTEMS_STAGING_ALLOWED_REALMS</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_SYSTEMS_STAGING_URL</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_TOOL_EXPOSURE</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OPERATOR_ROLE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_UI_ENABLED</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_DEMO_CLIENT_ID</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_DEMO_DISPLAY_NAME</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_DEMO_ISSUER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_MASTER_CLIENT_ID</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_MASTER_DISPLAY_NAME</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_MASTER_ISSUER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_DEMO_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_DEMO_DISPLAY_NAME</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_DEMO_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_MASTER_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_MASTER_DISPLAY_NAME</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_MASTER_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_ISSUER</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_DATASOURCE_JDBC_URL</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_DATASOURCE_PASSWORD</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_DATASOURCE_USERNAME</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_HTTP_HOST</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_HTTP_PORT</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_RESOURCE_METADATA_AUTHORIZATION_SERVER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_RESOURCE_METADATA_SCOPES</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_TENANT_ENABLED</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_TOKEN_AUDIENCE</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_TOKEN_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_RESOURCE_METADATA_AUTHORIZATION_SERVER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_ENABLED</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_AUDIENCE</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_TOKEN_ISSUER</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_TLS_KEY_STORE_PEM_UI_CERT</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_TLS_KEY_STORE_PEM_UI_KEY</excludedEnvironmentVariable>
                         </excludedEnvironmentVariables>
@@ -267,10 +268,10 @@
                              reach a Keycloak that is not there. Every variable the examples define is kept out of the
                              forked test JVM; tests set what they need through their test resources. -->
                         <excludedEnvironmentVariables>
-                            <excludedEnvironmentVariable>KC_MCP_ADMIN_AUDIENCE</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_AUDIENCE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_ENABLED</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_ADMIN_ISSUER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_ADMIN_ROLE</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_ROLE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_TOKEN</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ALLOWED_HOSTS</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_CONFIRM_FALLBACK</excludedEnvironmentVariable>
@@ -328,25 +329,26 @@
                             <excludedEnvironmentVariable>KC_MCP_SYSTEMS_STAGING_ALLOWED_REALMS</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_SYSTEMS_STAGING_URL</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_TOOL_EXPOSURE</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OPERATOR_ROLE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_UI_ENABLED</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_DEMO_CLIENT_ID</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_DEMO_DISPLAY_NAME</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_DEMO_ISSUER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_MASTER_CLIENT_ID</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_MASTER_DISPLAY_NAME</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_IDPS_MASTER_ISSUER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>KC_MCP_UI_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_DEMO_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_DEMO_DISPLAY_NAME</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_DEMO_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_MASTER_CLIENT_ID</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_MASTER_DISPLAY_NAME</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_IDPS_MASTER_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_UI_OIDC_ISSUER</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_DATASOURCE_JDBC_URL</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_DATASOURCE_PASSWORD</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_DATASOURCE_USERNAME</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_HTTP_HOST</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_HTTP_PORT</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_RESOURCE_METADATA_AUTHORIZATION_SERVER</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_RESOURCE_METADATA_SCOPES</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_TENANT_ENABLED</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_TOKEN_AUDIENCE</excludedEnvironmentVariable>
-                            <excludedEnvironmentVariable>QUARKUS_OIDC_TOKEN_ISSUER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_RESOURCE_METADATA_AUTHORIZATION_SERVER</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_ENABLED</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_AUDIENCE</excludedEnvironmentVariable>
+                            <excludedEnvironmentVariable>KC_MCP_MCP_OAUTH_TOKEN_ISSUER</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_TLS_KEY_STORE_PEM_UI_CERT</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>QUARKUS_TLS_KEY_STORE_PEM_UI_KEY</excludedEnvironmentVariable>
                         </excludedEnvironmentVariables>

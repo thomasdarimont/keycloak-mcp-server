@@ -112,13 +112,13 @@ MCP client logs the user in at the right realm.
    The admin API answers with the token `setup.sh` printed (it is in the distribution's `conf/kcmcp.conf`):
 
    ```shell
-   curl -H "Authorization: Bearer admintoken-..." http://localhost:9080/admin/systems
+   curl -H "Authorization: Bearer admintoken-..." http://localhost:9080/api/admin/systems
    ```
 
    Swagger UI at <http://localhost:9080/q/swagger-ui/> describes the API; *Authorize* takes the same token. The static
    token keeps the demo simple; on a real server the preferred way in is an access token of a trusted issuer
-   (`kc-mcp.admin.issuer`), a person's from the authorization code flow or a service account's from the client
-   credentials grant, carrying `kc-mcp.admin.role`, so Keycloak governs who administers the server. With `start`
+   (`kc-mcp.admin.oauth.issuer`), a person's from the authorization code flow or a service account's from the client
+   credentials grant, carrying `kc-mcp.admin.oauth.role`, so Keycloak governs who administers the server. With `start`
    there is no database and this server only reads: registering a system answers 503 `no_mutable_repository`. With
    `start-dev` the H2 database comes with `kc-mcp.dynamic-systems=true`, so the API and the UI's *Add system* register
    systems there, next to the ones of `conf/systems/`
@@ -134,10 +134,10 @@ MCP client logs the user in at the right realm.
 
 ## How the pieces fit
 
-- **User login and delegation.** `kc-mcp.delegation=exchange` with `quarkus.oidc.tenant-enabled=true`: the MCP
+- **User login and delegation.** `kc-mcp.delegation=exchange` with `kc-mcp.mcp.oauth.enabled=true`: the MCP
   endpoint answers 401 with the protected resource metadata, LM Studio reads it, finds the realm of the entry
   (`master` or `demo`) and the scope to ask for (`delegation:client:keycloak-mcp-server`), logs the user in with PKCE
-  as `mcp-consumer` and sends the token. `quarkus.oidc.token.audience=keycloak-mcp-server` requires the audience the
+  as `mcp-consumer` and sends the token. `kc-mcp.mcp.oauth.audience=keycloak-mcp-server` requires the audience the
   mapper on `mcp-consumer` adds; that token opens the MCP server only, it carries no admin role and never goes to
   the Admin API. For every Admin API call the server exchanges it at Keycloak for a delegated token (`sub` = the
   user, `act` = `keycloak-mcp-server`), so Keycloak enforces the user's roles. Keycloak needs for this: the two

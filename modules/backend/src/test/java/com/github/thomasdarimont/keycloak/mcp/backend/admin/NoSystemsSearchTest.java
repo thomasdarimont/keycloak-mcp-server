@@ -55,7 +55,7 @@ class NoSystemsSearchTest {
         given().header("Authorization", "Bearer " + AdminProfile.TOKEN)
             .contentType("application/json")
             .body("{\"url\": \"http://127.0.0.1:1\", \"defaultRealm\": \"acme-dev\", \"allowedRealms\": [\"acme-dev\"]}")
-            .put("/admin/systems/acme")
+            .put("/api/admin/systems/acme")
             .then()
             .statusCode(201);
         McpClient entry = new McpClient().path("/mcp/systems/acme/acme-dev").initialize(false);

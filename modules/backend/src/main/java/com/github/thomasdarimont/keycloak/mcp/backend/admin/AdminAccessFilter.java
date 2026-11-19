@@ -21,15 +21,16 @@ import io.quarkus.security.identity.SecurityIdentity;
 
 /**
  * Who may call the admin API: a request carrying the static {@code kc-mcp.admin.token},
- * or an access token of the trusted {@code kc-mcp.admin.issuer} with
- * {@code kc-mcp.admin.role} (verified by Quarkus OIDC, which {@code EntryTenantResolver}
- * points at that issuer for {@code /admin} requests). Anything else is 401 with a Bearer
- * challenge, a verified token without the role 403; with the API off every request is
- * 404.
+ * or an access token of the trusted {@code kc-mcp.admin.oauth.issuer} with
+ * {@code kc-mcp.admin.oauth.role} (verified by Quarkus OIDC, which
+ * {@code EntryTenantResolver} points at that issuer for {@code /api/admin} requests).
+ * Anything else is 401 with a Bearer challenge, a verified token without the role 403;
+ * with the API off every request is 404.
  * <p>
- * Only identities verified by the admin tenant count. Without {@code kc-mcp.admin.issuer}
- * the admin API takes the static token alone: an MCP caller's token, verified by the
- * default tenant, never reaches it, whatever roles it carries.
+ * Only identities verified by the admin tenant count. Without
+ * {@code kc-mcp.admin.oauth.issuer} the admin API takes the static token alone: an MCP
+ * caller's token, verified by the default tenant, never reaches it, whatever roles it
+ * carries.
  */
 public class AdminAccessFilter {
 
@@ -41,7 +42,7 @@ public class AdminAccessFilter {
     SecurityIdentity identity;
 
     /**
-     * The OIDC tenant that verifies access tokens of {@code kc-mcp.admin.issuer}
+     * The OIDC tenant that verifies access tokens of {@code kc-mcp.admin.oauth.issuer}
      * ({@code EntryTenantResolver}).
      */
     public static final String ADMIN_TENANT = "kc-mcp-admin";
@@ -66,7 +67,7 @@ public class AdminAccessFilter {
         if (staticTokenMatches(authorization, admin.token().orElse(null))) {
             return Optional.empty();
         }
-        Optional<String> issuer = admin.issuer().filter(v -> !v.isBlank());
+        Optional<String> issuer = admin.oauth().issuer().filter(v -> !v.isBlank());
         if (identity == null || identity.isAnonymous() || issuer.isEmpty()) {
             return Optional.of(unauthorized(admin, issuer));
         }
@@ -77,10 +78,10 @@ public class AdminAccessFilter {
             return Optional.of(unauthorized(admin, issuer));
         }
         Caller caller = SecurityIdentityCallerProvider.fromIdentity(identity);
-        if (!caller.hasRole(admin.role())) {
-            LOG.infof("Admin API: %s refused, lacks the role %s", caller, admin.role());
+        if (!caller.hasRole(admin.oauth().role())) {
+            LOG.infof("Admin API: %s refused, lacks the role %s", caller, admin.oauth().role());
             return Optional.of(error(403, "forbidden",
-                    "The admin API needs the role " + admin.role() + ", which the caller lacks."));
+                    "The admin API needs the role " + admin.oauth().role() + ", which the caller lacks."));
         }
         LOG.debugf("Admin API: %s", caller);
         return Optional.empty();
@@ -89,8 +90,8 @@ public class AdminAccessFilter {
     private static Response unauthorized(McpServerConfig.Admin admin, Optional<String> issuer) {
         String message = issuer
             .map(i -> "The admin API needs the bearer token of kc-mcp.admin.token or an access token of " + i
-                    + " with the role " + admin.role() + ".")
-            .orElse("The admin API needs the bearer token of kc-mcp.admin.token (no kc-mcp.admin.issuer is "
+                    + " with the role " + admin.oauth().role() + ".")
+            .orElse("The admin API needs the bearer token of kc-mcp.admin.token (no kc-mcp.admin.oauth.issuer is "
                     + "configured, so no other access token is accepted).");
         return Response.fromResponse(error(401, "unauthorized", message))
             .header("WWW-Authenticate", "Bearer realm=\"keycloak-mcp-server admin\"")

@@ -104,8 +104,8 @@ public class CallerAuth {
         if (required && !oidcEnabled) {
             throw new IllegalStateException("kc-mcp.delegation=" + delegation.name().toLowerCase()
                     + " / kc-mcp.require-caller=true / kc-mcp.security-profile=shared need the MCP endpoint to authenticate"
-                    + " callers: set " + "quarkus.oidc.tenant-enabled=true (env QUARKUS_OIDC_TENANT_ENABLED) and point "
-                    + "quarkus.oidc.auth-server-url at the realm that issues the caller tokens");
+                    + " callers: set " + "kc-mcp.mcp.oauth.enabled=true (env KC_MCP_MCP_OAUTH_ENABLED) and point "
+                    + "kc-mcp.mcp.oauth.issuer at the realm that issues the caller tokens");
         }
     }
 

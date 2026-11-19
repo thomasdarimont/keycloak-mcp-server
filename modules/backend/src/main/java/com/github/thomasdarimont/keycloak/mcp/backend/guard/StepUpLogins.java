@@ -73,7 +73,7 @@ import io.vertx.core.json.JsonObject;
 public class StepUpLogins {
 
     /** The pages of the browser login, relative to the HTTP root. */
-    public static final String PATH = "/step-up";
+    public static final String PATH = "/auth/step-up";
 
     private static final String DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 
@@ -185,7 +185,7 @@ public class StepUpLogins {
         }
     }
 
-    /** The link of a browser login: {@code /step-up/<id>}. */
+    /** The link of a browser login: {@code /auth/step-up/<id>}. */
     public record Ticket(String id, Request request, long expiresAt) {
 
         JsonObject json() {

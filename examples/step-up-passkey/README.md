@@ -171,8 +171,8 @@ The login and the Admin API calls:
 | `KC_MCP_DELEGATION` | `exchange` | Admin API calls run with a delegated token for the caller and the server's client |
 | `KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID`, `…CLIENT_SECRET` | `keycloak-mcp` | the server's client (the actor); its service account holds no admin role |
 | `KC_MCP_SYSTEMS_DEFAULT_VERSION` | `26.8.2` | stated, because the server's client may not read the server info |
-| `QUARKUS_OIDC_TOKEN_AUDIENCE` | `keycloak-mcp` | only tokens issued for the MCP server are accepted |
-| `QUARKUS_OIDC_RESOURCE_METADATA_SCOPES` | `openid,delegation:client:keycloak-mcp` | what MCP clients are told to ask for; without the delegation scope every tool answers `delegation_failed` |
+| `KC_MCP_MCP_OAUTH_AUDIENCE` | `keycloak-mcp` | only tokens issued for the MCP server are accepted |
+| `KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES` | `openid,delegation:client:keycloak-mcp` | what MCP clients are told to ask for; without the delegation scope every tool answers `delegation_failed` |
 
 In the realm, `keycloak-mcp` may carry at most `realm-admin` in a delegated token (`clientScopeMappings`), so alice
 can still delete users; carol's `view-users` stays what it is.

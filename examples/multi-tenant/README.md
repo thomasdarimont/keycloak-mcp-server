@@ -64,7 +64,7 @@ replace the file vault.
 
 ## User login per realm (`mcp-users`, port 8092)
 
-The second server requires an OAuth login at its MCP endpoint (`QUARKUS_OIDC_TENANT_ENABLED=true`) and makes
+The second server requires an OAuth login at its MCP endpoint (`KC_MCP_MCP_OAUTH_ENABLED=true`) and makes
 every Admin API call with a delegated token (`KC_MCP_DELEGATION=exchange`): Keycloak issues it for the user and
 the tenant's client together (token exchange delegation, preview in Keycloak 26.8; `sub` is the user, `act` is
 `keycloak-mcp-server-<tenant>`). The user's own token opens the MCP server only and never reaches the Admin API.
@@ -82,7 +82,7 @@ tenant with its one client id and one key; what each realm that users log in at 
   `realm-management` roles a delegated token may carry at most.
 - **`mcp-consumer`**: the public PKCE client MCP clients log the user in with requires consent, offers the
   optional scope `delegation:client` and puts `keycloak-mcp-server` (what the server accepts,
-  `QUARKUS_OIDC_TOKEN_AUDIENCE`) and the tenant's client into the token's audience. It has no `kc-admin-api`
+  `KC_MCP_MCP_OAUTH_AUDIENCE`) and the tenant's client into the token's audience. It has no `kc-admin-api`
   scope and no role scope.
 - **Admin Permissions**: the realm has them enabled, and the onboarding job grants the tenant's client the
   permission *Users / delegate* (`init/grant-delegation.sh`, called by `init/onboard-tenants.sh`). A realm import

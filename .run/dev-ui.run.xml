@@ -18,13 +18,13 @@
               <entry key="KC_MCP_STORAGE_SECRET_KEY" value="demo-storage-key-change-me" />
               <entry key="KC_MCP_DYNAMIC_SYSTEMS" value="true" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />
-              <entry key="KC_MCP_UI_ISSUER" value="http://localhost:8080/realms/demo" />
-              <entry key="KC_MCP_UI_CLIENT_ID" value="keycloak-mcp-ui" />
-              <entry key="KC_MCP_ADMIN_ROLE" value="realm-management.realm-admin" />
+              <entry key="KC_MCP_UI_OIDC_ISSUER" value="http://localhost:8080/realms/demo" />
+              <entry key="KC_MCP_UI_OIDC_CLIENT_ID" value="keycloak-mcp-ui" />
+              <entry key="KC_MCP_ADMIN_OAUTH_ROLE" value="realm-management.realm-admin" />
               <entry key="KC_MCP_UI_VIEWER_ROLE" value="realm-management.view-users" />
               <entry key="KC_MCP_ADMIN_ENABLED" value="true" />
-              <entry key="KC_MCP_ADMIN_ISSUER" value="http://localhost:8080/realms/demo" />
-              <entry key="KC_MCP_ADMIN_AUDIENCE" value="mcp-admin" />
+              <entry key="KC_MCP_ADMIN_OAUTH_ISSUER" value="http://localhost:8080/realms/demo" />
+              <entry key="KC_MCP_ADMIN_OAUTH_AUDIENCE" value="mcp-admin" />
               <entry key="QUARKUS_TLS_KEY_STORE_PEM_UI_CERT" value=".certs/localhost.pem" />
               <entry key="QUARKUS_TLS_KEY_STORE_PEM_UI_KEY" value=".certs/localhost-key.pem" />
             </map>

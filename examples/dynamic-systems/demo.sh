@@ -42,7 +42,7 @@ for _ in $(seq 1 60); do curl -s -o /dev/null "$MCP/mcp" && break; sleep 1; done
 curl -s -o /dev/null "$MCP/mcp" || { echo "no MCP server at $MCP: docker compose up -d --build first" >&2; exit 1; }
 
 step "1. register the system 'acme' (stored in PostgreSQL, key pair generated in the database vault)"
-SYSTEM=$(admin -X PUT "$MCP/admin/systems/acme" -d @- <<'JSON'
+SYSTEM=$(admin -X PUT "$MCP/api/admin/systems/acme" -d @- <<'JSON'
 {
   "displayName": "ACME Corp.",
   "description": "ACME's Keycloak, administered through the MCP server",
@@ -61,7 +61,7 @@ JSON
 echo "$SYSTEM" | jq .
 if echo "$SYSTEM" | jq -e '.error == "signing_key_exists"' >/dev/null; then
   echo "(already registered with a key; replacing the settings, keeping the key)"
-  SYSTEM=$(admin -X PUT "$MCP/admin/systems/acme" -d "$(echo '{}' | jq '. + {"displayName":"ACME Corp.","description":"ACME'"'"'s Keycloak, administered through the MCP server","url":"http://keycloak:8080","issuer":"http://localhost:8090/realms/acme-dev","authRealm":"acme-dev","defaultRealm":"acme-dev","allowedRealms":["acme-dev"],"version":"26.8.2","signingKey":"existing"}')")
+  SYSTEM=$(admin -X PUT "$MCP/api/admin/systems/acme" -d "$(echo '{}' | jq '. + {"displayName":"ACME Corp.","description":"ACME'"'"'s Keycloak, administered through the MCP server","url":"http://keycloak:8080","issuer":"http://localhost:8090/realms/acme-dev","authRealm":"acme-dev","defaultRealm":"acme-dev","allowedRealms":["acme-dev"],"version":"26.8.2","signingKey":"existing"}')")
 fi
 JWKS_PATH=$(echo "$SYSTEM" | jq -r .signingKey.jwksPath)
 JWKS_URL="$MCP_INTERNAL$JWKS_PATH"
@@ -114,11 +114,11 @@ $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
 TOKEN_URL=http://localhost:8090/realms/master/protocol/openid-connect/token
 ADMIN_AT=$(curl -s "$TOKEN_URL" \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
-curl -sS "$MCP/admin/systems" \
+curl -sS "$MCP/api/admin/systems" \
   -H "Authorization: Bearer $ADMIN_AT" | jq -c '[.systems[] | {alias, source}]'
 CLI_AT=$(curl -s "$TOKEN_URL" \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' | jq -r .access_token)
-curl -s "$MCP/admin/systems" \
+curl -s "$MCP/api/admin/systems" \
   -H "Authorization: Bearer $CLI_AT" \
   -o /dev/null -w 'the same with an admin-cli token (no audience, no roles): HTTP %{http_code}\n'
 
@@ -131,7 +131,7 @@ if [ -z "$UI_CLIENT_ID" ]; then
 else
   echo "client keycloak-mcp-ui exists"
 fi
-# the only role the UI's API needs (kc-mcp.admin.role, realm:admin by default) in the client's role scope
+# the only role the UI needs (kc-mcp.ui.operator-role, by default the admin API's: realm:admin) in the client's role scope
 $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KCADM create "clients/$UI_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
 echo "management UI: $MCP/ui/ (admin / admin)"
@@ -157,10 +157,10 @@ export MCP_CALL_QUIET=1                             # the login and consent step
 if [ -z "$SKIP_ADOPT" ]; then
   step "5a. a second Keycloak, Globex' (:8089): registered as the system 'globex', its client lives in master"
   GLOBEX_SYSTEM='{"displayName":"Globex Corp.","description":"Globex\u0027 Keycloak, its realms adopted one by one","url":"http://keycloak-globex:8080","issuer":"http://localhost:8089/realms/master","authRealm":"master","clientId":"keycloak-mcp-server","clientAuth":"private_key_jwt","version":"26.8.2"}'
-  GLOBEX=$(admin -X PUT "$MCP/admin/systems/globex" -d "$(jq -c '. + {signingKey: "generate"}' <<<"$GLOBEX_SYSTEM")")
+  GLOBEX=$(admin -X PUT "$MCP/api/admin/systems/globex" -d "$(jq -c '. + {signingKey: "generate"}' <<<"$GLOBEX_SYSTEM")")
   if jq -e '.error == "signing_key_exists"' >/dev/null <<<"$GLOBEX"; then
     echo "(already registered with a key; keeping the key and the realms adopted so far)"
-    GLOBEX=$(admin "$MCP/admin/systems/globex")
+    GLOBEX=$(admin "$MCP/api/admin/systems/globex")
   fi
   jq -c '{alias, url, authRealm, clientAuth, allowedRealms, entries}' <<<"$GLOBEX"
 
@@ -171,21 +171,21 @@ if [ -z "$SKIP_ADOPT" ]; then
     echo "client keycloak-mcp-server exists in Globex' master realm"
   else
     echo "before the client exists, listing the realms answers:"
-    admin "$MCP/admin/systems/globex/keycloak-realms" | jq -c '{error}'
+    admin "$MCP/api/admin/systems/globex/keycloak-realms" | jq -c '{error}'
     # roles=admin: the master admin role, every realm; credential=public-key: the key is copied into the client,
     # for a Keycloak that cannot fetch it from the server's JWKS URL
-    SETUP=$(admin "$MCP/admin/systems/globex/client-setup?roles=admin&credential=public-key")
+    SETUP=$(admin "$MCP/api/admin/systems/globex/client-setup?roles=admin&credential=public-key")
     jq -c '{client: (.client | {clientId, clientAuthenticatorType, fullScopeAllowed}), roles: .roles.mode}' <<<"$SETUP"
     jq -r .script <<<"$SETUP" | ./adopt-setup.sh 2>&1 | sed '/^$/d'      # kcadm reports on stderr
   fi
 
   step "5c. the realms the client's service account sees there; none is adopted yet on a first run"
-  admin "$MCP/admin/systems/globex/keycloak-realms" | jq -c '.realms[] | {name, displayName, enabled, adopted}'
+  admin "$MCP/api/admin/systems/globex/keycloak-realms" | jq -c '.realms[] | {name, displayName, enabled, adopted}'
 
   step "5d. adopt two of them: they become the system's allowlist, with Keycloak's realm id and display name"
-  admin -X POST "$MCP/admin/systems/globex/adoption" -d '{"realms": ["globex-staff", "globex-customers"], "restrict": true}' \
+  admin -X POST "$MCP/api/admin/systems/globex/adoption" -d '{"realms": ["globex-staff", "globex-customers"], "restrict": true}' \
     | jq -c 'del(.system) | with_entries(select(.value != null and .value != []))'
-  admin "$MCP/admin/systems/globex" | jq -c '{allowedRealms, entries}'
+  admin "$MCP/api/admin/systems/globex" | jq -c '{allowedRealms, entries}'
 
   step "5e. tools in an adopted realm, and in one that was not adopted"
   ./mcp-call.py "$MCP/mcp/systems/globex/globex-staff" keycloak_user_search '{"search": "*"}' | jq -c '[.items[]?.username] // .'

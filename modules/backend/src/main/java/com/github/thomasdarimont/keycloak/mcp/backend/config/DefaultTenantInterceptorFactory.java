@@ -14,7 +14,7 @@ import io.smallrye.config.Priorities;
 
 /**
  * Points the default OIDC tenant at the default Keycloak system: when
- * {@code quarkus.oidc.auth-server-url} is not set, it becomes
+ * {@code kc-mcp.mcp.oauth.issuer} is not set, it becomes
  * {@code <url>/realms/<auth-realm>} of the system {@code kc-mcp.default-system} names,
  * else of the only configured system; several systems without that setting derive nothing
  * (a system's name carries no meaning). Callers of the MCP endpoint are then verified

@@ -621,7 +621,7 @@ public class AdminAdoption {
             case CLIENT_SECRET -> {
                 client.put("clientAuthenticatorType", "client-secret");
                 notes.add("Keycloak generates the secret: copy it from the client's Credentials tab into a secret of"
-                        + " this server (PUT /admin/secrets/<name>) and set the system's clientSecret to"
+                        + " this server (PUT /api/admin/secrets/<name>) and set the system's clientSecret to"
                         + " vault:<name>.");
             }
             default -> throw new AdminException(409, "not_a_service_client",

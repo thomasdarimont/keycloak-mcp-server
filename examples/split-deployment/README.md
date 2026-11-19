@@ -6,7 +6,7 @@ The same server in two instance roles on one PostgreSQL database
 | service | port | `kc-mcp.instance-role` | serves | database user |
 |---|---|---|---|---|
 | `admin` | 127.0.0.1:8094 | `admin` | admin API (and the management UI, when enabled); `/mcp` answers 404 | `kcmcp_admin`: owns the schema, runs the migrations, purges old audit rows |
-| `mcp` | 8095 | `mcp` | the MCP endpoint for people (delegation mode `exchange`); `/admin` answers 404 | `kcmcp_mcp`: reads systems, realms, secrets, keys; appends audit rows; keeps CIBA approvals |
+| `mcp` | 8095 | `mcp` | the MCP endpoint for people (delegation mode `exchange`); `/api/admin` answers 404 | `kcmcp_mcp`: reads systems, realms, secrets, keys; appends audit rows; keeps CIBA approvals |
 
 Keycloak runs on :8093 (`admin`/`admin`), PostgreSQL on :5491. In a real deployment `mcp` sits behind the public
 ingress and `admin` on the internal network only. The MCP clients, and the models behind them, never reach the admin
@@ -43,7 +43,7 @@ to the Admin API. The user's own token never leaves the MCP instance. The client
 
    | attempt | answer |
    |---|---|
-   | `GET`/`PUT /admin/systems` on the MCP instance, with the admin token | 404 |
+   | `GET`/`PUT /api/admin/systems` on the MCP instance, with the admin token | 404 |
    | the MCP endpoint on the admin instance | 404 |
    | the admin API with alice's MCP token (audience `keycloak-mcp-server`) | 401 |
    | the admin API with a master admin's token without the admin audience | 401 |
@@ -79,7 +79,7 @@ to the Admin API. The user's own token never leaves the MCP instance. The client
   | `kc_mcp_user_session`, Liquibase's tables | none |
 
 - **What has to happen on the admin side**, because the MCP side cannot write it:
-  - signing keys: register with `"signingKey": "generate"`, and rotate with `POST /admin/systems/<alias>/signing-key`.
+  - signing keys: register with `"signingKey": "generate"`, and rotate with `POST /api/admin/systems/<alias>/signing-key`.
     An MCP instance that meets a `private_key_jwt` system without a key would have to create one, which its
     database user may not: the key has to exist before the MCP side uses the system. In delegation mode `exchange`
     the MCP instance signs two requests with that key, the client's own token and the token exchange.

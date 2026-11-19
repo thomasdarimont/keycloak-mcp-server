@@ -17,12 +17,12 @@ setting, `kc-mcp.instance-role`: an `admin` instance has no MCP endpoint, so the
 
 | | `local` | `shared` |
 |---|---|---|
-| MCP endpoint | anonymous, behind DNS rebinding protection | callers must authenticate: `quarkus.oidc.tenant-enabled=true` **and** `quarkus.oidc.token.audience` |
+| MCP endpoint | anonymous, behind DNS rebinding protection | callers must authenticate: `kc-mcp.mcp.oauth.enabled=true` **and** `kc-mcp.mcp.oauth.audience` |
 | destructive tools without elicitation | `confirm: true` accepted (`confirm-fallback=flag`) | refused (`confirm-fallback=deny`) |
 | system and realm of destructive tools | defaults fill in (`explicit-target=off`) | must be named (`explicit-target=destructive`) |
 | systems registered at runtime on private addresses | allowed (`dynamic-private-hosts=allow`) | only hosts named literally in `allowed-hosts` (`listed`) |
 | outbound Keycloak hosts | unrestricted | `kc-mcp.allowed-hosts` required |
-| admin API with an issuer | | needs `kc-mcp.admin.audience` |
+| admin API with an issuer | | needs `kc-mcp.admin.oauth.audience` |
 | `grant-type=password` (a person's account signs in) | allowed | refused: every system needs a service client |
 | database storage | encryption warned about | needs `kc-mcp.storage.secret-key` |
 | MCP traffic log | allowed | refuses to start with it on |
@@ -228,7 +228,7 @@ The real boundary is the roles of the identity the server uses. Pick the level, 
 | full admin | client in `master` with `admin`, or an admin user via `admin-cli` | nothing |
 | realm admin | confidential client **in the realm** with `realm-admin` | `kc-mcp.systems.default.allowed-realms=<realm>`, `kc-mcp.systems.default.default-realm=<realm>` |
 | realm manager | client in the realm with only the `realm-management` roles needed | as realm admin; role filtering hides the rest. Narrow further: `KC_MCP_DENIED_TOOLS=keycloak_user_delete`, `KC_MCP_READ_ONLY=true` |
-| delegated agent (exchange) | the human holds the roles and consents to the server's client acting for them (Keycloak 26.8 token exchange delegation, preview); the client's role scope caps every delegated token | `KC_MCP_DELEGATION=exchange` + the client's `client_credentials` + `QUARKUS_OIDC_TENANT_ENABLED=true` ([Callers](#callers), `examples/delegated-auth`) |
+| delegated agent (exchange) | the human holds the roles and consents to the server's client acting for them (Keycloak 26.8 token exchange delegation, preview); the client's role scope caps every delegated token | `KC_MCP_DELEGATION=exchange` + the client's `client_credentials` + `KC_MCP_MCP_OAUTH_ENABLED=true` ([Callers](#callers), `examples/delegated-auth`) |
 
 A `master` client may also manage realms through `<realm>-realm` client roles; the filter understands both.
 
@@ -410,9 +410,9 @@ of the refused call, until `max-age` or `login-validity` ends it.
   provider's own link and code. The next call asks the provider whether the user signed in. The user's browser only
   has to reach the provider, not this server. Keycloak takes the level of a device login from the client's *Default
   ACR Values*, not from the request, so the client needs the wanted level there and the device authorization grant.
-- **`browser`**: the link leads to a page of this server (`/step-up/<ticket>`) that says which tool asks and sends
+- **`browser`**: the link leads to a page of this server (`/auth/step-up/<ticket>`) that says which tool asks and sends
   the browser to the provider (authorization code flow with PKCE, a nonce and a state bound to the browser by a
-  cookie); the provider returns to `/step-up/callback`, the client's redirect URI. The user's browser has to reach
+  cookie); the provider returns to `/auth/step-up/callback`, the client's redirect URI. The user's browser has to reach
   this server; set `kc-mcp.hostname` to the address it does so at.
 
 ```properties
@@ -456,8 +456,8 @@ This is about the MCP endpoint and its authorization server; the admin API and t
 ([Identity providers, authorization servers and Keycloak systems](providers-and-systems.md)).
 
 `CallerProvider` reads the Quarkus `SecurityIdentity`: subject, username, issuing realm, roles. The OIDC tenant is off
-by default, so the endpoint is anonymous. `QUARKUS_OIDC_TENANT_ENABLED=true` verifies bearer tokens of
-the default system's auth realm, `<url>/realms/<auth-realm>` (`quarkus.oidc.auth-server-url` to change it, `QUARKUS_OIDC_TOKEN_AUDIENCE` to
+by default, so the endpoint is anonymous. `KC_MCP_MCP_OAUTH_ENABLED=true` verifies bearer tokens of
+the default system's auth realm, `<url>/realms/<auth-realm>` (`kc-mcp.mcp.oauth.issuer` to change it, `KC_MCP_MCP_OAUTH_AUDIENCE` to
 require an audience). `KC_MCP_DELEGATION` then decides whose identity reaches Keycloak:
 
 | | `off` (default) | `exchange` |
@@ -521,7 +521,7 @@ secret.
 So the Keycloak side decides what a stolen credential is worth:
 
 - **The narrowest roles per service client.** Only the `realm-management` roles the tools of that system need, in
-  the realms they need them (`GET /admin/systems/<alias>/client-setup?roles=read|manage|admin` prints them).
+  the realms they need them (`GET /api/admin/systems/<alias>/client-setup?roles=read|manage|admin` prints them).
 - **The user's identity instead of the service account's.** With `KC_MCP_DELEGATION=exchange` the server's client
   holds no admin role at all: its credentials alone get a token that cannot call the Admin API, so a stolen
   credential is useless without a user's token.
@@ -538,7 +538,7 @@ than `client_secret`:
 - **A signed JWT keeps the key on the server.** The server signs a short-lived assertion (`jti`, `exp`, `aud` the
   realm's issuer) per token request, and Keycloak fetches the public key from the server's JWKS. The private key never
   leaves the server, nothing replayable travels to Keycloak, and rotation and revocation happen on the server alone:
-  `POST /admin/systems/<alias>/signing-key` rotates with a grace period,
+  `POST /api/admin/systems/<alias>/signing-key` rotates with a grace period,
   `?dropPrevious=true` takes the previous keys out of the JWKS at once
   ([Several Keycloak systems](systems.md#walkthrough-a-new-system-with-private_key_jwt)). The Keycloak client
   stays as it is.
@@ -574,7 +574,7 @@ Changes made on the server do not reach every instance at once. Changes made in 
 
 **In an emergency, start in Keycloak.** Disable the affected client in every Keycloak it exists in: that is the
 only step that takes effect everywhere at once. Then clean up on the server: disable the system or rotate its key with
-`dropPrevious=true`, clear Keycloak's keys cache, and read the audit trail (`GET /admin/audit`) for what the instance
+`dropPrevious=true`, clear Keycloak's keys cache, and read the audit trail (`GET /api/admin/audit`) for what the instance
 did. Within the `cache-seconds` window an MCP instance may still serve a system disabled on the server. A faster,
 database-neutral invalidation is planned ([roadmap](development.md#status-and-roadmap)).
 

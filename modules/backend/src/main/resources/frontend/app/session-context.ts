@@ -13,6 +13,12 @@ export type SessionState = {
 
 export const sessionContext = createContext<SessionState>('kc-mcp-session');
 
+/** What a page tells someone who may read but not change: the role they lack, as the server names it. */
+export function operatorRoleHint(session: SessionState | undefined, action: string): string {
+  const role = session?.me?.adminRole;
+  return `${action} needs the operator role${role ? ` ${role}` : ''}, which your account does not have.`;
+}
+
 export function sessionCanWrite(session: SessionState | undefined): boolean {
   return hasCapability(session?.me, Cap.systemsWrite);
 }

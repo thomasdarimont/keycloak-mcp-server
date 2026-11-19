@@ -28,13 +28,13 @@ kc-mcp.systems.default.version=26.8.2
 kc-mcp.systems.default.default-realm=demo
 kc-mcp.systems.default.allowed-realms=demo
 kc-mcp.tool-exposure=hybrid
-quarkus.oidc.tenant-enabled=true
+kc-mcp.mcp.oauth.enabled=true
 # Only tokens issued for this server: the Audience mapper on mcp-consumer adds aud=mcp-admin.
-quarkus.oidc.token.audience=mcp-admin
+kc-mcp.mcp.oauth.audience=mcp-admin
 # What MCP clients are told to ask for at login; without the delegation scope every tool answers delegation_failed.
-quarkus.oidc.resource-metadata.scopes=openid,delegation:client:mcp-admin
+kc-mcp.mcp.oauth.resource-metadata.scopes=openid,delegation:client:mcp-admin
 # Realm admins are told to pass confirm: true right away instead of being asked first (guidance only).
 kc-mcp.model-confirmation-trusted-roles=realm-management.realm-admin
 # When Keycloak is reached at an internal address, the tokens and the browser still use the public one:
-#quarkus.oidc.token.issuer=https://sso.example.com/realms/demo
-#quarkus.oidc.resource-metadata.authorization-server=https://sso.example.com/realms/demo
+#kc-mcp.mcp.oauth.token-issuer=https://sso.example.com/realms/demo
+#kc-mcp.mcp.oauth.resource-metadata.authorization-server=https://sso.example.com/realms/demo

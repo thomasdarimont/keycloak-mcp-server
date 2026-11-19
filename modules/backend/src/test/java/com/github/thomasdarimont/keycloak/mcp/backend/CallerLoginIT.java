@@ -28,29 +28,29 @@ class CallerLoginIT {
 
     @Test
     void adminApiAcceptsAccessTokensOfTheTrustedIssuerWithTheRole() {
-        given().get("/admin/systems").then().statusCode(401).header("WWW-Authenticate", startsWith("Bearer"));
+        given().get("/api/admin/systems").then().statusCode(401).header("WWW-Authenticate", startsWith("Bearer"));
         // a realm admin's token opens the API ...
         given().header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "alice", "alice"))
-            .get("/admin/systems")
+            .get("/api/admin/systems")
             .then()
             .statusCode(200)
             .body("systems.alias", hasItem("default"));
         // ... a viewer's does not, nor a token without the audience
         given().header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "carol", "carol"))
-            .get("/admin/systems")
+            .get("/api/admin/systems")
             .then()
             .statusCode(403)
             .body("error", equalTo("forbidden"));
         given().header("Authorization", "Bearer " + CallerTestResource.token("other-app", "alice", "alice"))
-            .get("/admin/systems")
+            .get("/api/admin/systems")
             .then()
             .statusCode(401);
-        given().header("Authorization", "Bearer not-a-token").get("/admin/systems").then().statusCode(401);
+        given().header("Authorization", "Bearer not-a-token").get("/api/admin/systems").then().statusCode(401);
         // registering needs a mutable repository, which this profile lacks
         given().header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "alice", "alice"))
             .contentType("application/json")
             .body("{\"url\": \"" + CallerTestResource.base + "\"}")
-            .put("/admin/systems/acme")
+            .put("/api/admin/systems/acme")
             .then()
             .statusCode(503)
             .body("error", equalTo("no_mutable_repository"));
@@ -58,18 +58,18 @@ class CallerLoginIT {
         given().header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "alice", "alice"))
             .contentType("application/json")
             .body("{\"value\": \"s3cr3t\"}")
-            .put("/admin/secrets/acme/client-secret")
+            .put("/api/admin/secrets/acme/client-secret")
             .then()
             .statusCode(409)
             .body("error", equalTo("vault_read_only"));
         given().header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "alice", "alice"))
-            .get("/admin/secrets")
+            .get("/api/admin/secrets")
             .then()
             .statusCode(200)
             .body("vault", equalTo("file"))
             .body("writable", equalTo(false));
         given().header("Authorization", "Bearer " + CallerTestResource.token("mcp-consumer", "alice", "alice"))
-            .get("/admin/storage")
+            .get("/api/admin/storage")
             .then()
             .statusCode(503)
             .body("error", equalTo("storage_disabled"));

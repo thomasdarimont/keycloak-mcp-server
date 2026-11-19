@@ -34,18 +34,18 @@ public class UiTestResource extends CallerTestResource {
             throw new IllegalStateException("Keycloak bootstrap of the UI clients failed", e);
         }
         config.put("kc-mcp.ui.enabled", "true");
-        config.put("kc-mcp.ui.idps.demo.issuer", base + "/realms/demo");
-        config.put("kc-mcp.ui.idps.demo.display-name", "Demo realm");
-        config.put("kc-mcp.ui.idps.second.issuer", base + "/realms/demo");
-        config.put("kc-mcp.ui.idps.second.client-id", "keycloak-mcp-ui-2");
+        config.put("kc-mcp.ui.oidc.idps.demo.issuer", base + "/realms/demo");
+        config.put("kc-mcp.ui.oidc.idps.demo.display-name", "Demo realm");
+        config.put("kc-mcp.ui.oidc.idps.second.issuer", base + "/realms/demo");
+        config.put("kc-mcp.ui.oidc.idps.second.client-id", "keycloak-mcp-ui-2");
         config.put("quarkus.datasource.jdbc.url", "jdbc:h2:mem:kc-mcp-ui-it;DB_CLOSE_DELAY=-1");
         config.put("kc-mcp.dynamic-systems", "true");
         config.put("kc-mcp.storage.secret-key", "test-passphrase");
-        config.put("kc-mcp.ui.idps.second.session-age-extension", "PT5M");
+        config.put("kc-mcp.ui.oidc.idps.second.session-age-extension", "PT5M");
         // a tenant's provider: not on the login page, reachable through ?idp=hidden
-        config.put("kc-mcp.ui.idps.hidden.issuer", base + "/realms/demo");
-        config.put("kc-mcp.ui.idps.hidden.client-id", "keycloak-mcp-ui-2");
-        config.put("kc-mcp.ui.idps.hidden.hide-on-login-page", "true");
+        config.put("kc-mcp.ui.oidc.idps.hidden.issuer", base + "/realms/demo");
+        config.put("kc-mcp.ui.oidc.idps.hidden.client-id", "keycloak-mcp-ui-2");
+        config.put("kc-mcp.ui.oidc.idps.hidden.hide-on-login-page", "true");
         return config;
     }
 

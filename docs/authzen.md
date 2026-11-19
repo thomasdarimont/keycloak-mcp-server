@@ -137,8 +137,8 @@ Systems file (camelCase, as the other fields of a system; kebab-case is accepted
   "realms": { "sandbox": { "displayName": "Sandbox", "access": { "authorization": { "enabled": false } } } } }
 ```
 
-Admin API: the system's `authorization` with `PUT /admin/systems/<alias>`, a realm's settings with
-`PUT /admin/systems/<alias>/realms/<realm>` ([Systems](systems.md#admin-api-registering-systems-at-runtime)).
+Admin API: the system's `authorization` with `PUT /api/admin/systems/<alias>`, a realm's settings with
+`PUT /api/admin/systems/<alias>/realms/<realm>` ([Systems](systems.md#admin-api-registering-systems-at-runtime)).
 
 ### Realm settings
 

@@ -12,7 +12,8 @@ import io.vertx.core.json.JsonObject;
  * <p>
  * Configuration {@code kc-mcp.systems.<system>.realms.<realm>.*}, systems file
  * {@code "realms": {"<realm>": {"displayName": "...", "access": {...}}}}, admin API
- * {@code /admin/systems/<system>/realms/<realm>}, database table {@code kc_mcp_realm}.
+ * {@code /api/admin/systems/<system>/realms/<realm>}, database table
+ * {@code kc_mcp_realm}.
  *
  * @param name the realm's name in Keycloak, the key it is known by here
  * @param realmId Keycloak's internal id of the realm, which stays when the realm is

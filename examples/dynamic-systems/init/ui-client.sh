@@ -16,7 +16,7 @@ if [ -z "$id" ]; then
 else
   echo "client keycloak-mcp-ui exists"
 fi
-# the only role the UI's API needs (kc-mcp.admin.role, realm:admin by default) in the client's role scope
+# the only role the UI needs (kc-mcp.ui.operator-role, by default the admin API's: realm:admin) in the client's role scope
 $KC get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KC create "clients/$id/scope-mappings/realm" -r master -f - >/dev/null
 echo "management UI client ready"

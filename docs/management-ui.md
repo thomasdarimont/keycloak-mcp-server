@@ -31,14 +31,14 @@ loop.
 
 A system is one Keycloak front door (`url`). Realms are not a top-level nav section: the allowlist is
 `allowedRealms` / `defaultRealm` on the system; stored per-realm settings use
-`GET`/`PUT`/`DELETE /admin/systems/{alias}/realms[/{realm}]` (mirrored under `/bff/api/...`). Empty `allowedRealms`
+`GET`/`PUT`/`DELETE /api/admin/systems/{alias}/realms[/{realm}]` (mirrored under `/bff/api/...`). Empty `allowedRealms`
 means all realms on that cluster. Realm import / discover and Test connection still need server endpoints.
 
 ## Roles
 
 | role | config | access |
 |---|---|---|
-| operator | `kc-mcp.admin.role` (default `realm:admin`) | read and write `/bff/api/*` |
+| operator | `kc-mcp.ui.operator-role`; unset: the admin API's `kc-mcp.admin.oauth.role` (default `realm:admin`) | read and write `/bff/api/*` |
 | viewer | `kc-mcp.ui.viewer-role` (optional; unset = off) | read-only `/bff/api/*`, except the server info |
 
 The BFF enforces; the UI hides what `/bff/me` `capabilities` does not list (`systems:read`, `systems:write`,
@@ -63,12 +63,12 @@ It needs the [database storage](storage.md) and HTTPS.
 | setting | meaning |
 |---|---|
 | `kc-mcp.ui.enabled=true` | serves `/ui` and `/bff` |
-| `kc-mcp.ui.issuer` | the provider users sign in at, a Keycloak realm or another OpenID Provider: the address the server reaches it at; default `kc-mcp.admin.issuer`, else the auth realm |
-| `kc-mcp.ui.client-id` | the server's client there, `keycloak-mcp-ui` by default: public, PKCE S256, redirect URI `<server>/bff/login`, post-logout redirect URI `<server>/ui/*`; `kc-mcp.ui.client-secret` for a confidential client |
+| `kc-mcp.ui.oidc.issuer` | the provider users sign in at, a Keycloak realm or another OpenID Provider: the address the server reaches it at; default `kc-mcp.admin.oauth.issuer`, else the auth realm |
+| `kc-mcp.ui.oidc.client-id` | the server's client there, `keycloak-mcp-ui` by default: public, PKCE S256, redirect URI `<server>/bff/login`, post-logout redirect URI `<server>/ui/*`; `kc-mcp.ui.oidc.client-secret` for a confidential client |
 | `QUARKUS_TLS_KEY_STORE_PEM_UI_CERT` / `_KEY`, `quarkus.http.ssl-port` | HTTPS; `etc/mkcert.sh` writes `.certs/localhost*.pem` for local use; behind a TLS proxy set `quarkus.http.proxy.proxy-address-forwarding=true` instead |
-| `kc-mcp.ui.tls-configuration-name` | a named trust store for the server's own calls to the identity providers (private CA) |
-| `kc-mcp.ui.connect-timeout` / `read-timeout` | timeouts of those calls, default `kc-mcp.http.*` |
-| `kc-mcp.ui.scopes` / `kc-mcp.ui.auth-params.<name>` | scopes besides `openid` and extra parameters of the authorization request, also per provider (`kc-mcp.ui.idps.<alias>.scopes`, `.auth-params.<name>`, used instead of the top-level ones when set); for providers that issue a refresh token only when asked ([below](#providers-without-a-refresh-token)) |
+| `kc-mcp.ui.oidc.tls-configuration-name` | a named trust store for the server's own calls to the identity providers (private CA) |
+| `kc-mcp.ui.oidc.connect-timeout` / `read-timeout` | timeouts of those calls, default `kc-mcp.http.*` |
+| `kc-mcp.ui.oidc.scopes` / `kc-mcp.ui.oidc.auth-params.<name>` | scopes besides `openid` and extra parameters of the authorization request, also per provider (`kc-mcp.ui.oidc.idps.<alias>.scopes`, `.auth-params.<name>`, used instead of the top-level ones when set); for providers that issue a refresh token only when asked ([below](#providers-without-a-refresh-token)) |
 
 `./mvnw package` bundles the UI with Quarkus Web Bundler; turn it off at runtime with `kc-mcp.ui.enabled=false`.
 A `-Pdist` build ships the same bundle as a static jar (`modules/ui-bundle`) without the extension, which cannot run
@@ -81,7 +81,7 @@ A working setup with one or two identity providers: `examples/management-ui/`.
 
 ## Several identity providers
 
-`kc-mcp.ui.idps.<alias>.issuer`, `.client-id`, `.client-secret`, `.display-name` add one provider per alias. Each one
+`kc-mcp.ui.oidc.idps.<alias>.issuer`, `.client-id`, `.client-secret`, `.display-name` add one provider per alias. Each one
 becomes an OIDC tenant `kc-mcp-ui-<alias>` and a sign-in button that starts `/bff/login?idp=<alias>`; a session records
 which provider and subject it belongs to.
 
@@ -89,11 +89,11 @@ which provider and subject it belongs to.
   Its users sign in through `/bff/login?idp=<alias>` directly, and the UI names the provider once they are in.
 - Nothing is remembered between sessions. A logout returns to `/ui/?idp=<alias>`, and the page offers that provider
   first.
-- `kc-mcp.ui.idps.<alias>.session-age-extension` sets the session renewal per provider (below).
+- `kc-mcp.ui.oidc.idps.<alias>.session-age-extension` sets the session renewal per provider (below).
 
 ## Sessions
 
-- **Renewal.** A session is kept alive with its refresh token for `kc-mcp.ui.session-age-extension` past the ID
+- **Renewal.** A session is kept alive with its refresh token for `kc-mcp.ui.oidc.session-age-extension` past the ID
   token's expiry, 30 minutes by default, the usual SSO idle timeout. Rows carry provider, issuer, subject and the
   provider's session id (`sid`), and are deleted once their tokens are of no use.
 - **Session check.** The UI calls `POST /bff/check-session` whenever its tab becomes visible again. The server redeems
@@ -135,7 +135,7 @@ Keycloak issues a refresh token in the authorization code flow unless the client
 
 | provider | settings |
 |---|---|
-| Microsoft Entra ID | `kc-mcp.ui.idps.<alias>.scopes=offline_access` |
+| Microsoft Entra ID | `kc-mcp.ui.oidc.idps.<alias>.scopes=offline_access` |
 | Auth0, Okta | `scopes=offline_access`; Auth0 also *Allow Offline Access* on the API, Okta the *Refresh Token* grant on the app |
 | Google | `auth-params.access_type=offline`, `auth-params.prompt=consent` (Google issues a refresh token only at consent) |
 
@@ -151,7 +151,7 @@ set through `auth-params`; startup fails on them.
 | `GET /bff/me` | who is signed in, providers, `admin` / `viewer`, and `capabilities` |
 | `GET /bff/login[?idp=<alias>]` | starts the login, then `/ui/overview` |
 | `GET /bff/logout` | RP-initiated logout, session row deleted |
-| `GET /bff/api/systems[/{alias}]` | the systems, as `GET /admin/systems`; operator or viewer |
+| `GET /bff/api/systems[/{alias}]` | the systems, as `GET /api/admin/systems`; operator or viewer |
 | `PUT /bff/api/systems/{alias}` | replace a mutable system; operator only (+ CSRF header) |
 | `DELETE /bff/api/systems/{alias}` | remove a mutable system; operator only (+ CSRF) |
 | `POST /bff/api/systems/{alias}/signing-key` | rotate the signing key; operator only (+ CSRF) |
@@ -161,9 +161,9 @@ set through `auth-params`; startup fails on them.
 | `GET /bff/api/systems/{alias}/keycloak-realms` | the realms Keycloak lists for the system's service account |
 | `POST /bff/api/systems/{alias}/adoption` | adopt realms; operator only (+ CSRF) |
 | `DELETE /bff/api/systems/{alias}/adoption/{realm}` | give an adopted realm up (`?restrict=true` without an allowlist); operator only (+ CSRF) |
-| `GET /bff/api/audit` | the audit trail, as `GET /admin/audit`; operator or viewer |
-| `GET /bff/api/audit/{id}` | one event with its arguments, as `GET /admin/audit/{id}` |
-| `GET /bff/api/audit/values/{field}` | completions for its filters, as `GET /admin/audit/values/{field}` |
+| `GET /bff/api/audit` | the audit trail, as `GET /api/admin/audit`; operator or viewer |
+| `GET /bff/api/audit/{id}` | one event with its arguments, as `GET /api/admin/audit/{id}` |
+| `GET /bff/api/audit/values/{field}` | completions for its filters, as `GET /api/admin/audit/values/{field}` |
 | `POST /bff/check-session` | the session check above |
 | `POST /bff/backchannel-logout` | for the identity provider, not the browser |
 

@@ -74,7 +74,7 @@ else
   $KCADM update "clients/$ID" -r master -s fullScopeAllowed=false > /dev/null # one created before full scope went off
   echo "client keycloak-mcp-ui exists"
 fi
-# the only role the UI's API needs (kc-mcp.admin.role); full scope off keeps the others, account's too, out of its tokens
+# the only role the UI needs (kc-mcp.ui.operator-role, by default the admin API's); full scope off keeps the others, account's too, out of its tokens
 scope_admin "$(client_id keycloak-mcp-ui)"
 
 if ! $KCADM get users -r master -q username=root --fields username --format csv --noquotes | grep -qx root; then
@@ -100,7 +100,7 @@ if [ -z "$TOKEN" ]; then
 else
   echo "exists"
 fi
-echo "admin API:  curl -H 'Authorization: Bearer $TOKEN' http://localhost:9080/admin/systems"
+echo "admin API:  curl -H 'Authorization: Bearer $TOKEN' http://localhost:9080/api/admin/systems"
 echo "Swagger UI: http://localhost:9080/q/swagger-ui/ (Authorize -> adminToken -> paste the token)"
 
 # Keycloak fetches the server's JWKS as host.docker.internal:9080. Docker Desktop (macOS, Windows) reaches the

@@ -29,46 +29,46 @@ import com.github.thomasdarimont.keycloak.mcp.config.McpServerConfig;
  * Jackson turns them into JSON.
  *
  * <pre>
- * PUT    /admin/systems/{alias}              register or replace (body: the systems file fields, signingKey)
- * POST   /admin/systems                      same, alias in the body
- * GET    /admin/systems                      every known system with its source repository
- * GET    /admin/systems/{alias}
- * DELETE /admin/systems/{alias}              remove from the mutable repository, its keys from the vault
- * POST   /admin/systems/{alias}/signing-key  rotate the key (?dropPrevious=true: the old one leaves the JWKS now)
- * GET    /admin/secrets                      the names in the vault and the systems using them, never a value
- * GET    /admin/secrets/{name}
- * PUT    /admin/secrets/{name}               store or replace (body: {"value": "..."}); referenced as vault:{name}
- * DELETE /admin/secrets/{name}               remove a secret no system refers to
- * GET    /admin/storage                      encryption state: which key ids the stored values are under
- * GET    /admin/systems/{alias}/realms       the settings of the system's realms
- * GET    /admin/systems/{alias}/realms/{r}   one realm's settings
- * PUT    /admin/systems/{alias}/realms/{r}   adds or replaces them (labels, Keycloak's realm id, authorization)
- * DELETE /admin/systems/{alias}/realms/{r}   removes them; the system's settings apply again
- * GET    /admin/systems/{alias}/client-setup  the client this server needs in Keycloak, its roles, a kcadm.sh
+ * PUT    /api/admin/systems/{alias}              register or replace (body: the systems file fields, signingKey)
+ * POST   /api/admin/systems                      same, alias in the body
+ * GET    /api/admin/systems                      every known system with its source repository
+ * GET    /api/admin/systems/{alias}
+ * DELETE /api/admin/systems/{alias}              remove from the mutable repository, its keys from the vault
+ * POST   /api/admin/systems/{alias}/signing-key  rotate the key (?dropPrevious=true: the old one leaves the JWKS now)
+ * GET    /api/admin/secrets                      the names in the vault and the systems using them, never a value
+ * GET    /api/admin/secrets/{name}
+ * PUT    /api/admin/secrets/{name}               store or replace (body: {"value": "..."}); referenced as vault:{name}
+ * DELETE /api/admin/secrets/{name}               remove a secret no system refers to
+ * GET    /api/admin/storage                      encryption state: which key ids the stored values are under
+ * GET    /api/admin/systems/{alias}/realms       the settings of the system's realms
+ * GET    /api/admin/systems/{alias}/realms/{r}   one realm's settings
+ * PUT    /api/admin/systems/{alias}/realms/{r}   adds or replaces them (labels, Keycloak's realm id, authorization)
+ * DELETE /api/admin/systems/{alias}/realms/{r}   removes them; the system's settings apply again
+ * GET    /api/admin/systems/{alias}/client-setup  the client this server needs in Keycloak, its roles, a kcadm.sh
  *                                            script: ?roles=admin|read|manage realms=a,b credential=jwks-url|public-key
- * GET    /admin/systems/{alias}/keycloak-realms  the realms the system's service account sees in Keycloak
- * POST   /admin/systems/{alias}/adoption     registers some of them: {"realms": [...], "restrict", "preset"} or
+ * GET    /api/admin/systems/{alias}/keycloak-realms  the realms the system's service account sees in Keycloak
+ * POST   /api/admin/systems/{alias}/adoption     registers some of them: {"realms": [...], "restrict", "preset"} or
  *                                            {"allRealms": true}
- * DELETE /admin/systems/{alias}/adoption/{r} gives one up: off the allowlist, settings removed; ?restrict=true
+ * DELETE /api/admin/systems/{alias}/adoption/{r} gives one up: off the allowlist, settings removed; ?restrict=true
  *                                            when the system has no allowlist yet
- * POST   /admin/storage/rekey                re-encrypt everything under the current kc-mcp.storage.secret-key
- * GET    /admin/audit                        the audit trail, newest first: ?subject= caller= system= realm= tool=
+ * POST   /api/admin/storage/rekey                re-encrypt everything under the current kc-mcp.storage.secret-key
+ * GET    /api/admin/audit                        the audit trail, newest first: ?subject= caller= system= realm= tool=
  *                                            level= outcome=ok|error|<code> from= to= (ISO-8601) limit= cursor=
  *                                            traceId= anonymous=only|exclude sort=when|took|caller order=asc|desc
  *                                            args=true (without it an event only says hasArgs)
- * GET    /admin/audit/{id}                   one event with its arguments
- * GET    /admin/audit/values/{field}         recorded callers, systems, realms or tools containing ?containing=
- * GET    /admin/extensions                   the installed extensions, with their status and problem counts
- * GET    /admin/extensions/{spi}/{id}        one extension's settings: spec, values (confidential ones masked),
+ * GET    /api/admin/audit/{id}                   one event with its arguments
+ * GET    /api/admin/audit/values/{field}         recorded callers, systems, realms or tools containing ?containing=
+ * GET    /api/admin/extensions                   the installed extensions, with their status and problem counts
+ * GET    /api/admin/extensions/{spi}/{id}        one extension's settings: spec, values (confidential ones masked),
  *                                            problems; texts in the Accept-Language
- * GET    /admin/server-info                  the server, its runtime and what the extensions report about themselves
+ * GET    /api/admin/server-info                  the server, its runtime and what the extensions report about themselves
  * </pre>
  */
 @Path(AdminResource.PATH)
 @Produces(MediaType.APPLICATION_JSON)
 public class AdminResource {
 
-    public static final String PATH = "/admin";
+    public static final String PATH = "/api/admin";
 
     @Inject
     McpServerConfig config;

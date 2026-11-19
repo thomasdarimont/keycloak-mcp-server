@@ -132,7 +132,7 @@ public interface McpServerConfig {
      * is the server's own client (Keycloak 26.8 token exchange delegation, needs the
      * caller's consent and the client's {@code delegate} permission), so Keycloak
      * enforces the user's own roles. It requires the MCP endpoint to authenticate callers
-     * ({@code quarkus.oidc.tenant-enabled=true}) and a confidential client with a service
+     * ({@code kc-mcp.mcp.oauth.enabled=true}) and a confidential client with a service
      * account. The caller's token itself is never sent to the Admin API.
      */
     @WithDefault("off")
@@ -156,7 +156,7 @@ public interface McpServerConfig {
      * {@link #dnsRebindingAllowedHosts()}: a web page on the same machine would otherwise
      * reach the anonymous endpoint through a DNS name that resolves to 127.0.0.1 (DNS
      * rebinding). {@code auto} (default) protects while the endpoint is anonymous
-     * ({@code quarkus.oidc.tenant-enabled=false} and no required caller) and stands down
+     * ({@code kc-mcp.mcp.oauth.enabled=false} and no required caller) and stands down
      * once callers authenticate; {@code on} and {@code off} decide outright. Only the MCP
      * endpoint is covered, JWKS and admin routes are not.
      */
@@ -450,14 +450,72 @@ public interface McpServerConfig {
     interface Mcp {
         @WithDefault("true")
         boolean enabled();
+
+        /**
+         * The authorization server of the MCP endpoint ({@code kc-mcp.mcp.oauth.*}): the
+         * server is its resource server and accepts the access tokens it issues.
+         */
+        Oauth oauth();
+
+        /**
+         * Who may call the MCP endpoint. These settings stand for properties of Quarkus
+         * OIDC, which verifies the tokens; the server reads the values in effect there,
+         * so every one is optional here.
+         */
+        interface Oauth {
+            /**
+             * {@code true} authenticates the callers of the MCP endpoint: requests need
+             * an access token of {@link #issuer()}. Off by default, the endpoint is
+             * anonymous.
+             */
+            Optional<Boolean> enabled();
+
+            /**
+             * The authorization server, at the address the server reaches it, as the
+             * realm URL ({@code https://sso.example.com/realms/demo}). Unset: the auth
+             * realm of the default system.
+             */
+            Optional<String> issuer();
+
+            /**
+             * The issuer the tokens carry when that is not {@link #issuer()}: the public
+             * address of a Keycloak the server reaches through an internal one.
+             */
+            Optional<String> tokenIssuer();
+
+            /**
+             * The audience a token must carry, so that only tokens issued for this server
+             * are accepted. Set it whenever callers log in.
+             */
+            Optional<List<String>> audience();
+
+            /**
+             * What MCP clients are told in the protected resource metadata (RFC 9728).
+             */
+            ResourceMetadata resourceMetadata();
+        }
+
+        interface ResourceMetadata {
+            /**
+             * The authorization server MCP clients are sent to; the public address when
+             * {@link Oauth#issuer()} is an internal one. Unset: {@link Oauth#issuer()}.
+             */
+            Optional<String> authorizationServer();
+
+            /** The scopes MCP clients are told to ask for. */
+            Optional<List<String>> scopes();
+
+            /** The address of the MCP endpoint as clients know it. */
+            Optional<String> resource();
+        }
     }
 
     /**
-     * The admin API ({@code kc-mcp.admin.*}, {@code /admin/systems}): registers systems
-     * in the first mutable {@code KeycloakSystemRepository} (the database storage), with
-     * their {@code private_key_jwt} keys created in the {@code KeyVault}. Callers present
-     * either the static {@link Admin#token()} or an access token of the trusted
-     * {@link Admin#issuer()} that carries {@link Admin#role()}.
+     * The admin API ({@code kc-mcp.admin.*}, {@code /api/admin/systems}): registers
+     * systems in the first mutable {@code KeycloakSystemRepository} (the database
+     * storage), with their {@code private_key_jwt} keys created in the {@code KeyVault}.
+     * Callers present either the static {@link Admin#token()} or an access token of the
+     * trusted {@link Admin.Oauth#issuer()} that carries {@link Admin.Oauth#role()}.
      */
     Admin admin();
 
@@ -563,7 +621,7 @@ public interface McpServerConfig {
     }
 
     interface Admin {
-        /** Off by default; on needs a {@link #token()} or an {@link #issuer()}. */
+        /** Off by default; on needs a {@link #token()} or an {@link Oauth#issuer()}. */
         @WithDefault("false")
         boolean enabled();
 
@@ -574,22 +632,31 @@ public interface McpServerConfig {
         Optional<String> token();
 
         /**
-         * OAuth authorization server whose access tokens the admin API accepts, as the
-         * realm URL ({@code https://sso.example.com/realms/master}); its discovery
-         * document and keys are fetched from there.
+         * The authorization server of the admin API ({@code kc-mcp.admin.oauth.*}): the
+         * server is its resource server.
          */
-        Optional<String> issuer();
+        Oauth oauth();
 
-        /** Audience such a token must carry; unset accepts any. */
-        Optional<String> audience();
+        interface Oauth {
+            /**
+             * OAuth authorization server whose access tokens the admin API accepts, as
+             * the realm URL ({@code https://sso.example.com/realms/master}); its
+             * discovery document and keys are fetched from there.
+             */
+            Optional<String> issuer();
 
-        /**
-         * Role such a token must carry, in the server's notation: {@code realm:<role>}
-         * for a realm role, {@code <client>.<role>} for a client role. The default is the
-         * {@code admin} realm role of a Keycloak master realm.
-         */
-        @WithDefault("realm:admin")
-        String role();
+            /** Audience such a token must carry; unset accepts any. */
+            Optional<String> audience();
+
+            /**
+             * Role such a token must carry, in the server's notation:
+             * {@code realm:<role>} for a realm role, {@code <client>.<role>} for a client
+             * role. The default is the {@code admin} realm role of a Keycloak master
+             * realm.
+             */
+            @WithDefault("realm:admin")
+            String role();
+        }
 
         /**
          * Whether the admin API registers systems it does not know yet. {@code false}
@@ -619,69 +686,18 @@ public interface McpServerConfig {
         boolean enabled();
 
         /**
-         * Identity provider the UI's users log in at when no {@link #idps()} are
-         * configured, as the realm URL ({@code https://sso.example.com/realms/master}).
-         * Defaults to {@code kc-mcp.admin.issuer}, else
-         * {@code <url>/realms/<auth-realm>}.
+         * The role that makes someone an operator of the management UI, who may read and
+         * change everything there ({@code realm:<role>} or {@code <client>.<role>}, read
+         * from the access token of the sign-in provider). Unset: the admin API's
+         * {@link Admin.Oauth#role()}, which fits when the UI signs people in at the admin
+         * API's authorization server.
          */
-        Optional<String> issuer();
-
-        /**
-         * The OIDC client the server logs users in with at that provider: a public client
-         * (PKCE S256) unless {@link #clientSecret()} is set; standard flow, redirect URI
-         * {@code <server>/bff/login}, post logout redirect URI {@code <server>/ui/*}.
-         */
-        @WithDefault("keycloak-mcp-ui")
-        String clientId();
-
-        /** Set for a confidential client; unset keeps the client public. */
-        Optional<String> clientSecret();
-
-        /**
-         * How long after its ID token expired a browser session is still renewed with the
-         * refresh token before the user has to sign in again: the provider's SSO idle
-         * timeout (Keycloak's default is 30 minutes). Per provider in
-         * {@link IdpSettings#sessionAgeExtension()}.
-         */
-        @WithDefault("PT30M")
-        Duration sessionAgeExtension();
-
-        /**
-         * Named identity providers ({@code kc-mcp.ui.idps.<alias>.issuer} etc.) when the
-         * UI offers more than one way to sign in: each becomes a login choice
-         * ({@code /bff/login?idp=<alias>}) and its own OIDC tenant; a session remembers
-         * the alias it came from. Without any, the top-level issuer and client form the
-         * single provider {@code default}.
-         */
-        Map<String, IdpSettings> idps();
-
-        /**
-         * Named TLS configuration ({@code quarkus.tls.<name>.*}) the server's own calls
-         * to the identity providers use (discovery, keys, session checks), for providers
-         * behind a private CA. Unset: the JVM's default trust. Quarkus' OIDC login has
-         * its own ({@code quarkus.oidc.tls.tls-configuration-name}).
-         */
-        Optional<String> tlsConfigurationName();
-
-        /**
-         * Connect timeout of those calls; falls back to
-         * {@code kc-mcp.http.connect-timeout}.
-         */
-        @WithConverter(Durations.DurationConverter.class)
-        Optional<Duration> connectTimeout();
-
-        /**
-         * Read timeout of those calls; falls back to {@code kc-mcp.http.read-timeout}.
-         */
-        @WithConverter(Durations.DurationConverter.class)
-        Optional<Duration> readTimeout();
+        Optional<String> operatorRole();
 
         /**
          * Optional read-only role for the management UI (same notation as
-         * {@link Admin#role()}: {@code realm:<role>} or {@code <client>.<role>}). Holders
-         * may call safe {@code /bff/api/*} methods and see the UI; writes still need
-         * {@link Admin#role()}. Unset: only the admin role opens the API (unchanged from
-         * before).
+         * {@link #operatorRole()}). Holders may call safe {@code /bff/api/*} methods and
+         * see the UI; writes still need the operator role. Unset: only operators get in.
          */
         Optional<String> viewerRole();
 
@@ -697,24 +713,92 @@ public interface McpServerConfig {
         Optional<String> traceUrl();
 
         /**
-         * Scopes the sign-in asks for besides {@code openid}, for the default provider
-         * and every named one without its own. A provider that issues a refresh token
-         * only when asked needs it here: Microsoft Entra ID and Auth0
-         * {@code offline_access}. Never {@code offline_access} for Keycloak: that is an
-         * offline token, which outlives the SSO session, so the session check would keep
-         * a session the user ended.
+         * The sign-in provider of the management UI ({@code kc-mcp.ui.oidc.*}): the
+         * server is its OpenID Connect relying party.
          */
-        Optional<List<String>> scopes();
+        Oidc oidc();
 
-        /**
-         * Extra query parameters of the authorization request, for the default provider
-         * and every named one without its own; Google issues a refresh token with
-         * {@code access_type=offline} (and, for users who signed in before,
-         * {@code prompt=consent}). The parameters of the code flow itself
-         * ({@code client_id}, {@code redirect_uri}, {@code scope}, {@code state}, ...)
-         * cannot be set.
-         */
-        Map<String, String> authParams();
+        interface Oidc {
+            /**
+             * Identity provider the UI's users log in at when no {@link #idps()} are
+             * configured, as the realm URL
+             * ({@code https://sso.example.com/realms/master}). Defaults to
+             * {@code kc-mcp.admin.oauth.issuer}, else {@code <url>/realms/<auth-realm>}.
+             */
+            Optional<String> issuer();
+
+            /**
+             * The OIDC client the server logs users in with at that provider: a public
+             * client (PKCE S256) unless {@link #clientSecret()} is set; standard flow,
+             * redirect URI {@code <server>/bff/login}, post logout redirect URI
+             * {@code <server>/ui/*}.
+             */
+            @WithDefault("keycloak-mcp-ui")
+            String clientId();
+
+            /** Set for a confidential client; unset keeps the client public. */
+            Optional<String> clientSecret();
+
+            /**
+             * How long after its ID token expired a browser session is still renewed with
+             * the refresh token before the user has to sign in again: the provider's SSO
+             * idle timeout (Keycloak's default is 30 minutes). Per provider in
+             * {@link IdpSettings#sessionAgeExtension()}.
+             */
+            @WithDefault("PT30M")
+            Duration sessionAgeExtension();
+
+            /**
+             * Named identity providers ({@code kc-mcp.ui.oidc.idps.<alias>.issuer} etc.)
+             * when the UI offers more than one way to sign in: each becomes a login
+             * choice ({@code /bff/login?idp=<alias>}) and its own OIDC tenant; a session
+             * remembers the alias it came from. Without any, the top-level issuer and
+             * client form the single provider {@code default}.
+             */
+            Map<String, IdpSettings> idps();
+
+            /**
+             * Named TLS configuration ({@code quarkus.tls.<name>.*}) the server's own
+             * calls to the identity providers use (discovery, keys, session checks), for
+             * providers behind a private CA. Unset: the JVM's default trust. Quarkus'
+             * OIDC login has its own ({@code quarkus.oidc.tls.tls-configuration-name}).
+             */
+            Optional<String> tlsConfigurationName();
+
+            /**
+             * Connect timeout of those calls; falls back to
+             * {@code kc-mcp.http.connect-timeout}.
+             */
+            @WithConverter(Durations.DurationConverter.class)
+            Optional<Duration> connectTimeout();
+
+            /**
+             * Read timeout of those calls; falls back to
+             * {@code kc-mcp.http.read-timeout}.
+             */
+            @WithConverter(Durations.DurationConverter.class)
+            Optional<Duration> readTimeout();
+
+            /**
+             * Scopes the sign-in asks for besides {@code openid}, for the default
+             * provider and every named one without its own. A provider that issues a
+             * refresh token only when asked needs it here: Microsoft Entra ID and Auth0
+             * {@code offline_access}. Never {@code offline_access} for Keycloak: that is
+             * an offline token, which outlives the SSO session, so the session check
+             * would keep a session the user ended.
+             */
+            Optional<List<String>> scopes();
+
+            /**
+             * Extra query parameters of the authorization request, for the default
+             * provider and every named one without its own; Google issues a refresh token
+             * with {@code access_type=offline} (and, for users who signed in before,
+             * {@code prompt=consent}). The parameters of the code flow itself
+             * ({@code client_id}, {@code redirect_uri}, {@code scope}, {@code state},
+             * ...) cannot be set.
+             */
+            Map<String, String> authParams();
+        }
     }
 
     /** One identity provider of the management UI. */
@@ -722,11 +806,11 @@ public interface McpServerConfig {
         /** Realm URL of the provider; required. */
         String issuer();
 
-        /** Falls back to {@link Ui#clientId()}. */
+        /** Falls back to {@link Ui.Oidc#clientId()}. */
         Optional<String> clientId();
 
         /**
-         * Falls back to {@link Ui#clientSecret()} when neither is set the client is
+         * Falls back to {@link Ui.Oidc#clientSecret()} when neither is set the client is
          * public.
          */
         Optional<String> clientSecret();
@@ -734,7 +818,7 @@ public interface McpServerConfig {
         /** What the sign-in button says; defaults to the alias. */
         Optional<String> displayName();
 
-        /** Falls back to {@link Ui#sessionAgeExtension()}. */
+        /** Falls back to {@link Ui.Oidc#sessionAgeExtension()}. */
         Optional<Duration> sessionAgeExtension();
 
         /**
@@ -745,10 +829,10 @@ public interface McpServerConfig {
          */
         Optional<Boolean> hideOnLoginPage();
 
-        /** Falls back to {@link Ui#scopes()}. */
+        /** Falls back to {@link Ui.Oidc#scopes()}. */
         Optional<List<String>> scopes();
 
-        /** Falls back to {@link Ui#authParams()} when empty. */
+        /** Falls back to {@link Ui.Oidc#authParams()} when empty. */
         Map<String, String> authParams();
     }
 

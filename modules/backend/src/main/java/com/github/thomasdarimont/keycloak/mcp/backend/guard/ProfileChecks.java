@@ -59,9 +59,11 @@ public class ProfileChecks {
             .getOptionalValue("quarkus.oidc.token.audience", String.class)
             .filter(v -> !v.isBlank());
         Settings s = new Settings(config.securityProfile(), callers.oidcEnabled(), audience.isPresent(),
-                !systems.allowedHosts().unrestricted(), config.admin().enabled(), config.admin().issuer().isPresent(),
-                config.admin().audience().filter(v -> !v.isBlank()).isPresent(), config.admin().allowNewSystems(),
-                config.instanceRole(), config.mcp().enabled(), config.ui().enabled(), systems.passwordGrantSystems());
+                !systems.allowedHosts().unrestricted(), config.admin().enabled(),
+                config.admin().oauth().issuer().isPresent(),
+                config.admin().oauth().audience().filter(v -> !v.isBlank()).isPresent(),
+                config.admin().allowNewSystems(), config.instanceRole(), config.mcp().enabled(), config.ui().enabled(),
+                systems.passwordGrantSystems());
         List<ProfileCheck> checks = extensions.extensions(ProfileCheck.class);
         for (ProfileCheck c : checks) {
             LOG.infof("Profile check '%s' registered (%s)", c.id(), c.getClass().getName());
@@ -209,19 +211,20 @@ public class ProfileChecks {
         // without the MCP endpoint (instance role admin) there are no callers to
         // authenticate
         if (s.mcpEnabled() && !s.oidcEnabled()) {
-            problems.add("authenticated callers: quarkus.oidc.tenant-enabled=true (env QUARKUS_OIDC_TENANT_ENABLED)"
-                    + " with quarkus.oidc.auth-server-url pointing at the realm that issues the caller tokens");
+            problems.add("authenticated callers: kc-mcp.mcp.oauth.enabled=true (env KC_MCP_MCP_OAUTH_ENABLED)"
+                    + " with kc-mcp.mcp.oauth.issuer pointing at the realm that issues the caller tokens");
         }
         if (s.mcpEnabled() && !s.callerAudience()) {
-            problems.add("an audience on the caller tokens: quarkus.oidc.token.audience (env"
-                    + " QUARKUS_OIDC_TOKEN_AUDIENCE), so that tokens issued for other services are refused");
+            problems.add("an audience on the caller tokens: kc-mcp.mcp.oauth.audience (env"
+                    + " KC_MCP_MCP_OAUTH_AUDIENCE), so that tokens issued for other services are refused");
         }
         if (!s.hostsRestricted()) {
             problems.add("the Keycloak hosts the server may talk to: kc-mcp.allowed-hosts (env KC_MCP_ALLOWED_HOSTS),"
                     + " e.g. *.example.com,sso.internal:8443");
         }
         if (s.adminEnabled() && s.adminIssuer() && !s.adminAudience()) {
-            problems.add("an audience on the admin API tokens: kc-mcp.admin.audience (env KC_MCP_ADMIN_AUDIENCE)");
+            problems.add(
+                    "an audience on the admin API tokens: kc-mcp.admin.oauth.audience (env KC_MCP_ADMIN_OAUTH_AUDIENCE)");
         }
         // a person's password stands in for every caller, and the Keycloak audit names
         // that person for everything the server does

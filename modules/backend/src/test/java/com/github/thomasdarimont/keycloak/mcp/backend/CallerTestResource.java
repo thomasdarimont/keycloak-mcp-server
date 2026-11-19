@@ -97,14 +97,15 @@ public class CallerTestResource implements QuarkusTestResourceLifecycleManager {
                 Map.entry("kc-mcp.systems.default.allowed-realms", "demo"), Map.entry("kc-mcp.tool-exposure", "direct"),
                 Map.entry("kc-mcp.systems.default.grant-type", "client_credentials"),
                 Map.entry("kc-mcp.systems.default.username", ""), Map.entry("kc-mcp.systems.default.password", ""),
-                Map.entry("quarkus.oidc.tenant-enabled", "true"),
-                Map.entry("quarkus.oidc.auth-server-url", base + "/realms/demo"),
-                Map.entry("quarkus.oidc.token.audience", "mcp-admin"),
+                Map.entry("kc-mcp.mcp.oauth.enabled", "true"),
+                Map.entry("kc-mcp.mcp.oauth.issuer", base + "/realms/demo"),
+                Map.entry("kc-mcp.mcp.oauth.audience", "mcp-admin"),
                 // the admin API trusts the demo realm's tokens: realm admins may use it,
                 // nobody else
-                Map.entry("kc-mcp.admin.enabled", "true"), Map.entry("kc-mcp.admin.issuer", base + "/realms/demo"),
-                Map.entry("kc-mcp.admin.audience", "mcp-admin"),
-                Map.entry("kc-mcp.admin.role", "realm-management.realm-admin"));
+                Map.entry("kc-mcp.admin.enabled", "true"),
+                Map.entry("kc-mcp.admin.oauth.issuer", base + "/realms/demo"),
+                Map.entry("kc-mcp.admin.oauth.audience", "mcp-admin"),
+                Map.entry("kc-mcp.admin.oauth.role", "realm-management.realm-admin"));
     }
 
     void bootstrap() throws IOException, InterruptedException {

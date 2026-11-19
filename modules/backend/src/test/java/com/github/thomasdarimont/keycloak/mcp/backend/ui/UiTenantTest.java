@@ -69,7 +69,8 @@ class UiTenantTest {
 
     static UiTenant tenant(Map<String, Object> ui) {
         UiTenant t = new UiTenant();
-        McpServerConfig.Ui u = config(McpServerConfig.Ui.class, ui);
+        McpServerConfig.Ui.Oidc oidc = config(McpServerConfig.Ui.Oidc.class, ui);
+        McpServerConfig.Ui u = config(McpServerConfig.Ui.class, Map.of("oidc", oidc));
         t.config = config(McpServerConfig.class, Map.of("ui", u));
         return t;
     }

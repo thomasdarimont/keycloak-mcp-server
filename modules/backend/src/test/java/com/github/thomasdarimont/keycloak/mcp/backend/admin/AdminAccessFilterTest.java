@@ -30,16 +30,20 @@ public class AdminAccessFilterTest {
                 return Optional.ofNullable(token);
             }
 
-            public Optional<String> issuer() {
-                return Optional.ofNullable(issuer);
-            }
+            public Oauth oauth() {
+                return new Oauth() {
+                    public Optional<String> issuer() {
+                        return Optional.ofNullable(issuer);
+                    }
 
-            public Optional<String> audience() {
-                return Optional.empty();
-            }
+                    public Optional<String> audience() {
+                        return Optional.empty();
+                    }
 
-            public String role() {
-                return "realm:admin";
+                    public String role() {
+                        return "realm:admin";
+                    }
+                };
             }
 
             public boolean allowNewSystems() {
@@ -78,7 +82,7 @@ public class AdminAccessFilterTest {
         SecurityIdentity mcpCaller = verifiedBy("Default", "realm:admin");
         Optional<Response> r = AdminAccessFilter.decide(admin("secret", null), "Bearer eyJ...", mcpCaller);
         assertEquals(401, status(r));
-        assertTrue(String.valueOf(r.get().getEntity()).contains("no kc-mcp.admin.issuer"));
+        assertTrue(String.valueOf(r.get().getEntity()).contains("no kc-mcp.admin.oauth.issuer"));
     }
 
     @Test

@@ -94,7 +94,7 @@ token verification (OIDC discovery and signing keys), the database driver and an
 trust. A container started without the distribution's scripts has no `conf/truststores`; use `kc-mcp.truststore-paths`
 there.
 
-`kc-mcp.ui.tls-configuration-name` and `kc-mcp.spi.confirmer.ciba.tls-configuration-name` still select a separate trust
+`kc-mcp.ui.oidc.tls-configuration-name` and `kc-mcp.spi.confirmer.ciba.tls-configuration-name` still select a separate trust
 store for those calls.
 
 ## Not supported

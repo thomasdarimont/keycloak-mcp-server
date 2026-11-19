@@ -44,28 +44,28 @@ class ClosedRegistrationTest {
                 .build());
 
         admin().body("{\"url\": \"http://127.0.0.1:1\"}")
-            .put("/admin/systems/newcomer")
+            .put("/api/admin/systems/newcomer")
             .then()
             .statusCode(403)
             .body("error", equalTo("registration_closed"));
         admin().body("{\"alias\": \"newcomer\", \"url\": \"http://127.0.0.1:1\"}")
-            .post("/admin/systems")
+            .post("/api/admin/systems")
             .then()
             .statusCode(403)
             .body("error", equalTo("registration_closed"));
-        admin().get("/admin/systems").then().statusCode(200).body("systems.alias", hasItem("frozen"));
+        admin().get("/api/admin/systems").then().statusCode(200).body("systems.alias", hasItem("frozen"));
 
         // the known system: readable, changeable, rotatable, removable
-        admin().get("/admin/systems/frozen").then().statusCode(200).body("source", equalTo("db"));
+        admin().get("/api/admin/systems/frozen").then().statusCode(200).body("source", equalTo("db"));
         admin().body("{\"url\": \"http://127.0.0.1:1\", \"displayName\": \"Frozen Inc.\"}")
-            .put("/admin/systems/frozen")
+            .put("/api/admin/systems/frozen")
             .then()
             .statusCode(200)
             .body("displayName", equalTo("Frozen Inc."));
-        admin().post("/admin/systems/frozen/signing-key").then().statusCode(200);
-        admin().body("{\"value\": \"s3cr3t\"}").put("/admin/secrets/frozen/secret").then().statusCode(201);
-        admin().delete("/admin/secrets/frozen/secret").then().statusCode(204);
-        admin().delete("/admin/systems/frozen").then().statusCode(204);
-        admin().get("/admin/systems/frozen").then().statusCode(404);
+        admin().post("/api/admin/systems/frozen/signing-key").then().statusCode(200);
+        admin().body("{\"value\": \"s3cr3t\"}").put("/api/admin/secrets/frozen/secret").then().statusCode(201);
+        admin().delete("/api/admin/secrets/frozen/secret").then().statusCode(204);
+        admin().delete("/api/admin/systems/frozen").then().statusCode(204);
+        admin().get("/api/admin/systems/frozen").then().statusCode(404);
     }
 }

@@ -26,8 +26,9 @@ export interface Me {
   realm?: string;
   issuer?: string;
   roles?: string[];
+  /** The operator role as the server names it (kc-mcp.ui.operator-role, else the admin API's role). */
   adminRole?: string;
-  /** True when the session holds kc-mcp.admin.role (operator). */
+  /** True when the session holds the operator role. */
   admin?: boolean;
   /** True when the session holds kc-mcp.ui.viewer-role (read-only), if configured. */
   viewer?: boolean;

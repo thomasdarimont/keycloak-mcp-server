@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a client setup script of the MCP server inside the second Keycloak (keycloak-globex), logged in as admin: the
 # script the Adopt tab of the management UI shows (1. Client in Keycloak, copy), or the "script" of
-# GET /admin/systems/<alias>/client-setup. It creates the server's client and gives its service account the roles.
+# GET /api/admin/systems/<alias>/client-setup. It creates the server's client and gives its service account the roles.
 #
 #   pbpaste | ./adopt-setup.sh          the script from the clipboard (macOS; xclip -o or wl-paste on Linux)
 #   ./adopt-setup.sh client-setup.sh    the script from a file

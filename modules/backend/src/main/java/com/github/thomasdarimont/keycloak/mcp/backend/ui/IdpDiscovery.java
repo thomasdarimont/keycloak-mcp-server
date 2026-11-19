@@ -26,7 +26,7 @@ import io.quarkus.tls.TlsConfigurationRegistry;
  * issuer: where their keys ({@code jwks_uri}) and their token endpoint are. Quarkus keeps
  * its own copy for the login; this one serves the parts the server calls itself
  * (back-channel logout tokens, session checks), through a JAX-RS client whose TLS comes
- * from {@code kc-mcp.ui.tls-configuration-name} when set.
+ * from {@code kc-mcp.ui.oidc.tls-configuration-name} when set.
  */
 @ApplicationScoped
 public class IdpDiscovery {
@@ -55,9 +55,10 @@ public class IdpDiscovery {
     @Inject
     public IdpDiscovery(McpServerConfig config, Instance<TlsConfigurationRegistry> tls) {
         this(OutboundClients.create(
-                OutboundClients.Timeouts.of(config).with(config.ui().connectTimeout(), config.ui().readTimeout()),
-                config.ui().tlsConfigurationName().orElse(null), tls.isResolvable() ? tls.get() : null,
-                "kc-mcp.ui.tls-configuration-name"));
+                OutboundClients.Timeouts.of(config)
+                    .with(config.ui().oidc().connectTimeout(), config.ui().oidc().readTimeout()),
+                config.ui().oidc().tlsConfigurationName().orElse(null), tls.isResolvable() ? tls.get() : null,
+                "kc-mcp.ui.oidc.tls-configuration-name"));
     }
 
     public IdpDiscovery(Client client) {

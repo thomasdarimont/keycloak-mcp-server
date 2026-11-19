@@ -44,7 +44,7 @@ class McpEndpointOffTest {
                 .body(not(containsString("admin")))
                 .body(not(containsString("kc-mcp")));
         }
-        given().get("/admin/systems").then().statusCode(404).body(containsString("admin_api_disabled"));
+        given().get("/api/admin/systems").then().statusCode(404).body(containsString("admin_api_disabled"));
         given().get("/q/openapi").then().statusCode(200);
     }
 }

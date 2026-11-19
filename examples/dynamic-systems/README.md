@@ -29,7 +29,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ### 1. Register the system
 
 ```shell
-curl -s -X PUT localhost:8091/admin/systems/acme \
+curl -s -X PUT localhost:8091/api/admin/systems/acme \
   -H 'Authorization: Bearer demo-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -56,20 +56,20 @@ curl -s -X PUT localhost:8091/admin/systems/acme \
 - `authRealm`: the realm of the system's client, here `acme-dev` itself. In delegation mode `exchange` the client must
   live in the realm the users log in at, because Keycloak exchanges a token only in the realm that issued it. One
   client serves both servers: `mcp` uses its service account, `mcp-users` uses it as the actor of the delegated tokens
-- `GET /admin/systems` lists, `POST /admin/systems/acme/signing-key` rotates, `DELETE /admin/systems/acme` removes
+- `GET /api/admin/systems` lists, `POST /api/admin/systems/acme/signing-key` rotates, `DELETE /api/admin/systems/acme` removes
 - `client_secret` systems reference a vault secret (`"clientSecret": "vault:acme/client-secret"`, stored with
-  `PUT /admin/secrets/acme/client-secret`); see [Several Keycloak systems](../../docs/systems.md)
+  `PUT /api/admin/secrets/acme/client-secret`); see [Several Keycloak systems](../../docs/systems.md)
 
 Bearer: the static `KC_MCP_ADMIN_TOKEN`, or an access token of a master realm admin:
 
 ```shell
 TOKEN=$(curl -s http://localhost:8090/realms/master/protocol/openid-connect/token \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
-curl -s localhost:8091/admin/systems \
+curl -s localhost:8091/api/admin/systems \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-- `KC_MCP_ADMIN_ISSUER`: the realm; `KC_MCP_ADMIN_AUDIENCE=keycloak-mcp-server`; role `realm:admin`
+- `KC_MCP_ADMIN_OAUTH_ISSUER`: the realm; `KC_MCP_ADMIN_OAUTH_AUDIENCE=keycloak-mcp-server`; role `realm:admin`
 - `keycloak-mcp-admin` (step 2b) is a public client with that audience mapper
 - `admin-cli` tokens are refused: lightweight in Keycloak 26, no roles, no audience
 
@@ -145,18 +145,18 @@ client for the MCP server. Step 5 of `demo.sh` goes the way an administrator wou
 ```shell
 A='Authorization: Bearer demo-admin-token'
 # a: register it; the client will live in master, no realm is named yet
-curl -s -X PUT localhost:8091/admin/systems/globex -H "$A" -H 'Content-Type: application/json' -d '{
+curl -s -X PUT localhost:8091/api/admin/systems/globex -H "$A" -H 'Content-Type: application/json' -d '{
     "displayName": "Globex Corp.", "url": "http://keycloak-globex:8080",
     "issuer": "http://localhost:8089/realms/master", "authRealm": "master",
     "clientId": "keycloak-mcp-server", "clientAuth": "private_key_jwt", "version": "26.8.2",
     "signingKey": "generate"}' | jq .
 # b: the client for that Keycloak, as JSON and as a kcadm script; run the script there
-curl -s -H "$A" 'localhost:8091/admin/systems/globex/client-setup?roles=admin&credential=public-key' \
+curl -s -H "$A" 'localhost:8091/api/admin/systems/globex/client-setup?roles=admin&credential=public-key' \
   | jq -r .script | ./adopt-setup.sh
 # c: the realms its service account sees
-curl -s -H "$A" localhost:8091/admin/systems/globex/keycloak-realms | jq -c '.realms[] | {name, displayName, adopted}'
+curl -s -H "$A" localhost:8091/api/admin/systems/globex/keycloak-realms | jq -c '.realms[] | {name, displayName, adopted}'
 # d: adopt two; they become the system's allowlist
-curl -s -X POST localhost:8091/admin/systems/globex/adoption -H "$A" -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8091/api/admin/systems/globex/adoption -H "$A" -H 'Content-Type: application/json' \
   -d '{"realms": ["globex-staff", "globex-customers"], "restrict": true}' | jq .
 # e: an adopted realm answers at its own entry
 ./mcp-call.py http://localhost:8091/mcp/systems/globex/globex-staff keycloak_user_search '{"search": "*"}'

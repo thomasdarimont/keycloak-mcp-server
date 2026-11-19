@@ -103,11 +103,11 @@ class OutboundClientsTimeoutTest {
         assertEquals(Timeouts.DEFAULT, Timeouts.of(defaults));
 
         McpServerConfig tuned = config(Map.of("kc-mcp.http.connect-timeout", "2s", "kc-mcp.http.read-timeout", "PT2M",
-                "kc-mcp.ui.read-timeout", "5s"));
+                "kc-mcp.ui.oidc.read-timeout", "5s"));
         Timeouts global = Timeouts.of(tuned);
         assertEquals(Duration.ofSeconds(2), global.connect());
         assertEquals(Duration.ofMinutes(2), global.read());
-        Timeouts ui = global.with(tuned.ui().connectTimeout(), tuned.ui().readTimeout());
+        Timeouts ui = global.with(tuned.ui().oidc().connectTimeout(), tuned.ui().oidc().readTimeout());
         assertEquals(Duration.ofSeconds(2), ui.connect(), "not overridden: the global value");
         assertEquals(Duration.ofSeconds(5), ui.read());
 

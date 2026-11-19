@@ -12,8 +12,8 @@ import com.google.auto.service.AutoService;
  * env vars at 300, below the system properties at 400 that {@code QuarkusTestProfile}s
  * and {@code QuarkusTestResource}s use). A shell that still has one of the demo env files
  * sourced ({@code KC_MCP_CLIENT_SECRET}, {@code KC_MCP_DELEGATION},
- * {@code QUARKUS_OIDC_TENANT_ENABLED}, ...) must not change what the tests see. Empty
- * values clear a leaked setting: SmallRye treats them as absent for optional properties.
+ * {@code KC_MCP_MCP_OAUTH_ENABLED}, ...) must not change what the tests see. Empty values
+ * clear a leaked setting: SmallRye treats them as absent for optional properties.
  */
 @AutoService(ConfigSource.class)
 public class TestConfig implements ConfigSource {
@@ -41,7 +41,7 @@ public class TestConfig implements ConfigSource {
             // rather than blanks
             Map.entry("kc-mcp.spi.access-check.group-scope.default", "off"),
             Map.entry("kc-mcp.spi.access-check.no-escalation.default", "on"),
-            Map.entry("quarkus.oidc.tenant-enabled", "false"), Map.entry("quarkus.oidc.token.audience", ""));
+            Map.entry("kc-mcp.mcp.oauth.enabled", "false"), Map.entry("kc-mcp.mcp.oauth.audience", ""));
 
     @Override
     public Set<String> getPropertyNames() {

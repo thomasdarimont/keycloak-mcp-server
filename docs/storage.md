@@ -76,9 +76,9 @@ Rotating the key:
 
 1. Put the new key into `secret-key` and the old one into `previous-secret-keys` (comma separated; they only decrypt).
 2. Roll that out to every instance.
-3. Let the startup pass rewrite the rows, or call `POST /admin/storage/rekey`. Both are idempotent, and plain and
+3. Let the startup pass rewrite the rows, or call `POST /api/admin/storage/rekey`. Both are idempotent, and plain and
    `enc:v1` values from older builds get encrypted as well.
-4. Check that `GET /admin/storage` shows only the current key id in use.
+4. Check that `GET /api/admin/storage` shows only the current key id in use.
 5. Drop the old key from `previous-secret-keys`.
 
 Rows written under a key that is configured nowhere are reported as `remaining` and never touched.
@@ -101,8 +101,8 @@ the last snapshot stays in use ([When the database is away](#when-the-database-i
 
 - **Traces.** With tracing on (`quarkus.otel.sdk.disabled=false`), an event records the OpenTelemetry `trace_id` and
   `span_id` of the span the server runs each tool call in (`kc_mcp.tool <name>`), so the call is found in the tracing or logging system and, the other
-  way round, a trace in the audit trail (`GET /admin/audit?traceId=`). Without tracing both stay empty.
-- **Reading.** `GET /admin/audit` filters and pages the rows ([admin API](systems.md)), and the management UI's
+  way round, a trace in the audit trail (`GET /api/admin/audit?traceId=`). Without tracing both stay empty.
+- **Reading.** `GET /api/admin/audit` filters and pages the rows ([admin API](systems.md)), and the management UI's
   *Audit* page shows them to operators and viewers. In a split deployment only the admin instance reads them.
 - **Retention.** `kc-mcp.spi.audit-listener.db.retention-days` deletes older events at startup and then hourly, one statement on
   the `occurred_at` index. Unset keeps everything, like Keycloak's event store without expiration.

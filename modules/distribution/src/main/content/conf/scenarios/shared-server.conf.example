@@ -20,9 +20,9 @@ kc-mcp.systems.default.version=26.8.2
 kc-mcp.systems.default.default-realm=demo
 kc-mcp.systems.default.allowed-realms=demo
 kc-mcp.tool-exposure=hybrid
-quarkus.oidc.tenant-enabled=true
-quarkus.oidc.token.audience=mcp-admin
-quarkus.oidc.resource-metadata.scopes=openid,delegation:client:mcp-admin
+kc-mcp.mcp.oauth.enabled=true
+kc-mcp.mcp.oauth.audience=mcp-admin
+kc-mcp.mcp.oauth.resource-metadata.scopes=openid,delegation:client:mcp-admin
 kc-mcp.model-confirmation-trusted-roles=realm-management.realm-admin
 # The address clients use, so the links the server hands out do not depend on request headers (docs/tls.md).
 #kc-mcp.hostname=https://mcp.example.com

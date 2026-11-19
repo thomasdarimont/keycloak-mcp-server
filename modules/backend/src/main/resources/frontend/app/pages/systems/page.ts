@@ -4,7 +4,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { BffError, listSystems, type System } from '../../bff.js';
 import '../../kc-mcp-help.js';
 import { newSystemHref, systemHref } from '../../router.js';
-import { sessionCanWrite, sessionContext, type SessionState } from '../../session-context.js';
+import { operatorRoleHint, sessionCanWrite, sessionContext, type SessionState } from '../../session-context.js';
 
 /** Systems list via GET /bff/api/systems; each row is a Keycloak cluster/environment. */
 @customElement('kc-mcp-systems-page')
@@ -139,7 +139,7 @@ export class SystemsPage extends LitElement {
       this.canCreate = !!data.canCreate && canWrite;
       this.canCreateHint = canWrite
         ? (data.canCreateHint ?? null)
-        : 'Sign in with the operator role (kc-mcp.admin.role) to register or change systems.';
+        : operatorRoleHint(this.session, 'Registering or changing systems');
     } catch (e) {
       this.items = [];
       this.canCreate = false;

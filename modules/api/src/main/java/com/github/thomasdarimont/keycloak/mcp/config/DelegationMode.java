@@ -19,7 +19,7 @@ public enum DelegationMode {
      * the {@code delegate} permission (Admin Permissions). The delegated token carries
      * the caller's roles within the client's scope, the {@code act} claim names the
      * client, and Keycloak's audit shows both. Needs
-     * {@code quarkus.oidc.tenant-enabled=true} and a confidential client with service
+     * {@code kc-mcp.mcp.oauth.enabled=true} and a confidential client with service
      * account ({@code client_credentials}).
      */
     EXCHANGE;

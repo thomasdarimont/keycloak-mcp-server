@@ -20,7 +20,7 @@ class UiCapabilitiesTest {
 
     @Test
     void operatorGetsReadAndWrite() {
-        McpServerConfig config = config(Map.of("kc-mcp.admin.role", "realm:admin"));
+        McpServerConfig config = config(Map.of("kc-mcp.admin.oauth.role", "realm:admin"));
         Caller alice = Caller.of("a", "alice", "demo", Set.of("realm:admin"));
         assertTrue(UiCapabilities.canAccessApi(alice, config));
         assertTrue(UiCapabilities.canWrite(alice, config));
@@ -32,8 +32,8 @@ class UiCapabilitiesTest {
 
     @Test
     void viewerGetsReadsOnlyWhenConfigured() {
-        McpServerConfig config = config(
-                Map.of("kc-mcp.admin.role", "realm:admin", "kc-mcp.ui.viewer-role", "realm-management.view-users"));
+        McpServerConfig config = config(Map.of("kc-mcp.admin.oauth.role", "realm:admin", "kc-mcp.ui.viewer-role",
+                "realm-management.view-users"));
         Caller carol = Caller.of("c", "carol", "demo", Set.of("realm-management.view-users"));
         assertTrue(UiCapabilities.isViewer(carol, config));
         assertFalse(UiCapabilities.canWrite(carol, config));
@@ -47,15 +47,15 @@ class UiCapabilitiesTest {
         assertTrue(UiCapabilities.operatorOnly("/bff/api/server-info/anything"));
         assertFalse(UiCapabilities.operatorOnly("/bff/api/systems"));
         assertFalse(UiCapabilities.operatorOnly("/bff/api/server-information"));
-        McpServerConfig config = config(
-                Map.of("kc-mcp.admin.role", "realm:admin", "kc-mcp.ui.viewer-role", "realm-management.view-users"));
+        McpServerConfig config = config(Map.of("kc-mcp.admin.oauth.role", "realm:admin", "kc-mcp.ui.viewer-role",
+                "realm-management.view-users"));
         Caller carol = Caller.of("c", "carol", "demo", Set.of("realm-management.view-users"));
         assertFalse(UiCapabilities.forCaller(carol, config).contains(UiCapabilities.SERVER_READ));
     }
 
     @Test
     void withoutViewerRoleConfiguredOnlyOperatorOpensTheApi() {
-        McpServerConfig config = config(Map.of("kc-mcp.admin.role", "realm:admin"));
+        McpServerConfig config = config(Map.of("kc-mcp.admin.oauth.role", "realm:admin"));
         Caller carol = Caller.of("c", "carol", "demo", Set.of("realm-management.view-users"));
         assertFalse(UiCapabilities.canAccessApi(carol, config));
         assertTrue(UiCapabilities.forCaller(carol, config).isEmpty());
@@ -66,5 +66,15 @@ class UiCapabilitiesTest {
             .withSources(new PropertiesConfigSource(properties, "test", 100))
             .build()
             .getConfigMapping(McpServerConfig.class);
+    }
+
+    @Test
+    void theUiCanHaveAnOperatorRoleOfItsOwn() {
+        McpServerConfig config = config(
+                Map.of("kc-mcp.admin.oauth.role", "realm:admin", "kc-mcp.ui.operator-role", "realm:mcp-operators"));
+        assertEquals("realm:mcp-operators", UiCapabilities.operatorRole(config));
+        assertTrue(UiCapabilities.canWrite(Caller.of("o", "olga", "corp", Set.of("realm:mcp-operators")), config));
+        // the admin API's role says nothing about the UI then
+        assertFalse(UiCapabilities.canAccessApi(Caller.of("a", "alice", "demo", Set.of("realm:admin")), config));
     }
 }

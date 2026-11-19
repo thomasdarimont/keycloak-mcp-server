@@ -64,7 +64,7 @@ services:
       # person's machine only). The systems still come from systems.json. docs/management-ui.md
       KC_MCP_UI_ENABLED: "true"
       KC_MCP_DEV_MODE: "true"
-      KC_MCP_UI_ISSUER: http://keycloak:8080/realms/master
+      KC_MCP_UI_OIDC_ISSUER: http://keycloak:8080/realms/master
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:h2:file:./data/kc-mcp-multi-tenant
       KC_MCP_STORAGE_SECRET_KEY: demo-storage-key-change-me
       # with a database the keys would come from its vault; the tenants' keys are the provisioned ones in keys/,
@@ -105,9 +105,9 @@ services:
       KC_MCP_DELEGATION: exchange
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
-      QUARKUS_OIDC_TENANT_ENABLED: "true"
+      KC_MCP_MCP_OAUTH_ENABLED: "true"
       # only tokens minted for the MCP server (audience mapper on mcp-consumer)
-      QUARKUS_OIDC_TOKEN_AUDIENCE: keycloak-mcp-server
+      KC_MCP_MCP_OAUTH_AUDIENCE: keycloak-mcp-server
     volumes:
       - ./systems.json:/config/systems.json:ro
       - ./keys:/deployments/data/keys:ro

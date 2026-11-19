@@ -100,7 +100,7 @@ scopes:
 | `delegation:client:keycloak-mcp` | `aud=keycloak-mcp` and `may_act` naming `keycloak-mcp` | the MCP server answers 401 |
 
 The server advertises `openid` and that scope in its protected resource metadata
-(`QUARKUS_OIDC_RESOURCE_METADATA_SCOPES`), and VS Code asks for what is advertised. The user's token carries no roles
+(`KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES`), and VS Code asks for what is advertised. The user's token carries no roles
 and no Admin API audience, it opens the MCP server only. The server (`env/cimd.env`) logs in as `keycloak-mcp` and
 exchanges the user's token for a delegated one: `sub` is the user, `act` is `keycloak-mcp`, the roles are the user's
 `realm-management` roles within the role scope of `keycloak-mcp`. Admin events name the user.

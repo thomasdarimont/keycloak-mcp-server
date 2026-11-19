@@ -20,11 +20,11 @@ public enum SecurityProfile {
     LOCAL,
     /**
      * A server other people reach over the network: callers of the MCP endpoint must
-     * authenticate ({@code quarkus.oidc.tenant-enabled=true} and a
-     * {@code quarkus.oidc.token.audience} are required; not checked on an instance
-     * without the MCP endpoint, {@link InstanceRole#ADMIN}), destructive tools are
-     * confirmed through elicitation only ({@code confirm-fallback=deny}), destructive
-     * tools name their system and realm ({@code explicit-target=destructive}),
+     * authenticate ({@code kc-mcp.mcp.oauth.enabled=true} and a
+     * {@code kc-mcp.mcp.oauth.audience} are required; not checked on an instance without
+     * the MCP endpoint, {@link InstanceRole#ADMIN}), destructive tools are confirmed
+     * through elicitation only ({@code confirm-fallback=deny}), destructive tools name
+     * their system and realm ({@code explicit-target=destructive}),
      * {@code kc-mcp.allowed-hosts} is required, the admin API's issuer needs an audience,
      * the database storage needs a {@code secret-key}, and changes are refused while the
      * audit trail cannot be written ({@code audit-on-failure=refuse-changes}).

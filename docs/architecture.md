@@ -36,7 +36,7 @@ flowchart TB
     M -- "REST HTTP(S)" ---> K1
     M -- "REST HTTP(S)" ---> K2
     A -- "SQL (reads, writes)" --> D
-    R -- "REST HTTP(S)<br/>/admin" --> A
+    R -- "REST HTTP(S)<br/>/api/admin" --> A
     B -- "HTTPS<br/>/ui, /bff" --> A
     classDef client fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
     classDef server fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
@@ -61,7 +61,7 @@ Who issues the tokens in this picture, and what the server is towards each of th
 | MCP instance | `kc-mcp.instance-role=mcp`: the MCP endpoint and nothing else, no admin API and no UI | the Keycloak systems' Admin REST API; the database, to read |
 | tools and prompts | what the MCP instance offers the model: the Keycloak tools and the prompts ([Tools](tools.md)) | |
 | Keycloak systems | the Keycloaks the server administers, static from the configuration or registered at runtime ([Several Keycloak systems](systems.md)) | |
-| admin instance | `kc-mcp.instance-role=admin`: the admin API under `/admin` and, when enabled, the management UI with its backend-for-frontend; `/mcp` answers 404 | the database, to read and write |
+| admin instance | `kc-mcp.instance-role=admin`: the admin API under `/api/admin` and, when enabled, the management UI with its backend-for-frontend; `/mcp` answers 404 | the database, to read and write |
 | management client | anything that speaks REST to the admin API: `curl`, a script, a pipeline | the admin instance |
 | management UI | the browser application for the same tasks ([Management UI](management-ui.md)) | the admin instance, which signs the person in and keeps the session |
 | server database | systems, realms, secrets, signing keys, audit events, sessions ([Database storage](storage.md)) | |
