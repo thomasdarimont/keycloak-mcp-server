@@ -18,7 +18,7 @@ public class TicketConfirmer implements Confirmer {
         if (!"keycloak_user_delete".equals(r.tool().name())) {
             return Decision.abstain();
         }
-        if ("protected".equals(r.args().get("id"))) {
+        if ("protected".equals(r.args().get("username"))) {
             return Decision.declined("User 'protected' may not be deleted; open a ticket with security first.");
         }
         return r.args().containsKey("ticket") ? Decision.confirmed() : Decision.abstain();

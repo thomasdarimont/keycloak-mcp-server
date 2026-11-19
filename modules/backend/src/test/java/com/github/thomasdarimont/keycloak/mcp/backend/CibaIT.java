@@ -99,6 +99,40 @@ class CibaIT {
     }
 
     @Test
+    void aUsernameThatIsNotTheIdsIsRefusedBeforeAnyoneIsAsked() throws Exception {
+        String id = user("ciba-mixed-up");
+        McpClient alice = alice();
+        // the id of one user under the name of another: the device would show "Delete
+        // user: carol"
+        JsonObject args = new JsonObject().put("id", id).put("username", "carol");
+        JsonObject r = McpClient.text(alice.callTool("keycloak_user_delete", args));
+        assertEquals("username_mismatch", r.getString("error"), r.encode());
+        assertTrue(r.getString("message").contains("is 'ciba-mixed-up', not 'carol'"), r.encode());
+        assertTrue(Entity.delivered.isEmpty(), "no request reached the device: " + Entity.delivered);
+        assertTrue(exists("ciba-mixed-up"), "nothing was deleted");
+    }
+
+    @Test
+    void theDeviceNamesTheUserAnIdStandsFor() throws Exception {
+        String id = user("ciba-by-id");
+        JsonObject r = McpClient.text(alice().callTool("keycloak_user_logout", new JsonObject().put("id", id)));
+        requested(r);
+        assertEquals(1, Entity.delivered.size(), Entity.delivered.toString());
+        String operation = Entity.delivered.getFirst().operation();
+        assertTrue(operation.contains("ciba-by-id") && !operation.contains(id),
+                "the username Keycloak has for the id, not the id the model sent: " + operation);
+        assertEquals("ciba-by-id", r.getString("target"), "the model is told too: " + r.encode());
+    }
+
+    @Test
+    void aUserThatDoesNotExistIsRefusedBeforeAnyoneIsAsked() throws Exception {
+        JsonObject r = McpClient.text(alice().callTool("keycloak_user_logout",
+                new JsonObject().put("id", "0b9d4e0c-7f1a-4a53-9a5e-3d2f6a1c8e77")));
+        assertEquals("not_found", r.getString("error"), r.encode());
+        assertTrue(Entity.delivered.isEmpty(), "no request reached the device: " + Entity.delivered);
+    }
+
+    @Test
     void declineOnTheDeviceCancelsTheTool() throws Exception {
         Entity.mode = Entity.Mode.CANCEL;
         String id = user("ciba-cancel");

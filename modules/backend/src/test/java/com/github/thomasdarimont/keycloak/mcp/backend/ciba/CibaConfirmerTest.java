@@ -46,6 +46,7 @@ import com.github.thomasdarimont.keycloak.mcp.confirm.Decision;
 import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApproval;
 import com.github.thomasdarimont.keycloak.mcp.confirm.PendingApprovalStore;
 import com.github.thomasdarimont.keycloak.mcp.confirm.Prompter;
+import com.github.thomasdarimont.keycloak.mcp.confirm.ResolvedTarget;
 import com.github.thomasdarimont.keycloak.mcp.spi.ConfigProblem;
 import com.github.thomasdarimont.keycloak.mcp.spi.ProviderConfig;
 import com.sun.net.httpserver.HttpExchange;
@@ -715,6 +716,22 @@ class CibaConfirmerTest {
         assertEquals("Reset password: u1 (realm demo)", reset);
         assertTrue(!reset.contains("Secret"), "a password never reaches the device");
         assertTrue(CibaConfirmer.operation(op("Delete user", Map.of("username", "x".repeat(400)))).length() <= 200);
+    }
+
+    @Test
+    void theDeviceShowsWhatTheServerFoundNotWhatTheModelSent() {
+        ConfirmationRequest reset = op("Reset password",
+                Map.of("id", "9c1dd37b-f90d-4207-95df-74c86e4eab87", "password", "Secret-123"))
+            .withTargets(List.of(new ResolvedTarget("user", "carol", "9c1dd37b-f90d-4207-95df-74c86e4eab87", true)));
+        assertEquals("Reset password: carol (realm demo)", CibaConfirmer.operation(reset),
+                "the username Keycloak has for the id, not the id");
+        ConfirmationRequest mapper = op("Delete client mapper", Map.of("clientId", "c-uuid", "mapper", "audience"))
+            .withTargets(List.of(new ResolvedTarget("client", "shop-web", "c-uuid", true),
+                    new ResolvedTarget("mapper", "audience", null, true)));
+        assertEquals("Delete client mapper: client shop-web, mapper audience (realm demo)",
+                CibaConfirmer.operation(mapper), "every declared target is named, not only the client");
+        assertEquals("client shop-web, mapper audience", mapper.targetSummary());
+        assertEquals("carol", reset.targetSummary());
     }
 
     @Test

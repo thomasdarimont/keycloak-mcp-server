@@ -152,6 +152,24 @@ DESTRUCTIVE tools delete users and groups, reset passwords, log users out, unass
 and `keycloak_auth_flow_bind` count as destructive too, for the lock-out risk. `keycloak_user_delete` also demands the
 matching `username`, so an id alone cannot delete.
 
+**What the human is shown is what Keycloak has, not what the model sent.** The arguments of a call are the model's:
+an id says nothing to the person asked to approve it, and a name may stand for nothing at all. Before any confirmer
+runs, the server looks up the users, clients, groups and organizations a destructive tool names
+(`ToolSpec.Builder.targets(...)`) and hands the confirmers what it found:
+
+- The chat prompt and the CIBA device name the target by the name Keycloak has for it: `Reset user password: carol`,
+  whether the model passed `carol` or her id. The `confirmation_required` answer carries it as `target`, for the model
+  to tell the user.
+- A target that does not exist answers `not_found` at once, and nobody is asked. The same goes for
+  `keycloak_user_delete` with a username that is not the id's (`username_mismatch`).
+- Every argument that says what a destructive call acts on is shown, such as the mapper next to its client; a test
+  fails for a destructive tool with a required argument that is no declared target. Roles, aliases, mappers and other
+  names are shown as given, and are not looked up.
+- When Keycloak itself refuses the lookup, the confirmation shows the argument as sent and the tool reports the
+  refusal as usual.
+
+The handlers resolve their targets again when they run: something may change between the approval and the call.
+
 More tools can need confirmation, the same way: server-wide `kc-mcp.confirm-tools=user_set_enabled` or
 `kc-mcp.confirm-writes=true` (every tool that changes Keycloak), and per system, realm or preset the `confirm` and
 `confirm-writes` keys of the [tools section](#tool-restrictions-per-system-and-realm). Confirmation can only be

@@ -12,6 +12,7 @@ import org.keycloak.representations.idm.IdentityProviderMapperRepresentation;
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -118,6 +119,7 @@ public class IdpToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove sso", "remove google login", "unconfigure broker")
                     .schema(schema().string("alias", "Identity provider alias").required())
+                    .targets(Target.named("alias", "identity provider"))
                     .handler(this::delete)
                     .roles("manage-identity-providers")
                     .api(delete(R + "/identity-provider/instances/{alias}").path("alias", "alias"))
@@ -180,6 +182,7 @@ public class IdpToolProvider extends AbstractToolProvider {
                         .required()
                         .string("mapper", "Mapper id or name")
                         .required())
+                    .targets(Target.named("alias", "identity provider"), Target.named("mapper"))
                     .handler(this::mapperDelete)
                     .roles("manage-identity-providers")
                     .api(delete(R + "/identity-provider/instances/{alias}/mappers/{id}").path("alias", "alias")

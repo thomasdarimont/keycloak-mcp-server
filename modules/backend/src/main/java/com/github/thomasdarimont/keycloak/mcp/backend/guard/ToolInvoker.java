@@ -401,7 +401,10 @@ public class ToolInvoker {
                 ElicitationPrompter.of(ctx.elicitation(), confirmTimeout,
                         ElicitationPrompter.operation(spec.name(), system, realm, ctx.caller(), inv.args())),
                 ctx.clientName(), ctx.connectionId(), ctx.connection() != null && ctx.connection().isTransient(),
-                reason);
+                reason)
+            // what the call acts on, as Keycloak has it: the human is shown that, not the
+            // arguments; a target that does not exist ends the call here
+            .withTargets(TargetResolver.resolve(spec, inv.admin(), realm, inv.args()));
         Decision decision = confirmer.confirm(request);
         switch (decision.outcome()) {
             case DECLINED -> {
@@ -428,6 +431,10 @@ public class ToolInvoker {
                     case SERVER -> "Only the user can confirm, through this client or on their device;"
                             + " confirm: true is not accepted as a substitute.";
                 });
+                if (request.targetSummary() != null) {
+                    // for the model to tell the user what they are confirming
+                    fields.put("target", request.targetSummary());
+                }
                 fields.putAll(decision.details());
                 return Optional
                     .of(ToolResult.error("confirmation_required", decision.message() != null ? decision.message()

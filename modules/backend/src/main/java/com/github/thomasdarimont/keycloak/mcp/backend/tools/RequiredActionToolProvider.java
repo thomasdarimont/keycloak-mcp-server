@@ -16,6 +16,7 @@ import org.keycloak.representations.idm.RequiredActionProviderRepresentation;
 import org.keycloak.representations.idm.RequiredActionProviderSimpleRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -91,6 +92,7 @@ public class RequiredActionToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("reset required action", "default config", "clear max auth age")
                     .schema(schema().string("alias", ALIAS).required())
+                    .targets(Target.named("alias", "required action"))
                     .handler(this::configReset)
                     .roles("manage-realm")
                     .api(delete(R + "/authentication/required-actions/{alias}/config").path("alias", "alias"))
@@ -142,6 +144,7 @@ public class RequiredActionToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove required action", "delete required action", "uninstall action")
                     .schema(schema().string("alias", ALIAS).required())
+                    .targets(Target.named("alias", "required action"))
                     .handler(this::unregister)
                     .roles("manage-realm")
                     .api(delete(R + "/authentication/required-actions/{alias}").path("alias", "alias"))

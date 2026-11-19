@@ -24,6 +24,7 @@ import org.keycloak.representations.userprofile.config.UPAttributeRequired;
 import org.keycloak.representations.userprofile.config.UPConfig;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -154,6 +155,7 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove user attribute", "drop field", "delete custom attribute")
                     .schema(schema().string("name", "Attribute name").required())
+                    .targets(Target.named("name", "attribute"))
                     .handler(this::attributeDelete)
                     .roles("manage-realm")
                     .api(get(R + "/users/profile"), put(R + "/users/profile").body("UPConfig", "attributes"))
@@ -248,6 +250,7 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
                         .required()
                         .string("message", "Message key, e.g. loginTitle")
                         .required())
+                    .targets(Target.named("locale"), Target.named("message"))
                     .handler(this::textDelete)
                     .roles("manage-realm")
                     .api(delete(R + "/localization/{locale}/{key}").path("locale", "locale").path("key", "message"))

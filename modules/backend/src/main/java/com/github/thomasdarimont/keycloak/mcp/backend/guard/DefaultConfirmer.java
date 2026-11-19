@@ -42,7 +42,8 @@ public class DefaultConfirmer implements Confirmer {
     public Decision confirm(ConfirmationRequest r) {
         if (r.prompter().available()) {
             String message = (r.reason() != null ? r.reason() + "\n" : "") + "Confirm " + r.tool().title().toLowerCase()
-                    + (r.realm() != null ? " in realm '" + r.realm() + "'" : "") + "?\n" + r.tool().name() + " "
+                    + (r.realm() != null ? " in realm '" + r.realm() + "'" : "") + "?\n"
+                    + (r.targetSummary() != null ? "Target: " + r.targetSummary() + "\n" : "") + r.tool().name() + " "
                     + new JsonObject(Sensitive.redact(r.tool().inputSchema(), r.args())).encode();
             Optional<Boolean> answer = r.prompter().askYesNo(message);
             return answer.orElse(false) ? Decision.CONFIRMED : Decision.DECLINED;

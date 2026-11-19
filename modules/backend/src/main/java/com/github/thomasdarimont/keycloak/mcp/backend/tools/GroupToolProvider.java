@@ -16,6 +16,7 @@ import org.keycloak.representations.idm.UserRepresentation;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -104,6 +105,7 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove group", "purge team")
                     .schema(schema().string("id", GROUP_ID).required())
+                    .targets(Target.group("id"))
                     .handler(this::delete)
                     .roles("manage-users")
                     .api(delete(R + "/groups/{group-id}").path("group-id", "id"))
@@ -141,6 +143,7 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .schema(schema().string("groupId", GROUP_ID).required().string("userId", USER_ID).required())
                     .cost(ToolCost.PER_ITEM,
                             "reports the effective roles after: one call per composite role and group reached")
+                    .targets(Target.group("groupId"), Target.user("userId"))
                     .handler(this::memberRemove)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/groups/{groupId}").path("user-id", "userId")
@@ -179,6 +182,7 @@ public class GroupToolProvider extends AbstractToolProvider {
                         .required()
                         .string("role", "Realm role name")
                         .required())
+                    .targets(Target.group("groupId"), Target.named("role"))
                     .handler(this::roleUnassign)
                     .roles("manage-users")
                     .api(delete(R + "/groups/{group-id}/role-mappings/realm").path("group-id", "groupId"))
@@ -201,6 +205,7 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("revoke", "remove client role from group", "unassign")
                     .schema(groupClientRole(schema()))
+                    .targets(Target.group("groupId"), Target.client("clientId"), Target.named("role"))
                     .handler(this::clientRoleUnassign)
                     .roles("manage-users")
                     .api(delete(R + "/groups/{group-id}/role-mappings/clients/{client-id}").path("group-id", "groupId")

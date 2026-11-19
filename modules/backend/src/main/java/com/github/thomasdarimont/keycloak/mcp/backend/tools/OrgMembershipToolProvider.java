@@ -18,6 +18,7 @@ import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -122,6 +123,7 @@ public class OrgMembershipToolProvider extends AbstractToolProvider {
                         .required()
                         .string("invitationId", "Invitation id, from keycloak_org_invitations_list")
                         .required())
+                    .targets(Target.organization("organizationId"), Target.named("invitationId", "invitation"))
                     .handler(OrgToolProvider.guard(this::invitationDelete))
                     .roles("manage-realm", "manage-users")
                     .api(delete(R + "/organizations/{org-id}/invitations/{id}").path("org-id", "organizationId")
@@ -222,6 +224,7 @@ public class OrgMembershipToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove team", "delete department")
                     .schema(schema().string("organizationId", ORG_ID).required().string("group", ORG_GROUP).required())
+                    .targets(Target.organization("organizationId"), Target.named("group"))
                     .handler(OrgToolProvider.guard(this::groupDelete))
                     .roles("manage-realm")
                     .api(delete(R + "/organizations/{org-id}/groups/{group-id}").path("org-id", "organizationId")

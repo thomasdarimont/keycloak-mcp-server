@@ -21,6 +21,7 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
@@ -122,6 +123,7 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove scope", "drop scope")
                     .schema(schema().string("scope", SCOPE).required())
+                    .targets(Target.named("scope", "client scope"))
                     .handler(this::delete)
                     .roles("manage-clients")
                     .api(delete(R + "/client-scopes/{client-scope-id}").path("client-scope-id", "scope"))
@@ -145,6 +147,7 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove claim from scope", "drop mapper")
                     .schema(schema().string("scope", SCOPE).required().string("mapper", "Mapper id or name").required())
+                    .targets(Target.named("scope", "client scope"), Target.named("mapper"))
                     .handler(this::scopeMapperDelete)
                     .roles("manage-clients")
                     .api(delete(R + "/client-scopes/{client-scope-id}/protocol-mappers/models/{id}")
@@ -173,6 +176,7 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                         .required()
                         .string("mapper", "Mapper id or name")
                         .required())
+                    .targets(Target.client("clientId"), Target.named("mapper"))
                     .handler(this::clientMapperDelete)
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}/protocol-mappers/models/{id}")
@@ -241,6 +245,8 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove role from token", "role scope", "scope mapping")
                     .schema(mappingRole(mappingTarget(schema())))
+                    .targets(Target.named("scope", "client scope"), Target.client("clientId"), Target.named("role"),
+                            Target.named("roleClientId", "role client"))
                     .handler(this::scopeMappingRemove)
                     .roles("manage-clients")
                     .api(mappingOps("delete"))

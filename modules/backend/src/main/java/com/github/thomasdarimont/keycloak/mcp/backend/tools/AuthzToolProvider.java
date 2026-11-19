@@ -34,6 +34,7 @@ import org.keycloak.representations.idm.authorization.UserPolicyRepresentation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
@@ -163,6 +164,7 @@ public class AuthzToolProvider extends AbstractToolProvider {
                         .required()
                         .string("scope", "Scope name or id")
                         .required())
+                    .targets(Target.client("clientId"), Target.named("scope"))
                     .handler(this::scopeDelete)
                     .roles("manage-authorization")
                     .api(delete(RS + "/scope/{scope-id}").path("client-uuid", "clientId").path("scope-id", "scope"))
@@ -207,6 +209,7 @@ public class AuthzToolProvider extends AbstractToolProvider {
                         .required()
                         .string("resource", "Resource name or id")
                         .required())
+                    .targets(Target.client("clientId"), Target.named("resource"))
                     .handler(this::resourceDelete)
                     .roles("manage-authorization")
                     .api(delete(RS + "/resource/{resource-id}").path("client-uuid", "clientId")
@@ -246,6 +249,7 @@ public class AuthzToolProvider extends AbstractToolProvider {
                         .required()
                         .string("policy", "Policy or permission name or id")
                         .required())
+                    .targets(Target.client("clientId"), Target.named("policy"))
                     .handler(this::policyDelete)
                     .roles("manage-authorization")
                     .api(typed("delete", "/policy/{policy-id}").path("client-uuid", "clientId")

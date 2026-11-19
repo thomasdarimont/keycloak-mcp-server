@@ -39,6 +39,48 @@ class CatalogLintTest {
     @Inject
     DefaultExtensionRegistry registry;
 
+    /**
+     * Required arguments of destructive tools that are no target: a cross-check of
+     * another argument, or the content of the change rather than what it is made to.
+     */
+    static final Set<String> NOT_A_TARGET = Set.of("keycloak_user_delete.username",
+            "keycloak_workflow_create.definition", "keycloak_workflow_update.changes",
+            "keycloak_realm_partial_import.representation");
+
+    /**
+     * Whoever confirms a destructive call is shown its targets and nothing else of the
+     * arguments. A required argument no target covers would be missing from what they
+     * approve: "Delete client mapper: shop-web" without the mapper.
+     */
+    @Test
+    void destructiveToolsDeclareWhatTheyActOn() {
+        List<String> problems = new ArrayList<>();
+        for (ToolSpec spec : catalog.all()) {
+            if (!spec.isDestructive() || spec.name().startsWith("keycloak_acme_")) {
+                continue;
+            }
+            Set<String> declared = new TreeSet<>();
+            spec.targets().forEach(t -> declared.add(t.arg()));
+            for (Object required : spec.inputSchema().getJsonArray("required", new io.vertx.core.json.JsonArray())) {
+                String arg = String.valueOf(required);
+                if (Set.of("system", "realm").contains(arg) || Sensitive.argument(spec.inputSchema(), arg)
+                        || NOT_A_TARGET.contains(spec.name() + "." + arg)) {
+                    continue;
+                }
+                if (!declared.contains(arg)) {
+                    problems.add(spec.name() + ": required argument '" + arg + "' is no declared target");
+                }
+            }
+            JsonObject props = spec.inputSchema().getJsonObject("properties");
+            for (String arg : declared) {
+                if (!props.containsKey(arg)) {
+                    problems.add(spec.name() + ": target '" + arg + "' is no argument");
+                }
+            }
+        }
+        assertTrue(problems.isEmpty(), String.join("\n", problems));
+    }
+
     @Test
     void schemasAreFlatAndSmallModelFriendly() {
         List<String> problems = new ArrayList<>();

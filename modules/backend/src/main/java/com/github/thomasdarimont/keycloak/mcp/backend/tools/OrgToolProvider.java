@@ -17,6 +17,7 @@ import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolHandler;
@@ -109,6 +110,7 @@ public class OrgToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove tenant", "offboard company")
                     .schema(schema().string("organizationId", ORG_ID).required())
+                    .targets(Target.organization("organizationId"))
                     .handler(guard(this::delete))
                     .roles("manage-realm")
                     .api(delete(R + "/organizations/{org-id}").path("org-id", "organizationId"))
@@ -149,6 +151,7 @@ public class OrgToolProvider extends AbstractToolProvider {
                         .required()
                         .string("idpAlias", "Identity provider alias")
                         .required())
+                    .targets(Target.organization("organizationId"), Target.named("idpAlias", "identity provider"))
                     .handler(guard(this::idpUnlink))
                     .roles("manage-realm")
                     .api(delete(R + "/organizations/{org-id}/identity-providers/{alias}")
@@ -208,6 +211,7 @@ public class OrgToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("leave tenant", "offboard employee", "remove user from company")
                     .schema(schema().string("organizationId", ORG_ID).required().string("userId", USER_ID).required())
+                    .targets(Target.organization("organizationId"), Target.user("userId"))
                     .handler(guard(this::memberRemove))
                     .roles("manage-realm", "manage-users")
                     .api(delete(R + "/organizations/{org-id}/members/{member-id}").path("org-id", "organizationId")

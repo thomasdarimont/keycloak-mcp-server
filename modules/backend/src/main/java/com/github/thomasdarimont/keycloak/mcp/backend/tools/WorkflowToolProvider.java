@@ -10,6 +10,7 @@ import jakarta.ws.rs.core.Response;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -106,6 +107,7 @@ public class WorkflowToolProvider extends AbstractToolProvider {
                         .required()
                         .anyMap("changes", "Keys to replace, e.g. {\"enabled\": false} or {\"steps\": [...]}")
                         .required())
+                    .targets(Target.named("workflow"))
                     .handler(this::update)
                     .roles("manage-realm", "manage-users")
                     .api(get(R + "/workflows/{id}").derivedPath("id"),
@@ -119,6 +121,7 @@ public class WorkflowToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove automation", "stop workflow")
                     .schema(schema().string("workflow", WORKFLOW).required())
+                    .targets(Target.named("workflow"))
                     .handler(this::delete)
                     .roles("manage-realm", "manage-users")
                     .api(delete(R + "/workflows/{id}").derivedPath("id"))
@@ -146,6 +149,7 @@ public class WorkflowToolProvider extends AbstractToolProvider {
                         .required()
                         .string("notBefore",
                                 "First step no earlier than: ISO-8601 date, or seconds from now, e.g. 604800"))
+                    .targets(Target.named("workflow"), Target.user("userId"))
                     .handler(call -> activate(call, true))
                     .roles("manage-realm", "manage-users")
                     .api(post(R + "/workflows/{id}/activate/{type}/{resourceId}").derivedPath("id")

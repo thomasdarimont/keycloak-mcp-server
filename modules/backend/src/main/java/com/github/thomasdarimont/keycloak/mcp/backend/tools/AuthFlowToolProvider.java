@@ -22,6 +22,7 @@ import org.keycloak.representations.idm.RequiredActionProviderRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Delegation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -110,6 +111,7 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove flow", "drop login flow", "delete custom flow")
                     .schema(schema().string("flow", "Flow alias, e.g. my browser").required())
+                    .targets(Target.named("flow"))
                     .handler(this::flowDelete)
                     .roles("manage-realm")
                     .api(delete(R + "/authentication/flows/{id}").derivedPath("id"))
@@ -150,6 +152,7 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
                         .required()
                         .string("flowAlias", "Alias of the flow to bind")
                         .required())
+                    .targets(Target.named("flowAlias", "flow"), Target.named("binding"))
                     .handler(this::flowBind)
                     .delegation(Delegation.FORBIDDEN)
                     .roles("manage-realm")
@@ -277,6 +280,7 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove step", "remove authenticator", "delete subflow")
                     .schema(schema().string("executionId", EXECUTION_ID).required())
+                    .targets(Target.named("executionId", "execution"))
                     .handler(this::executionDelete)
                     .roles("manage-realm")
                     .api(delete(R + "/authentication/executions/{executionId}").path("executionId", "executionId"))

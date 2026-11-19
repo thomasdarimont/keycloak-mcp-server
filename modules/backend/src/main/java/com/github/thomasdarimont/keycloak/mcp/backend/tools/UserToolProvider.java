@@ -11,8 +11,10 @@ import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
+import com.github.thomasdarimont.keycloak.mcp.access.AccessCheck;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -156,6 +158,10 @@ public class UserToolProvider extends AbstractToolProvider {
                         .required()
                         .string("username", "Username of that user, must match")
                         .required())
+                    // before anyone is asked to confirm: the confirmation names the
+                    // username
+                    .access(UserToolProvider::deleteTarget)
+                    .targets(Target.user("id"))
                     .handler(this::delete)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}").path("user-id", "id"))
@@ -171,6 +177,7 @@ public class UserToolProvider extends AbstractToolProvider {
                         .required()
                         .sensitive()
                         .bool("temporary", "User must change it at next login (default false)"))
+                    .targets(Target.user("id"))
                     .handler(this::resetPassword)
                     .roles("manage-users")
                     .api(put(R + "/users/{user-id}/reset-password").path("user-id", "id")
@@ -214,6 +221,7 @@ public class UserToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("kick", "sign out", "signout", "revoke sessions", "terminate", "force logout")
                     .schema(schema().string("id", USER_ID).required())
+                    .targets(Target.user("id"))
                     .handler(this::logout)
                     .roles("manage-users")
                     .api(post(R + "/users/{user-id}/logout").path("user-id", "id"))
@@ -393,17 +401,51 @@ public class UserToolProvider extends AbstractToolProvider {
                 "username", u.getUsername(), "enabled", u.isEnabled());
     }
 
-    ToolResult delete(ToolCall call) {
-        String id = call.str("id");
+    /**
+     * The user a delete call names, or the reason it names none: {@code id} must be a
+     * UUID and {@code username} that user's name. The model gives both, so a wrong pair
+     * is a mix-up of two users.
+     */
+    static UserRepresentation deleteTarget(KeycloakAdmin kc, String realm, String id, String username) {
         if (!KeycloakAdmin.isUuid(id)) {
             throw new ToolException("invalid_arguments",
                     "id must be the user's UUID; look it up with keycloak_user_search.");
         }
-        UserRepresentation u = call.kc().findUser(call.realm(), id);
-        if (!u.getUsername().equalsIgnoreCase(call.str("username"))) {
-            throw new ToolException("username_mismatch", "User " + id + " is '" + u.getUsername() + "', not '"
-                    + call.str("username") + "'. Nothing deleted.");
+        UserRepresentation u = kc.findUser(realm, id);
+        if (!u.getUsername().equalsIgnoreCase(username)) {
+            throw new ToolException("username_mismatch",
+                    "User " + id + " is '" + u.getUsername() + "', not '" + username + "'. Nothing deleted.");
         }
+        return u;
+    }
+
+    /**
+     * The same check before the confirmation: whoever confirms, in the chat or on their
+     * device, is shown the username, so it has to be the name of the user the id stands
+     * for. Otherwise a person would approve "Delete user: alice" for another user's id
+     * and only learn of the mix-up when the call runs. The handler checks again, as the
+     * user may change between the confirmation and the call.
+     */
+    static AccessCheck.Decision deleteTarget(AccessCheck.Context c) {
+        if (c.keycloak() == null) {
+            return AccessCheck.Decision.allow();
+        }
+        try {
+            deleteTarget(c.keycloak(), c.realm(), c.arg("id"), c.arg("username"));
+            return AccessCheck.Decision.allow();
+        }
+        catch (ToolException e) {
+            return AccessCheck.Decision.deny(e.code(), e.getMessage());
+        }
+        catch (RuntimeException e) {
+            // Keycloak's own refusal (forbidden, unreachable): the handler reports it as
+            // every tool does
+            return AccessCheck.Decision.allow();
+        }
+    }
+
+    ToolResult delete(ToolCall call) {
+        UserRepresentation u = deleteTarget(call.kc(), call.realm(), call.str("id"), call.str("username"));
         call.kc().realm(call.realm()).users().get(u.getId()).remove();
         return ToolResult.done("User deleted", "id", u.getId(), "username", u.getUsername());
     }

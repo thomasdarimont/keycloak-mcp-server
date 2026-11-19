@@ -18,6 +18,7 @@ import org.keycloak.representations.idm.UserRepresentation;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
@@ -117,6 +118,7 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .schema(schema().string("userId", USER_ID).required().string("role", "Realm role name").required())
                     .cost(ToolCost.PER_ITEM,
                             "reports the effective roles after: one call per composite role and group reached")
+                    .targets(Target.user("userId"), Target.named("role"))
                     .handler(this::userRoleUnassign)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/role-mappings/realm").path("user-id", "userId"))
@@ -165,6 +167,7 @@ public class RoleToolProvider extends AbstractToolProvider {
                         .required()
                         .string("role", "Client role name")
                         .required())
+                    .targets(Target.user("userId"), Target.client("clientId"), Target.named("role"))
                     .handler(this::userClientRoleUnassign)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/role-mappings/clients/{client-id}").path("user-id", "userId")
@@ -218,6 +221,7 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove role", "drop role", "delete permission")
                     .schema(schema().string("role", "Realm role name").required())
+                    .targets(Target.named("role"))
                     .handler(this::delete)
                     .roles("manage-realm")
                     .api(delete(R + "/roles/{role-name}").path("role-name", "role"))
@@ -239,6 +243,8 @@ public class RoleToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("composite", "exclude role", "unnest role", "associated role")
                     .schema(compositeFields(schema()))
+                    .targets(Target.named("role"), Target.named("composite", "included role"),
+                            Target.named("compositeClientId", "included role client"))
                     .handler(this::compositeRemove)
                     .roles("manage-realm")
                     .api(delete(R + "/roles/{role-name}/composites").path("role-name", "role"))
@@ -267,6 +273,7 @@ public class RoleToolProvider extends AbstractToolProvider {
                         .required()
                         .string("role", "Client role name")
                         .required())
+                    .targets(Target.client("clientId"), Target.named("role"))
                     .handler(this::clientRoleDelete)
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}/roles/{role-name}").path("client-uuid", "clientId")

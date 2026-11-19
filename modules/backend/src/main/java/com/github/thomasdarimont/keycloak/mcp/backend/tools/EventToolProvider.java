@@ -12,6 +12,7 @@ import org.keycloak.representations.idm.EventRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -103,6 +104,7 @@ public class EventToolProvider extends AbstractToolProvider {
                     .synonyms("delete events", "purge audit log", "clear login events", "remove event history")
                     .schema(schema().enumeration("kind", "login or admin events", "login", "admin").required())
                     .cost(ToolCost.HEAVY, "deletes the realm's whole event history of that kind")
+                    .targets(Target.named("kind", "events"))
                     .handler(this::clear)
                     .roles("manage-events")
                     .api(delete(R + "/events"), delete(R + "/admin-events"))

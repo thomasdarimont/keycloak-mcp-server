@@ -18,6 +18,7 @@ import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -110,6 +111,7 @@ public class BrokeringToolProvider extends AbstractToolProvider {
                     .synonyms("unlink account", "remove federated identity", "disconnect social login",
                             "wrong account linked")
                     .schema(schema().string("userId", USER_ID).required().string("alias", ALIAS).required())
+                    .targets(Target.user("userId"), Target.named("alias", "identity provider"))
                     .handler(this::linkRemove)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/federated-identity/{provider}").path("user-id", "userId")

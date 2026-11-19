@@ -15,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -81,6 +82,7 @@ public class CredentialToolProvider extends AbstractToolProvider {
                         .string("credentialId",
                                 "Credential id, its label, or its type (otp, webauthn, password) if unique")
                         .required())
+                    .targets(Target.user("userId"), Target.named("credentialId", "credential"))
                     .handler(this::credentialDelete)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/credentials/{credentialId}").path("user-id", "userId")
@@ -126,6 +128,7 @@ public class CredentialToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("revoke app access", "remove consent", "deauthorize", "revoke offline token")
                     .schema(schema().string("userId", USER_ID).required().string("clientId", CLIENT_ID).required())
+                    .targets(Target.user("userId"), Target.client("clientId"))
                     .handler(this::consentRevoke)
                     .roles("manage-users")
                     .api(delete(R + "/users/{user-id}/consents/{client}").path("user-id", "userId")

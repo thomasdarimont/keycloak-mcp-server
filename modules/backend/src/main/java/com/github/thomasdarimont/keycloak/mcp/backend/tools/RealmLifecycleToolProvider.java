@@ -11,6 +11,7 @@ import org.keycloak.representations.adapters.action.GlobalRequestResult;
 import org.keycloak.representations.idm.RealmRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolResult;
@@ -85,6 +86,7 @@ public class RealmLifecycleToolProvider extends AbstractToolProvider {
                     .synonyms("remove realm", "drop realm", "delete tenant")
                     .schema(schema().string("name", "The realm's name again, as a check").required())
                     .cost(ToolCost.HEAVY, "deletes every user, client and group of the realm")
+                    .targets(Target.named("name", "realm"))
                     .handler(this::delete)
                     .roles("manage-realm")
                     .api(delete(R))

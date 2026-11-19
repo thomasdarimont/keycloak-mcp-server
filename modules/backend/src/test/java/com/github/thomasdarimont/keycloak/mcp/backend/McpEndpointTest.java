@@ -258,7 +258,7 @@ class McpEndpointTest {
     void serviceLoaderConfirmersRunBeforeTheBuiltInOne() {
         JsonObject refused = mcp.callTool("keycloak_user_delete",
                 new JsonObject().put("realm", "demo")
-                    .put("id", "protected")
+                    .put("id", "6f0a3a4e-1f0e-4d5b-9a53-0c2f3f6f7a11")
                     .put("username", "protected")
                     .put("confirm", true));
         assertTrue(refused.getBoolean("isError"));
@@ -268,9 +268,10 @@ class McpEndpointTest {
         // the custom confirmer abstains for other users, so the built-in confirm flag
         // rule applies
         assertEquals("confirmation_required",
-                McpClient
-                    .text(mcp.callTool("keycloak_user_delete",
-                            new JsonObject().put("realm", "demo").put("id", "u1").put("username", "u1")))
+                McpClient.text(mcp.callTool("keycloak_user_delete",
+                        new JsonObject().put("realm", "demo")
+                            .put("id", "6f0a3a4e-1f0e-4d5b-9a53-0c2f3f6f7a12")
+                            .put("username", "u1")))
                     .getString("error"));
     }
 

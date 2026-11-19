@@ -32,6 +32,7 @@ public final class ToolSpec {
     private final Set<String> requiredRoles;
     private final List<Requirement> requires;
     private final List<AccessCheck> accessChecks;
+    private final List<Target> targets;
     private final Delegation delegation;
     private final ToolHandler handler;
     private final boolean sensitiveResult;
@@ -55,6 +56,7 @@ public final class ToolSpec {
         this.requiredRoles = Set.copyOf(b.requiredRoles);
         this.requires = List.copyOf(b.requires);
         this.accessChecks = List.copyOf(b.accessChecks);
+        this.targets = List.copyOf(b.targets);
         this.delegation = b.delegation == null ? Delegation.ALLOWED : b.delegation;
         this.sensitiveResult = b.sensitiveResult;
         this.formerNames = Set.copyOf(b.formerNames);
@@ -78,6 +80,7 @@ public final class ToolSpec {
         this.requiredRoles = o.requiredRoles;
         this.requires = o.requires;
         this.accessChecks = o.accessChecks;
+        this.targets = o.targets;
         this.delegation = o.delegation;
         this.handler = o.handler;
         this.sensitiveResult = o.sensitiveResult;
@@ -165,6 +168,14 @@ public final class ToolSpec {
         return accessChecks;
     }
 
+    /**
+     * What the tool's arguments refer to, in the order a confirmation shows them; empty
+     * when the tool declares none.
+     */
+    public List<Target> targets() {
+        return targets;
+    }
+
     /** Whether the tool may run under delegated access. */
     public Delegation delegation() {
         return delegation;
@@ -225,9 +236,9 @@ public final class ToolSpec {
                 && idempotent == t.idempotent && inputSchema.equals(t.inputSchema) && synonyms.equals(t.synonyms)
                 && hot == t.hot && realmScoped == t.realmScoped && api.equals(t.api)
                 && requiredRoles.equals(t.requiredRoles) && requires.equals(t.requires)
-                && accessChecks.equals(t.accessChecks) && delegation == t.delegation && handler.equals(t.handler)
-                && sensitiveResult == t.sensitiveResult && formerNames.equals(t.formerNames) && cost == t.cost
-                && Objects.equals(costNote, t.costNote);
+                && accessChecks.equals(t.accessChecks) && targets.equals(t.targets) && delegation == t.delegation
+                && handler.equals(t.handler) && sensitiveResult == t.sensitiveResult
+                && formerNames.equals(t.formerNames) && cost == t.cost && Objects.equals(costNote, t.costNote);
     }
 
     @Override
@@ -292,6 +303,7 @@ public final class ToolSpec {
         private final Set<String> requiredRoles = new LinkedHashSet<>();
         private final List<Requirement> requires = new ArrayList<>();
         private final List<AccessCheck> accessChecks = new ArrayList<>();
+        private final List<Target> targets = new ArrayList<>();
         private Delegation delegation = Delegation.ALLOWED;
         private ToolHandler handler;
         private boolean sensitiveResult;
@@ -493,6 +505,18 @@ public final class ToolSpec {
          */
         public Builder access(AccessCheck check) {
             accessChecks.add(check);
+            return this;
+        }
+
+        /**
+         * What the arguments refer to, for the human who confirms the call: a user,
+         * client, group or organization is looked up before they are asked and shown by
+         * its name, so they approve what the call acts on and not an id the model chose;
+         * a target that does not exist ends the call before anyone is asked. Every
+         * required argument of a destructive tool that says what it acts on belongs here.
+         */
+        public Builder targets(Target... targets) {
+            this.targets.addAll(List.of(targets));
             return this;
         }
 

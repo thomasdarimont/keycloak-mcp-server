@@ -27,6 +27,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.EffectiveRoles;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ApiOperation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.InputSchema;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
@@ -118,6 +119,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .sensitiveResult()
                     .synonyms("rotate", "new secret", "reset secret", "credentials")
                     .schema(schema().string("clientId", CLIENT_ID).required())
+                    .targets(Target.client("clientId"))
                     .handler(this::regenerateSecret)
                     .delegation(Delegation.FORBIDDEN)
                     .roles("manage-clients")
@@ -159,6 +161,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("remove app", "unregister")
                     .schema(schema().string("clientId", CLIENT_ID).required())
+                    .targets(Target.client("clientId"))
                     .handler(this::delete)
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}").path("client-uuid", "clientId"))
@@ -328,6 +331,7 @@ public class ClientToolProvider extends AbstractToolProvider {
                         .required()
                         .enumeration("type", SCOPE_TYPE_DESC, "default", "optional")
                         .def("default"))
+                    .targets(Target.client("clientId"), Target.named("scope", "client scope"), Target.named("type"))
                     .handler(this::scopeUnassign)
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}/default-client-scopes/{clientScopeId}")

@@ -766,18 +766,23 @@ public class CibaConfirmer implements Confirmer {
     /** @param showSystem whether to name the system (the server has several) */
     static String operation(ConfirmationRequest r, boolean showSystem) {
         List<String[]> targets = new ArrayList<>();
-        for (Map.Entry<String, String> e : TARGET_ARGS.entrySet()) {
-            Object v = r.args().get(e.getKey());
-            if (v == null || String.valueOf(v).isBlank()) {
-                continue;
+        // what the server found in Keycloak for the tool's declared targets; the argument
+        // names below are the fallback for tools that declare none
+        r.targets().forEach(t -> targets.add(new String[] { t.label(), t.name() }));
+        if (r.targets().isEmpty()) {
+            for (Map.Entry<String, String> e : TARGET_ARGS.entrySet()) {
+                Object v = r.args().get(e.getKey());
+                if (v == null || String.valueOf(v).isBlank()) {
+                    continue;
+                }
+                if (e.getKey().equals("id") && r.args().get("username") != null) {
+                    continue;
+                }
+                if (Sensitive.argument(r.tool().inputSchema(), e.getKey())) {
+                    continue; // never on the device
+                }
+                targets.add(new String[] { e.getValue(), String.valueOf(v) });
             }
-            if (e.getKey().equals("id") && r.args().get("username") != null) {
-                continue;
-            }
-            if (Sensitive.argument(r.tool().inputSchema(), e.getKey())) {
-                continue; // never on the device
-            }
-            targets.add(new String[] { e.getValue(), String.valueOf(v) });
         }
         String what;
         if (targets.size() == 1) {

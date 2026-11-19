@@ -14,6 +14,7 @@ import org.keycloak.representations.idm.CredentialRepresentation;
 
 import com.github.thomasdarimont.keycloak.mcp.access.Delegation;
 import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
+import com.github.thomasdarimont.keycloak.mcp.catalog.Target;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCall;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolCost;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
@@ -85,6 +86,7 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
                     .schema(schema().string("sessionId", "Session id, from keycloak_user_sessions_list")
                         .required()
                         .bool("offline", "An offline session (default false)"))
+                    .targets(Target.named("sessionId", "session"))
                     .handler(this::sessionDelete)
                     .roles("manage-users")
                     .api(delete(R + "/sessions/{session}").path("session", "sessionId").queryAs("isOffline", "offline"))
@@ -95,6 +97,7 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("revoke client tokens", "client not before", "push revocation", "leaked token")
                     .schema(schema().string("clientId", CLIENT_ID).required())
+                    .targets(Target.client("clientId"))
                     .handler(this::revokeTokens)
                     .roles("manage-clients")
                     .api(put(R + "/clients/{client-uuid}").path("client-uuid", "clientId")
@@ -121,6 +124,7 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("end secret rotation", "drop old secret", "invalidate previous secret")
                     .schema(schema().string("clientId", CLIENT_ID).required())
+                    .targets(Target.client("clientId"))
                     .handler(this::rotatedSecretInvalidate)
                     .roles("manage-clients")
                     .api(delete(R + "/clients/{client-uuid}/client-secret/rotated").path("client-uuid", "clientId"))
@@ -159,6 +163,7 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
                     .destructive()
                     .synonyms("revoke registration token", "remove dcr token")
                     .schema(schema().string("id", "Token id, from keycloak_client_initial_access_list").required())
+                    .targets(Target.named("id", "initial access token"))
                     .handler(this::initialAccessDelete)
                     .roles("manage-clients")
                     .api(delete(R + "/clients-initial-access/{id}").path("id", "id"))

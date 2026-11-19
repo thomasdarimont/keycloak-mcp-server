@@ -24,7 +24,9 @@ The default is the two-step flow:
    caller: `login_hint` is their username (or the claim named by `login-hint`), `binding_message` is
    `<prefix>-<hash>` over tool, system, realm and arguments, and three additional parameters tell the device what is
    going on: `code`, a two-digit number; `requester`, the MCP client's name; and `operation`, for example
-   `Delete user: dave (realm demo)`, with the system named when the server has several. The call answers
+   `Delete user: dave (realm demo)`, with the system named when the server has several. The target is the name
+   Keycloak has for what the call acts on, looked up before the request is filed, not the argument the model sent
+   ([Confirming destructive tools](security.md#confirming-destructive-tools)). The call answers
    `confirmation_required` at once with `approval: {status: requested, code, bindingMessage, expiresInSeconds}` and a
    `howTo` for the model.
 2. **The model shows the number and calls again.** The `howTo` tells it to have the user approve on their device and
