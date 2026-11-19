@@ -27,6 +27,12 @@
               <entry key="KC_MCP_SPI_CONFIRMER_CIBA_CLIENT_SECRET" value="mcp-ciba-secret" />
               <entry key="KC_MCP_SPI_CONFIRMER_CIBA_TIMEOUT_SECONDS" value="90" />
               <entry key="KC_MCP_SPI_CONFIRMER_CIBA_POLL_WAIT_SECONDS" value="25" />
+              <entry key="KC_MCP_UI_ENABLED" value="true" />
+              <entry key="KC_MCP_DEV_MODE" value="true" />
+              <entry key="KC_MCP_ADMIN_ROLE" value="realm-management.realm-admin" />
+              <entry key="KC_MCP_DYNAMIC_SYSTEMS" value="false" />
+              <entry key="QUARKUS_DATASOURCE_JDBC_URL" value="jdbc:h2:file:./data/kc-mcp-ciba" />
+              <entry key="KC_MCP_STORAGE_SECRET_KEY" value="demo-storage-key-change-me" />
             </map>
           </option>
           <option name="jreName" value="#USE_PROJECT_JDK" />

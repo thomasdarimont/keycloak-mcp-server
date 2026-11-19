@@ -1,0 +1,32 @@
+{
+  "clientId": "keycloak-mcp-ui",
+  "name": "MCP server management UI",
+  "description": "Public PKCE client the management UI signs people in with; the server is the relying party. Full scope off: its role scope carries the master realm's admin role. Redirect URIs: this example (8091) and split-deployment's admin instance (8094).",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": false,
+  "implicitFlowEnabled": false,
+  "serviceAccountsEnabled": false,
+  "redirectUris": [
+    "http://localhost:8091/bff/login",
+    "http://localhost:8094/bff/login"
+  ],
+  "webOrigins": [
+    "+"
+  ],
+  "fullScopeAllowed": false,
+  "defaultClientScopes": [
+    "web-origins",
+    "acr",
+    "roles",
+    "profile",
+    "basic",
+    "email"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "http://localhost:8091/ui/*##http://localhost:8094/ui/*"
+  }
+}

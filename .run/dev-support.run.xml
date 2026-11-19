@@ -18,6 +18,12 @@
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
               <entry key="QUARKUS_HTTP_PORT" value="8105" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
+              <entry key="KC_MCP_UI_ENABLED" value="true" />
+              <entry key="KC_MCP_DEV_MODE" value="true" />
+              <entry key="KC_MCP_UI_VIEWER_ROLE" value="realm-management.view-events" />
+              <entry key="KC_MCP_DYNAMIC_SYSTEMS" value="false" />
+              <entry key="QUARKUS_DATASOURCE_JDBC_URL" value="jdbc:h2:file:./data/kc-mcp-support" />
+              <entry key="KC_MCP_STORAGE_SECRET_KEY" value="demo-storage-key-change-me" />
             </map>
           </option>
           <option name="jreName" value="#USE_PROJECT_JDK" />

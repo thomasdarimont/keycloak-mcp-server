@@ -78,6 +78,11 @@ services:
       KC_MCP_ADMIN_ISSUER: http://keycloak:8080/realms/master
       # an audience of its own: a token minted for the MCP endpoint (keycloak-mcp-server) never opens the admin API
       KC_MCP_ADMIN_AUDIENCE: keycloak-mcp-admin-api
+      # the management UI: http://localhost:8094/ui/ (admin / admin, after demo.sh has created its client
+      # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_ISSUER. Dev mode lets it run
+      # without HTTPS (its session cookie drops Secure; for one person's machine only). docs/management-ui.md
+      KC_MCP_UI_ENABLED: "true"
+      KC_MCP_DEV_MODE: "true"
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
       KC_MCP_STARTUP_CHECK: "off"
     ports:

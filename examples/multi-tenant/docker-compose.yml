@@ -58,6 +58,18 @@ services:
       KC_MCP_KEYS_DIR: /deployments/data/keys
       KC_MCP_TOOL_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: warn
+      # the management UI, to look around: http://localhost:8091/ui/ (admin / admin of the master realm), with the
+      # tenants as systems, their realms and the audit trail of the tool calls. It needs the database storage, here
+      # an H2 file in the container, and HTTPS, which dev mode lifts (its session cookie drops Secure; for one
+      # person's machine only). The systems still come from systems.json. docs/management-ui.md
+      KC_MCP_UI_ENABLED: "true"
+      KC_MCP_DEV_MODE: "true"
+      KC_MCP_UI_ISSUER: http://keycloak:8080/realms/master
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:h2:file:./data/kc-mcp-multi-tenant
+      KC_MCP_STORAGE_SECRET_KEY: demo-storage-key-change-me
+      # with a database the keys would come from its vault; the tenants' keys are the provisioned ones in keys/,
+      # which the second server signs with as well
+      KC_MCP_SPI_KEY_VAULT_DB_ENABLED: "false"
     volumes:
       - ./systems.json:/config/systems.json:ro
       - ./keys:/deployments/data/keys:ro

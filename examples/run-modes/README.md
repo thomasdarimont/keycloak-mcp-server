@@ -130,6 +130,17 @@ only at the end of a URI). A token obtained for `demo-app` is rejected with `401
 `./mcp-call.py --login alice:alice-demo whoami` walks the browser flow instead (login form, consent page, code with
 PKCE) and calls the tool with the token; `--show-tokens` prints the user's, the client's and the delegated token.
 
+## Management UI
+
+Every env file also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8081/ui/>, sign in
+at the `demo` realm as `alice` / `alice-demo` (operator) or `carol` / `carol-demo` (viewer, read-only). *Systems*
+shows what the env file configured, *Audit* the tool calls.
+
+It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's
+machine only) and keeps its sessions and the audit trail in an H2 file under `data/` (git-ignored). The server
+therefore has to be the default H2 build, not a `-Ppostgresql` one. [management-ui](../management-ui/) shows the UI
+with HTTPS, registration of systems and two identity providers.
+
 ## MCP prompts
 
 The server also offers task recipes as MCP prompts (`keycloak_onboard_user`, `keycloak_login_troubleshoot` and two

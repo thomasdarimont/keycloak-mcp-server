@@ -84,8 +84,11 @@ to the Admin API. The user's own token never leaves the MCP instance. The client
     database user may not: the key has to exist before the MCP side uses the system. In delegation mode `exchange`
     the MCP instance signs two requests with that key, the client's own token and the token exchange.
   - the audit retention (`KC_MCP_SPI_AUDIT_LISTENER_DB_RETENTION_DAYS`): set it on the admin instance only.
-- **The management UI** would run on the admin instance as well (`KC_MCP_UI_ENABLED=true`, with HTTPS and its client).
-  Its session rows are the admin user's alone. See [management-ui](../management-ui/).
+- **The management UI** runs on the admin instance: <http://localhost:8094/ui/>, sign in as `admin` / `admin` of the
+  master realm once `demo.sh` has created the public client `keycloak-mcp-ui` there (step 3b). *Audit* lists the
+  calls the MCP instance appended. Its session rows are the admin user's alone, and the MCP instance answers 404 at
+  `/ui`. Here it runs in dev mode without HTTPS, for one person's machine only; [management-ui](../management-ui/)
+  has the HTTPS setup.
 
 ## When the database is away
 

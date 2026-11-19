@@ -146,6 +146,37 @@
       },
       "defaultClientScopes": ["acr", "basic", "roles", "profile", "kc-admin-api", "service_account"],
       "optionalClientScopes": []
+    },
+    {
+      "clientId": "keycloak-mcp-ui",
+      "name": "MCP server management UI",
+      "description": "Public PKCE client the MCP server's management UI signs people in with (authorization code flow, the server is the relying party). Full scope off: the role scope lists what a token may carry.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [
+        "http://localhost:8097/bff/login"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8097/ui/*"
+      }
     }
   ],
   "clientProfiles": {
@@ -197,6 +228,10 @@
       {
         "client": "keycloak-mcp",
         "roles": ["view-realm", "view-users", "manage-users", "query-users", "query-groups", "view-events"]
+      },
+      {
+        "client": "keycloak-mcp-ui",
+        "roles": ["realm-admin"]
       }
     ]
   },

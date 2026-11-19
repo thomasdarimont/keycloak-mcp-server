@@ -11,6 +11,9 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # the management UI sends browsers to the login here, while the server reaches Keycloak as keycloak:8080
+      KC_HOSTNAME: http://localhost:8093
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       # 26.8 warns about its deprecated defaults: use the v2 brokering API, drop the Twitter (OAuth 1.0a) broker
@@ -50,7 +53,19 @@ services:
       KC_MCP_SPI_ACCESS_CHECK_ACME_PROTECTED_USERS_PREFIX: svc-
       # the tenant repository needs kc-mcp.dynamic-systems; globex is a placeholder that is never reached
       KC_MCP_DYNAMIC_SYSTEMS: "true"
+      # with dynamic systems no system is the default by itself: tools would require the system argument
+      KC_MCP_DEFAULT_SYSTEM: default
       KC_MCP_SPI_SYSTEM_REPOSITORY_ACME_TENANTS_SYSTEMS: globex=https://sso.globex.example|globex-prod
+      # the management UI, to look around: http://localhost:8094/ui/ (alice / alice-demo; carol / carol-demo as a
+      # read-only viewer), with the systems, globex among them, and the audit trail of the tool calls. It needs the
+      # database storage, here an H2 file in the container, and HTTPS, which dev mode lifts (its session cookie
+      # drops Secure; for one person's machine only). docs/management-ui.md
+      KC_MCP_UI_ENABLED: "true"
+      KC_MCP_DEV_MODE: "true"
+      KC_MCP_ADMIN_ROLE: realm-management.realm-admin
+      KC_MCP_UI_VIEWER_ROLE: realm-management.view-users
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:h2:file:./data/kc-mcp-extensions
+      KC_MCP_STORAGE_SECRET_KEY: demo-storage-key-change-me
     volumes:
       # the extension jar; the image reads /deployments/providers (KC_MCP_PROVIDERS_DIR)
       - ./target/acme-keycloak-mcp-extensions-1.0-SNAPSHOT.jar:/deployments/providers/acme-extensions.jar:ro

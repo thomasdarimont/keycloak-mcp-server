@@ -125,6 +125,16 @@ the login has to be repeated with the scope requested. Other clients need their 
 redirect URIs (Keycloak allows `*` only at the end of a URI). To switch users, log out in the Keycloak account
 console (`http://localhost:8096/realms/demo/account`) and reconnect.
 
+## Management UI
+
+`Both env files` also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8097/ui/>, sign in as
+`alice` / `alice-demo`. *Systems* shows the system and its realm, *Audit* the tool calls of the demo, each with the caller it ran for.
+
+It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's
+machine only) and keeps its sessions and the audit trail in an H2 file under `data/` (git-ignored). The server
+therefore has to be the default H2 build, not a `-Ppostgresql` one. The realm's public client `keycloak-mcp-ui` signs
+people in.
+
 ## Tightening
 
 - **Who may delegate**: replace the Users permission with a Groups permission (`delegate-members`, e.g. on

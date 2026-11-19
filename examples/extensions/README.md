@@ -33,6 +33,11 @@ docker compose down -v
 and sets the extensions' `KC_MCP_SPI_*` variables; the server acts as the realm-admin service account `mcp-admin` of realm
 `demo`.
 
+The [management UI](../../docs/management-ui.md) is on as well: <http://localhost:8094/ui/>, sign in as `alice` /
+`alice-demo` (`carol` / `carol-demo` is a read-only viewer). *Systems* lists `globex` from the tenant repository next
+to `default`, *Audit* the calls of `demo.sh`. It runs in dev mode without HTTPS, with an H2 file in the container,
+for one person's machine only.
+
 ## Build and run on the host
 
 ```

@@ -4,7 +4,8 @@
 #   1. register the system "acme" on the admin instance (admin API -> PostgreSQL as the writer, key generated there)
 #   2. the realm acme-dev with the public mcp-consumer client and the demo users
 #   3. the keycloak-mcp-server client in that realm, JWKS URL on the admin instance, allowed to act for the realm's
-#      users who consent to it (the actor of the MCP instance's delegated tokens); keycloak-mcp-admin in master
+#      users who consent to it (the actor of the MCP instance's delegated tokens); keycloak-mcp-admin and
+#      keycloak-mcp-ui in master, for the admin API and the management UI on the admin instance
 #   4. call tools as users on the MCP instance, which reads the system the admin instance stored
 #   5. what each side cannot do: no admin API on the MCP instance, no MCP endpoint on the admin instance,
 #      no admin API with an MCP token, no writes with the MCP instance's database user
@@ -90,6 +91,20 @@ $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
 ADMIN_AT=$(curl -s "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
 echo "admin API with a master admin's token: HTTP $(status -H "Authorization: Bearer $ADMIN_AT" "$ADMIN/admin/systems")"
+
+step "3b. the public client keycloak-mcp-ui: the management UI signs master realm admins in with it"
+UI_CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-ui --fields id --format csv --noquotes | head -1 || true)
+if [ -z "$UI_CLIENT_ID" ]; then
+  $KCADM create clients -r master -f - < "$SHARED"/clients/keycloak-mcp-ui.json >/dev/null
+  UI_CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-ui --fields id --format csv --noquotes | head -1)
+  echo "created client keycloak-mcp-ui"
+else
+  echo "client keycloak-mcp-ui exists"
+fi
+# the only role the UI's API needs (kc-mcp.admin.role, realm:admin by default) in the client's role scope
+$KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
+  | $KCADM create "clients/$UI_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
+echo "management UI: $ADMIN/ui/ (admin / admin)"
 
 step "4. tools on the MCP instance: it knows 'acme' only from the database, as the reader"
 U=$MCP/mcp/systems/acme/acme-dev

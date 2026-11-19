@@ -5,6 +5,12 @@
 Runnable setups, each with its own README. Most bring their Keycloak up with `docker compose`; `management-ui` runs on
 the stack of `run-modes`.
 
+Nearly every example also serves the [management UI](../docs/management-ui.md) at `/ui/`, to look at the systems and
+the audit trail of the tool calls while a demo runs; each README names the address and who signs in. They run it in
+dev mode without HTTPS, for one person's machine only (`cimd-vscode` uses its mkcert certificate instead). Where an
+env file brings an H2 file database for it, the server has to be the default H2 build. `xaa` has no UI: its users
+hold no password at Keycloak, which is the point of that example. `distribution` has it with `start-dev`.
+
 | example | shows |
 |---|---|
 | [run-modes](run-modes/) | one Keycloak, a demo realm, one env file per access level; the place to start |

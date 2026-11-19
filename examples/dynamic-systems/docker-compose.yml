@@ -81,6 +81,11 @@ services:
       # only tokens minted for the MCP server (the public client keycloak-mcp-admin); admin-cli tokens are lightweight
       # in Keycloak 26 and carry neither roles nor an audience
       KC_MCP_ADMIN_AUDIENCE: keycloak-mcp-server
+      # the management UI: http://localhost:8091/ui/ (admin / admin, after demo.sh has created its client
+      # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_ISSUER. Dev mode lets it run
+      # without HTTPS (its session cookie drops Secure; for one person's machine only). docs/management-ui.md
+      KC_MCP_UI_ENABLED: "true"
+      KC_MCP_DEV_MODE: "true"
       # the MCP server may only talk to this Keycloak
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
       KC_MCP_TOOL_EXPOSURE: hybrid

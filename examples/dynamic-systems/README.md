@@ -128,6 +128,11 @@ curl -s localhost:8092/.well-known/oauth-protected-resource/mcp/systems/acme/acm
 LLM clients (LM Studio, Claude): `mcp.json` (service account), `mcp-oauth.json` (login at `acme-dev` via `mcp-consumer`;
 the client reads the delegation scope from the entry's protected resource metadata and Keycloak shows the consent page).
 
+The [management UI](../../docs/management-ui.md) of the first server: <http://localhost:8091/ui/>, sign in as
+`admin` / `admin` of the master realm once `demo.sh` has created the public client `keycloak-mcp-ui` there
+(step 3c). *Systems* shows `acme` and lets you add or change systems, *Audit* lists the tool calls of both servers.
+It runs in dev mode without HTTPS, for one person's machine only.
+
 ## What it shows
 
 - Admin API + database storage: `KC_MCP_STATIC_SYSTEMS=false`, `KC_MCP_DYNAMIC_SYSTEMS=true`, `KC_MCP_ADMIN_ENABLED=true`

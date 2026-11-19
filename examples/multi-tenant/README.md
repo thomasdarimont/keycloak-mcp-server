@@ -55,6 +55,13 @@ What the demo shows:
   `realm_not_allowed`.
 - **`KC_MCP_ALLOWED_HOSTS=keycloak:8080`**: a system in `systems.json` pointing elsewhere is refused and logged.
 
+The [management UI](../../docs/management-ui.md) of the first server: <http://localhost:8091/ui/>, sign in as
+`admin` / `admin` of the master realm (the onboarding job creates the public client `keycloak-mcp-ui` there).
+*Systems* lists the tenants with their realms, *Audit* the tool calls. It runs in dev mode without HTTPS, for one
+person's machine only, with an H2 file in the container for its sessions and the audit trail. The tenants' keys
+still come from `keys/`: `KC_MCP_SPI_KEY_VAULT_DB_ENABLED=false` keeps the database vault out, which would otherwise
+replace the file vault.
+
 ## User login per realm (`mcp-users`, port 8092)
 
 The second server requires an OAuth login at its MCP endpoint (`QUARKUS_OIDC_TENANT_ENABLED=true`) and makes

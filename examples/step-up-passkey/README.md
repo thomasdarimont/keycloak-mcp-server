@@ -115,6 +115,16 @@ TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token)                   
 ./mcp-call.py --token "$TOKEN" keycloak_user_delete '{"id": "…", "username": "…", "confirm": true}'
 ```
 
+## Management UI
+
+`Both env files` also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8109/ui/>, sign in as
+`alice` / `alice-demo`. *Systems* shows the system and its realm, *Audit* the tool calls of the demo.
+
+It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's
+machine only) and keeps its sessions and the audit trail in an H2 file under `data/` (git-ignored). The server
+therefore has to be the default H2 build, not a `-Ppostgresql` one. The realm's public client `keycloak-mcp-ui` signs
+people in.
+
 ## What was tested, and what was not
 
 Both logins (`device` and `browser`) were run end to end against Keycloak 26.8.2 with the server in delegation mode

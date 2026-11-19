@@ -4,7 +4,8 @@
 #   1. register the system "acme" in the MCP server (admin API -> PostgreSQL, key pair generated in the database vault)
 #   2. create the realm acme-dev with the public mcp-consumer client and the demo users
 #   3. create the keycloak-mcp-server client in that realm, JWKS URL = what the API answered: its service account
-#      administers the realm (port 8091), and the realm's users may let it act on their behalf (port 8092)
+#      administers the realm (port 8091), and the realm's users may let it act on their behalf (port 8092);
+#      keycloak-mcp-admin and keycloak-mcp-ui in master, for the admin API and the management UI
 #   4. call tools: as the service account (port 8091) and as the realm's users (port 8092)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -101,6 +102,20 @@ CLI_AT=$(curl -s "$TOKEN_URL" \
 curl -s "$MCP/admin/systems" \
   -H "Authorization: Bearer $CLI_AT" \
   -o /dev/null -w 'the same with an admin-cli token (no audience, no roles): HTTP %{http_code}\n'
+
+step "3c. the public client keycloak-mcp-ui: the management UI signs master realm admins in with it"
+UI_CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-ui --fields id --format csv --noquotes | head -1 || true)
+if [ -z "$UI_CLIENT_ID" ]; then
+  $KCADM create clients -r master -f - < clients/keycloak-mcp-ui.json >/dev/null
+  UI_CLIENT_ID=$($KCADM get clients -r master -q clientId=keycloak-mcp-ui --fields id --format csv --noquotes | head -1)
+  echo "created client keycloak-mcp-ui"
+else
+  echo "client keycloak-mcp-ui exists"
+fi
+# the only role the UI's API needs (kc-mcp.admin.role, realm:admin by default) in the client's role scope
+$KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
+  | $KCADM create "clients/$UI_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
+echo "management UI: $MCP/ui/ (admin / admin)"
 
 step "4a. as the service account (port 8091): the entry /mcp/systems/acme/acme-dev"
 ./mcp-call.py "$MCP/mcp/systems/acme/acme-dev" whoami | jq -c '{system, entry, keycloakCallsRunAs, server: .server.version}'

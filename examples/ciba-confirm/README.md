@@ -168,6 +168,16 @@ LM Studio or another OAuth-capable client:
 The model calls the tool again at once, and that call waits up to 25 s (`KC_MCP_SPI_CONFIRMER_CIBA_POLL_WAIT_SECONDS`)
 for your decision, so you need not write in the chat. A small model may still stop and ask; then say "done".
 
+## Management UI
+
+`env/ciba.env` also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8099/ui/>, sign in as
+`alice` / `alice-demo`. *Systems* shows the system and its realm, *Audit* the tool calls of the demo, the declined and the approved deletions among them.
+
+It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's
+machine only) and keeps its sessions and the audit trail in an H2 file under `data/` (git-ignored). The server
+therefore has to be the default H2 build, not a `-Ppostgresql` one. The realm's public client `keycloak-mcp-ui` signs
+people in; `carol` reaches the login but not the API, which asks for `realm-admin`.
+
 ## What to look at
 
 | where | what |

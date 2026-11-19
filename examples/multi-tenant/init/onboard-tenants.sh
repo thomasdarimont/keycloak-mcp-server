@@ -41,4 +41,15 @@ onboard() {
 
 onboard tenant-a realm-a-1 realm-a-2
 onboard tenant-b realm-b-1
+
+# The operator's side: the public client the management UI (http://localhost:8091/ui/) signs master realm admins in
+# with. Full scope off; its role scope carries the admin role, the only one the UI's API asks for.
+ui=$($KC get clients -r master -q clientId=keycloak-mcp-ui --fields id --format csv --noquotes | head -1 || true)
+if [ -z "$ui" ]; then
+  ui=$(printf '%s' '{"clientId":"keycloak-mcp-ui","name":"MCP server management UI","enabled":true,"protocol":"openid-connect","publicClient":true,"standardFlowEnabled":true,"directAccessGrantsEnabled":false,"fullScopeAllowed":false,"redirectUris":["http://localhost:8091/bff/login"],"webOrigins":["+"],"attributes":{"pkce.code.challenge.method":"S256","post.logout.redirect.uris":"http://localhost:8091/ui/*"}}' \
+      | $KC create clients -r master -i -f -)
+  echo "created client keycloak-mcp-ui ($ui) for the management UI"
+fi
+$KC get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
+  | $KC create "clients/$ui/scope-mappings/realm" -r master -f - >/dev/null
 echo "tenants onboarded"

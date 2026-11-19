@@ -74,6 +74,17 @@ back; it runs `seed.py` first if the realm has no events yet.
 ./mcp-call.py keycloak_events_login '{"client": "shop-web", "max": 30}'      # any tool by hand
 ```
 
+## Management UI
+
+`env/support.env` also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8105/ui/>, sign in as
+`sam` / `sam-demo`, a support engineer of the realm (`view-users`, `view-events`). *Systems* shows the system and its realm, *Audit* the tool calls of the demo: what the model read to find each cause.
+
+It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's
+machine only) and keeps its sessions and the audit trail in an H2 file under `data/` (git-ignored). The server
+therefore has to be the default H2 build, not a `-Ppostgresql` one. The realm's public client `keycloak-mcp-ui` signs
+people in. sam is a viewer (`KC_MCP_UI_VIEWER_ROLE`), read-only like the server, and feels the planted fault: the
+password check of the login takes seconds.
+
 ## What read-only access can and cannot answer
 
 | the server sees | it does not see |

@@ -98,10 +98,12 @@ shell "demo stack: reset (down -v, re-imports the realm)" "demo-stack-reset" "ex
 
 # --- extensions: dev mode against the demo stack, with the example jar as providers directory
 {
-  grep -v '^#' examples/run-modes/env/realm-admin.env
+  grep -v -e '^#' -e '^KC_MCP_DYNAMIC_SYSTEMS=' examples/run-modes/env/realm-admin.env
   echo "KC_MCP_PROVIDERS_DIR=examples/extensions/target"
   echo "KC_MCP_SPI_AUDIT_LISTENER_ACME_FILE=target/acme-audit.jsonl"
+  # the tenant repository needs dynamic systems, with which no system is the default by itself
   echo "KC_MCP_DYNAMIC_SYSTEMS=true"
+  echo "KC_MCP_DEFAULT_SYSTEM=default"
   echo "KC_MCP_SPI_SYSTEM_REPOSITORY_ACME_TENANTS_SYSTEMS=globex=https://sso.globex.example|globex-prod"
 } | maven_dev "quarkus:dev (extensions: realm-admin + examples/extensions/target as providers)" "dev-extensions"
 shell "extensions: build jar + stack up (Keycloak :8093, MCP :8094)" "extensions-up" "examples/extensions" \

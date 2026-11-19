@@ -51,6 +51,16 @@ not logged in leaves no entries.
 
 `docker compose down -v` resets everything. After a reset, clear VS Code's stored login for the server.
 
+## Management UI
+
+`env/cimd.env` also turns the [management UI](../../docs/management-ui.md) on, over HTTPS with the mkcert
+certificate: <https://localhost:8443/ui/>, sign in as `alice` / `alice-demo`. *Systems* shows the system and its
+realm, *Audit* the tool calls VS Code made.
+
+Plain HTTP is not an option here. Keycloak on `https://localhost:8100` sends `Strict-Transport-Security`, after
+which a browser opens every `http://localhost` address with HTTPS. Sessions and the audit trail live in an H2 file
+under `data/` (git-ignored), so the server has to be the default H2 build, not a `-Ppostgresql` one.
+
 ## Why HTTPS
 
 VS Code can read the login server's metadata from its window, whose content security policy allows `https:` but not

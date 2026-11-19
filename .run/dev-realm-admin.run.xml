@@ -16,6 +16,13 @@
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
               <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_STARTUP_CHECK" value="warn" />
+              <entry key="KC_MCP_UI_ENABLED" value="true" />
+              <entry key="KC_MCP_DEV_MODE" value="true" />
+              <entry key="KC_MCP_ADMIN_ROLE" value="realm-management.realm-admin" />
+              <entry key="KC_MCP_UI_VIEWER_ROLE" value="realm-management.view-users" />
+              <entry key="KC_MCP_DYNAMIC_SYSTEMS" value="false" />
+              <entry key="QUARKUS_DATASOURCE_JDBC_URL" value="jdbc:h2:file:./data/kc-mcp-run-modes" />
+              <entry key="KC_MCP_STORAGE_SECRET_KEY" value="demo-storage-key-change-me" />
             </map>
           </option>
           <option name="jreName" value="#USE_PROJECT_JDK" />
