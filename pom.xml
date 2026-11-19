@@ -32,6 +32,8 @@
         <quarkus.platform.version>3.40.1.2</quarkus.platform.version>
         <quarkus-mcp-server.version>2.0.4</quarkus-mcp-server.version>
         <skipITs>true</skipITs>
+        <!-- the java executable of the forked test JVMs; empty: the JVM Maven runs on -->
+        <kcmcp.test.jvm />
         <surefire-plugin.version>3.6.1</surefire-plugin.version>
         <spotless-maven-plugin.version>3.11.0</spotless-maven-plugin.version>
         <!-- pinned above the Quarkus platform's 2.21.7 for the jackson-databind CVE fix; drop once the platform catches up -->
@@ -172,6 +174,13 @@
                              KC_MCP_* and QUARKUS_* to the tests, which then try to load certificates, enable the UI or
                              reach a Keycloak that is not there. Every variable the examples define is kept out of the
                              forked test JVM; tests set what they need through their test resources. -->
+                        <!-- On Unix the test JVM starts through etc/test-jvm/bin/java, which drops every KC_MCP_* and
+                             QUARKUS_* variable of the terminal, whatever its name (profile clean-test-environment).
+                             The list below is what is left for Windows, where a variable has to be named. -->
+                        <jvm>${kcmcp.test.jvm}</jvm>
+                        <environmentVariables>
+                            <KCMCP_TEST_JAVA>${java.home}/bin/java</KCMCP_TEST_JAVA>
+                        </environmentVariables>
                         <excludedEnvironmentVariables>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_AUDIENCE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_ENABLED</excludedEnvironmentVariable>
@@ -289,6 +298,13 @@
                              KC_MCP_* and QUARKUS_* to the tests, which then try to load certificates, enable the UI or
                              reach a Keycloak that is not there. Every variable the examples define is kept out of the
                              forked test JVM; tests set what they need through their test resources. -->
+                        <!-- On Unix the test JVM starts through etc/test-jvm/bin/java, which drops every KC_MCP_* and
+                             QUARKUS_* variable of the terminal, whatever its name (profile clean-test-environment).
+                             The list below is what is left for Windows, where a variable has to be named. -->
+                        <jvm>${kcmcp.test.jvm}</jvm>
+                        <environmentVariables>
+                            <KCMCP_TEST_JAVA>${java.home}/bin/java</KCMCP_TEST_JAVA>
+                        </environmentVariables>
                         <excludedEnvironmentVariables>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_OAUTH_AUDIENCE</excludedEnvironmentVariable>
                             <excludedEnvironmentVariable>KC_MCP_ADMIN_ENABLED</excludedEnvironmentVariable>
@@ -436,6 +452,18 @@
     </build>
 
     <profiles>
+        <profile>
+            <!-- tests do not see the KC_MCP_* and QUARKUS_* variables of the terminal (etc/test-jvm/bin/java) -->
+            <id>clean-test-environment</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                </os>
+            </activation>
+            <properties>
+                <kcmcp.test.jvm>${maven.multiModuleProjectDirectory}/etc/test-jvm/bin/java</kcmcp.test.jvm>
+            </properties>
+        </profile>
         <profile>
             <!-- The downloadable distribution (modules/distribution: bin/kcmcp.sh, conf/, the server under lib/, as
                  tar.gz and zip): `./mvnw package -Pdist`. Not part of the default build, which stays at the jars. -->
