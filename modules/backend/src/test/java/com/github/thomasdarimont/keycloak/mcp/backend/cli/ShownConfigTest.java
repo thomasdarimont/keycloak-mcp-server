@@ -44,7 +44,7 @@ class ShownConfigTest {
 
     @Test
     void ordinarySettingsAreShown() {
-        assertShown("kc-mcp.tool-exposure");
+        assertShown("kc-mcp.tools.exposure");
         assertShown("kc-mcp.systems.prod.url");
         assertShown("kc-mcp.https-certificate-key-file");
         assertShown("kc-mcp.jwt.key-id");

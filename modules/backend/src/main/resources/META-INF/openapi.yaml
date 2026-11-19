@@ -1017,7 +1017,7 @@ components:
     Tools:
       type: object
       description: >-
-        Tool restrictions over the server's `kc-mcp.read-only`, `allowed-tools`, `denied-tools` and
+        Tool restrictions over the server's `kc-mcp.tools.read-only`, `allowed-tools`, `denied-tools` and
         `allowed-categories`, which they can only narrow; among presets, system and realm the most specific key wins.
         Unknown tools answer 400 `unknown_tool`, unknown categories `unknown_category`.
       additionalProperties: false

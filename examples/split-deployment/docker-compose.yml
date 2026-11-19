@@ -148,10 +148,10 @@ services:
       KC_MCP_STATIC_SYSTEMS: "false"
       KC_MCP_DYNAMIC_SYSTEMS: "true"
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
-      KC_MCP_TOOL_EXPOSURE: hybrid
+      KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
       # the system's client (registered on the admin instance, key read from the database) is the actor
-      KC_MCP_DELEGATION: exchange
+      KC_MCP_MCP_DELEGATION: exchange
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       KC_MCP_MCP_OAUTH_ENABLED: "true"

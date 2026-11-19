@@ -141,7 +141,7 @@ public class McpClient {
             .header("Mcp-Protocol-Version", version)
             .header("Mcp-Method", "tools/call")
             .header("Mcp-Name", name);
-        // the arguments the server marks with x-mcp-header (kc-mcp.param-headers)
+        // the arguments the server marks with x-mcp-header (kc-mcp.mcp.param-headers)
         if ("execute_tool".equals(name) && arguments.getValue("name") instanceof String tool) {
             request.header("Mcp-Param-Tool", tool);
         }

@@ -36,15 +36,15 @@ class ConfigFilesSourceFactoryTest {
         Path main = Files.writeString(conf.resolve("kcmcp.conf"),
                 "kc-mcp.systems.default.url=http://from-file\nkc-mcp.system-defaults.default-realm=file\nkc-mcp.only-in-first=file\n");
         Path extra = Files.writeString(conf.resolve("extra.properties"),
-                "kc-mcp.system-defaults.default-realm=extra\nkc-mcp.read-only=true\n");
+                "kc-mcp.system-defaults.default-realm=extra\nkc-mcp.tools.read-only=true\n");
 
         SmallRyeConfig c = config(main + ", " + extra, Map.of("kc-mcp.systems.default.url", "http://from-command-line"),
-                Map.of("kc-mcp.systems.default.url", "http://default", "kc-mcp.tool-exposure", "hybrid"));
+                Map.of("kc-mcp.systems.default.url", "http://default", "kc-mcp.tools.exposure", "hybrid"));
 
         assertEquals("http://from-command-line", c.getRawValue("kc-mcp.systems.default.url"),
                 "a system property beats the file");
-        assertEquals("hybrid", c.getRawValue("kc-mcp.tool-exposure"), "defaults stay where no file speaks");
-        assertEquals("true", c.getRawValue("kc-mcp.read-only"), "the file beats the defaults");
+        assertEquals("hybrid", c.getRawValue("kc-mcp.tools.exposure"), "defaults stay where no file speaks");
+        assertEquals("true", c.getRawValue("kc-mcp.tools.read-only"), "the file beats the defaults");
         assertEquals("extra", c.getRawValue("kc-mcp.system-defaults.default-realm"),
                 "a later file overrides an earlier one");
         assertEquals("file", c.getRawValue("kc-mcp.only-in-first"), "the first file is read too");
@@ -52,10 +52,10 @@ class ConfigFilesSourceFactoryTest {
 
     @Test
     void theOrderOfTheListDecidesWhateverTheNamesAre() throws IOException {
-        Path a = Files.writeString(dir.resolve("a.properties"), "kc-mcp.read-only=true\n");
-        Path z = Files.writeString(dir.resolve("z.properties"), "kc-mcp.read-only=false\n");
-        assertEquals("false", config(a + "," + z, Map.of(), Map.of()).getRawValue("kc-mcp.read-only"));
-        assertEquals("true", config(z + "," + a, Map.of(), Map.of()).getRawValue("kc-mcp.read-only"));
+        Path a = Files.writeString(dir.resolve("a.properties"), "kc-mcp.tools.read-only=true\n");
+        Path z = Files.writeString(dir.resolve("z.properties"), "kc-mcp.tools.read-only=false\n");
+        assertEquals("false", config(a + "," + z, Map.of(), Map.of()).getRawValue("kc-mcp.tools.read-only"));
+        assertEquals("true", config(z + "," + a, Map.of(), Map.of()).getRawValue("kc-mcp.tools.read-only"));
     }
 
     @Test
@@ -83,14 +83,16 @@ class ConfigFilesSourceFactoryTest {
         // (295)
         Path systems = Files.createDirectories(dir.resolve("many"));
         for (int i = 0; i < 25; i++) {
-            Files.writeString(systems.resolve(String.format("%02d.conf", i)),
-                    "kc-mcp.read-only=" + (i % 2 == 0) + "\nkc-mcp.systems.s" + i + ".url=https://sso-" + i + "\n");
+            Files.writeString(systems.resolve(String.format("%02d.conf", i)), "kc-mcp.tools.read-only=" + (i % 2 == 0)
+                    + "\nkc-mcp.systems.s" + i + ".url=https://sso-" + i + "\n");
         }
         SmallRyeConfig c = config(systems.toString(), Map.of(), Map.of());
-        assertEquals("true", c.getRawValue("kc-mcp.read-only"), "the 25th file (24.conf, even) has the last word");
+        assertEquals("true", c.getRawValue("kc-mcp.tools.read-only"),
+                "the 25th file (24.conf, even) has the last word");
         assertEquals("https://sso-0", c.getRawValue("kc-mcp.systems.s0.url"));
         assertEquals("https://sso-24", c.getRawValue("kc-mcp.systems.s24.url"));
-        assertEquals(ConfigFilesSourceFactory.ORDINAL, c.getConfigValue("kc-mcp.read-only").getConfigSourceOrdinal());
+        assertEquals(ConfigFilesSourceFactory.ORDINAL,
+                c.getConfigValue("kc-mcp.tools.read-only").getConfigSourceOrdinal());
     }
 
     @Test

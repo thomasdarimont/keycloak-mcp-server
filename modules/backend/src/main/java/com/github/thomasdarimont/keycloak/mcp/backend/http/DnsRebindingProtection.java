@@ -24,11 +24,11 @@ import io.vertx.ext.web.RoutingContext;
  * resolves its own name to 127.0.0.1 and talks to the local server with that name in the
  * {@code Host} header. Requests to {@code <root>} and below are accepted only with a
  * localhost {@code Host} and, when present, a localhost {@code Origin}, plus the values
- * of {@code kc-mcp.dns-rebinding-allowed-hosts} and the host of {@code kc-mcp.hostname}.
- * {@code kc-mcp.dns-rebinding-protection}: {@code auto} (on while the endpoint is
- * anonymous), {@code on}, {@code off}. Other routes (JWKS, admin API, well-known) are not
- * touched; the MCP spec asks for this check on local servers without HTTPS and
- * authentication.
+ * of {@code kc-mcp.mcp.dns-rebinding-allowed-hosts} and the host of
+ * {@code kc-mcp.hostname}. {@code kc-mcp.mcp.dns-rebinding-protection}: {@code auto} (on
+ * while the endpoint is anonymous), {@code on}, {@code off}. Other routes (JWKS, admin
+ * API, well-known) are not touched; the MCP spec asks for this check on local servers
+ * without HTTPS and authentication.
  */
 @ApplicationScoped
 public class DnsRebindingProtection {
@@ -47,10 +47,10 @@ public class DnsRebindingProtection {
 
     void register(@Observes Router router) {
         if (!enabled()) {
-            LOG.debugf("DNS rebinding protection off (%s)", config.dnsRebindingProtection());
+            LOG.debugf("DNS rebinding protection off (%s)", config.mcp().dnsRebindingProtection());
             return;
         }
-        List<String> hosts = new ArrayList<>(config.dnsRebindingAllowedHosts().orElse(List.of()));
+        List<String> hosts = new ArrayList<>(config.mcp().dnsRebindingAllowedHosts().orElse(List.of()));
         PublicHostname.of(config.hostname()).map(PublicHostname::authority).ifPresent(hosts::add);
         allowed = allowedHosts(hosts);
         String root = EntryRoutes.root(rootPath);
@@ -62,8 +62,8 @@ public class DnsRebindingProtection {
 
     /** Whether the check applies under the current configuration. */
     boolean enabled() {
-        String mode = config.dnsRebindingProtection() == null ? "auto"
-                : config.dnsRebindingProtection().trim().toLowerCase(Locale.ROOT);
+        String mode = config.mcp().dnsRebindingProtection() == null ? "auto"
+                : config.mcp().dnsRebindingProtection().trim().toLowerCase(Locale.ROOT);
         return switch (mode) {
             case "on", "true" -> true;
             case "off", "false" -> false;
@@ -88,7 +88,7 @@ public class DnsRebindingProtection {
     private void refuse(RoutingContext ctx, String header, String value) {
         LOG.warnf(
                 "Refused a request to %s with %s '%s': not localhost (DNS rebinding protection,"
-                        + " kc-mcp.dns-rebinding-protection / kc-mcp.dns-rebinding-allowed-hosts)",
+                        + " kc-mcp.mcp.dns-rebinding-protection / kc-mcp.mcp.dns-rebinding-allowed-hosts)",
                 ctx.request().path(), header, value);
         ctx.response()
             .setStatusCode(403)
@@ -96,7 +96,7 @@ public class DnsRebindingProtection {
             .end("{\"error\":\"forbidden_host\",\"message\":\"" + header + " '"
                     + String.valueOf(value).replace('"', '\'')
                     + "' is not localhost; this server only answers local clients"
-                    + " (kc-mcp.dns-rebinding-allowed-hosts adds names).\"}");
+                    + " (kc-mcp.mcp.dns-rebinding-allowed-hosts adds names).\"}");
     }
 
     /**

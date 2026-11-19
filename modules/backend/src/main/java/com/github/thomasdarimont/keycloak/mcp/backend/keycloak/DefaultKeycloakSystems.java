@@ -84,7 +84,7 @@ public class DefaultKeycloakSystems implements KeycloakSystems {
             KcMcpMetrics metrics) {
         this(resolve(config), config.defaultSystem().orElse(null), keys,
                 HostAllowList.of(config.allowedHosts().orElse(List.of())), repositories(config, extensions),
-                config.staticSystemsOrder(), config.delegation());
+                config.staticSystemsOrder(), config.mcp().delegation());
         this.metrics = metrics;
         this.issuerPolicies = new CallerIssuerPolicies(issuerPolicies(config, extensions));
         this.readTimeout = config.http().readTimeout();

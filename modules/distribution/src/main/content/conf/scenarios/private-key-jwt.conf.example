@@ -13,4 +13,4 @@ kc-mcp.jwt.key-file=${kcmcp.home.dir}/conf/mcp-admin.pem
 kc-mcp.jwt.algorithm=RS256
 kc-mcp.systems.default.default-realm=demo
 kc-mcp.systems.default.allowed-realms=demo
-kc-mcp.tool-exposure=hybrid
+kc-mcp.tools.exposure=hybrid

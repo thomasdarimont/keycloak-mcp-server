@@ -124,8 +124,8 @@ public class TwoKeycloaksTestResource extends CallerTestResource {
         // default system is the second:
         // what the tenant verifies must not count as the second system's own issuer
         config.put("kc-mcp.default-system", "other");
-        config.put("kc-mcp.delegation", "exchange");
-        config.put("kc-mcp.require-caller", "false");
+        config.put("kc-mcp.mcp.delegation", "exchange");
+        config.put("kc-mcp.mcp.require-caller", "false");
         // an actor the second Keycloak does not know: the exchange is refused there
         config.put("kc-mcp.systems.other.client-id", "mcp-server");
         config.put("kc-mcp.systems.other.client-secret", "unknown-there");

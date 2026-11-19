@@ -168,7 +168,7 @@ The login and the Admin API calls:
 
 | setting | here | meaning |
 |---|---|---|
-| `KC_MCP_DELEGATION` | `exchange` | Admin API calls run with a delegated token for the caller and the server's client |
+| `KC_MCP_MCP_DELEGATION` | `exchange` | Admin API calls run with a delegated token for the caller and the server's client |
 | `KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID`, `…CLIENT_SECRET` | `keycloak-mcp` | the server's client (the actor); its service account holds no admin role |
 | `KC_MCP_SYSTEMS_DEFAULT_VERSION` | `26.8.2` | stated, because the server's client may not read the server info |
 | `KC_MCP_MCP_OAUTH_AUDIENCE` | `keycloak-mcp` | only tokens issued for the MCP server are accepted |

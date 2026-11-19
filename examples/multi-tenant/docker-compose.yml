@@ -56,7 +56,7 @@ services:
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
       # provisioned private_key_jwt keys, one per tenant (./gen-keys.sh), read-only
       KC_MCP_KEYS_DIR: /deployments/data/keys
-      KC_MCP_TOOL_EXPOSURE: hybrid
+      KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: warn
       # the management UI, to look around: http://localhost:8091/ui/ (admin / admin of the master realm), with the
       # tenants as systems, their realms and the audit trail of the tool calls. It needs the database storage, here
@@ -97,12 +97,12 @@ services:
       KC_MCP_SYSTEMS_FILE: /config/systems.json
       KC_MCP_ALLOWED_HOSTS: keycloak:8080
       KC_MCP_KEYS_DIR: /deployments/data/keys
-      KC_MCP_TOOL_EXPOSURE: hybrid
+      KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
       # callers act with their own roles; the default OIDC tenant (root /mcp) is the master realm,
       # an entry /mcp/systems/<tenant>/<realm> verifies tokens of that realm and tells MCP clients to ask for the
       # scope delegation:client:keycloak-mcp-server-<tenant>
-      KC_MCP_DELEGATION: exchange
+      KC_MCP_MCP_DELEGATION: exchange
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       KC_MCP_MCP_OAUTH_ENABLED: "true"

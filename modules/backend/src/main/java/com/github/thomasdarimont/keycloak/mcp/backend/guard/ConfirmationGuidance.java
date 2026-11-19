@@ -15,9 +15,9 @@ import com.github.thomasdarimont.keycloak.mcp.confirm.Confirmer;
 
 /**
  * What the model is told about confirming destructive tools, per session and caller
- * ({@code kc-mcp.model-confirmation}, {@code kc-mcp.model-confirmation-trusted-roles}):
- * the text goes into {@code search_tools} hits of destructive tools, {@code whoami} and
- * the {@code confirmation_required} answers. Guidance only, the confirmers decide.
+ * ({@code kc-mcp.confirm.model}, {@code kc-mcp.confirm.model-trusted-roles}): the text
+ * goes into {@code search_tools} hits of destructive tools, {@code whoami} and the
+ * {@code confirmation_required} answers. Guidance only, the confirmers decide.
  */
 @ApplicationScoped
 public class ConfirmationGuidance {
@@ -52,9 +52,9 @@ public class ConfirmationGuidance {
 
     @Inject
     public ConfirmationGuidance(McpServerConfig config, ConfirmerChain chain) {
-        this(config.modelConfirmation(), config.effectiveConfirmFallback(),
+        this(config.confirm().model(), config.effectiveConfirmFallback(),
                 chain.confirmers().stream().anyMatch(Confirmer::asksTheHuman),
-                Set.copyOf(config.modelConfirmationTrustedRoles().orElse(List.of())));
+                Set.copyOf(config.confirm().modelTrustedRoles().orElse(List.of())));
     }
 
     public ConfirmationGuidance(ModelConfirmation setting, ConfirmFallback fallback, boolean confirmerAsksTheHuman,

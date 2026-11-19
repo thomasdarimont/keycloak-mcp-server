@@ -41,8 +41,8 @@ import io.vertx.core.json.JsonObject;
  * {@link PromptProvider}s in their order, then the prompt files of the extension jars,
  * then those of the prompts directory ({@link PromptFiles}). A later prompt replaces an
  * earlier one of the same name, and the log says so;
- * {@code kc-mcp.prompt-overrides=false} makes a name used twice stop the start instead. A
- * rendered prompt ends with the catalog entries of the tools it names (name, level,
+ * {@code kc-mcp.prompts.overrides=false} makes a name used twice stop the start instead.
+ * A rendered prompt ends with the catalog entries of the tools it names (name, level,
  * description, parameters), so the model skips {@code search_tools}; in progressive
  * exposure mode those tools are also surfaced in {@code tools/list} for the connection.
  */
@@ -89,8 +89,8 @@ public class McpPromptRegistrar {
             }
         }
         found.addAll(PromptFiles.fromJars(extensions.jars()));
-        found.addAll(PromptFiles.fromDirectory(Extensions.resolve(config.promptsDir())));
-        for (Sourced prompt : effective(found, config.promptOverrides())) {
+        found.addAll(PromptFiles.fromDirectory(Extensions.resolve(config.prompts().dir())));
+        for (Sourced prompt : effective(found, config.prompts().overrides())) {
             register(prompt.spec());
         }
         if (!registered.isEmpty()) {
@@ -113,7 +113,7 @@ public class McpPromptRegistrar {
                 continue;
             }
             if (!overrides) {
-                throw new IllegalStateException("Prompt '%s' of %s is also defined by %s, and kc-mcp.prompt-overrides"
+                throw new IllegalStateException("Prompt '%s' of %s is also defined by %s, and kc-mcp.prompts.overrides"
                     .formatted(prompt.spec().name(), earlier.origin(), prompt.origin())
                         + " is false: rename or remove one of them");
             }

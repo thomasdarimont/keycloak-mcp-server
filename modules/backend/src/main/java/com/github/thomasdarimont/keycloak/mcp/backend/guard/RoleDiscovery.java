@@ -61,7 +61,8 @@ public class RoleDiscovery {
     public RoleDiscovery(KeycloakSystems systems, McpServerConfig config, CapabilityDiscovery capabilities) {
         // when delegating, the caller's delegated token decides per call; the server's
         // own client holds no admin role
-        this(systems::names, systems::get, config.roleFilter() && config.delegation() == DelegationMode.OFF);
+        this(systems::names, systems::get,
+                config.tools().roleFilter() && config.mcp().delegation() == DelegationMode.OFF);
         this.capabilities = capabilities::get;
     }
 

@@ -104,7 +104,7 @@ class UnlistedAndRenamedToolsTest {
         ToolCatalog catalog = new ToolCatalog(List.of(GET, RENAMED), null, 10, List.of());
 
         List<String> problems = ToolNameCheckProbe.problems(catalog,
-                Map.of("kc-mcp.denied-tools", List.of("user_get", "user_delete", "user_delte")));
+                Map.of("kc-mcp.tools.denied", List.of("user_get", "user_delete", "user_delte")));
 
         assertEquals(2, problems.size(), problems.toString());
         assertTrue(problems.stream().anyMatch(p -> p.contains("renamed to 'keycloak_user_remove'")));

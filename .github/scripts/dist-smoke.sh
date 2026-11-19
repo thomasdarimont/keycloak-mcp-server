@@ -59,7 +59,7 @@ stop_server() { kill "$SERVER_PID"; wait "$SERVER_PID" 2>/dev/null || true; SERV
 echo "== version"; "$DIST/bin/kcmcp.sh" --version
 
 echo "== 1. a --config file by relative path, from outside the distribution"
-printf 'quarkus.http.port=%s\nkc-mcp.tool-exposure=lazy\n' "$PORT" > "$DIST/conf/smoke.conf"
+printf 'quarkus.http.port=%s\nkc-mcp.tools.exposure=lazy\n' "$PORT" > "$DIST/conf/smoke.conf"
 start_server --config conf/smoke.conf --kc-mcp.startup-check=off --kc-mcp.systems.default.url=http://127.0.0.1:1 \
   --kc-mcp.systems.default.client-id=smoke --kc-mcp.systems.default.client-secret=smoke
 grep -q 'exposure=LAZY' server.log || { echo "conf/smoke.conf was not read"; cat server.log; exit 1; }

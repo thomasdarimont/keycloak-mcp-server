@@ -65,7 +65,7 @@ replace the file vault.
 ## User login per realm (`mcp-users`, port 8092)
 
 The second server requires an OAuth login at its MCP endpoint (`KC_MCP_MCP_OAUTH_ENABLED=true`) and makes
-every Admin API call with a delegated token (`KC_MCP_DELEGATION=exchange`): Keycloak issues it for the user and
+every Admin API call with a delegated token (`KC_MCP_MCP_DELEGATION=exchange`): Keycloak issues it for the user and
 the tenant's client together (token exchange delegation, preview in Keycloak 26.8; `sub` is the user, `act` is
 `keycloak-mcp-server-<tenant>`). The user's own token opens the MCP server only and never reaches the Admin API.
 Keycloak enforces the user's roles, and both audits name the human.

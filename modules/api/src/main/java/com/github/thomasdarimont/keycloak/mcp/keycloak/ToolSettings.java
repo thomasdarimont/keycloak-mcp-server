@@ -14,10 +14,10 @@ import io.vertx.core.json.JsonObject;
  * Which tools the calls into a Keycloak system or one of its realms may use: the
  * {@code tools} section of a system, a realm and a preset. Among those levels the most
  * specific key wins (preset, system, realm preset, realm), as with {@code access}.
- * Against the server's {@code kc-mcp.read-only}, {@code kc-mcp.allowed-tools},
- * {@code kc-mcp.denied-tools} and {@code kc-mcp.allowed-categories} a section can only
- * take tools away: read-only once read-only, denied once denied, and an allow-list
- * narrows the server's.
+ * Against the server's {@code kc-mcp.tools.read-only}, {@code kc-mcp.tools.allowed},
+ * {@code kc-mcp.tools.denied} and {@code kc-mcp.tools.categories} a section can only take
+ * tools away: read-only once read-only, denied once denied, and an allow-list narrows the
+ * server's.
  * <p>
  * Configuration {@code kc-mcp.systems.<name>.tools.read-only=true},
  * {@code ...tools.denied=user_delete,realm_update} (comma separated, with or without the

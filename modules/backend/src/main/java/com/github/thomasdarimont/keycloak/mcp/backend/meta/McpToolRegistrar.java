@@ -167,13 +167,13 @@ public class McpToolRegistrar {
 
     /**
      * The schema with {@code x-mcp-header} on the given string arguments it has
-     * ({@code kc-mcp.param-headers}): a client of protocol version 2026-07-28 sends
+     * ({@code kc-mcp.mcp.param-headers}): a client of protocol version 2026-07-28 sends
      * {@code Mcp-Param-<header>} with the value, and the MCP extension refuses a request
      * whose header does not match its body. A copy: the catalog's schema is also what
      * {@code search_tools} shows.
      */
     private JsonObject mirrored(JsonObject schema, Map<String, String> headers) {
-        if (!config.paramHeaders() || schema == null || schema.getJsonObject("properties") == null) {
+        if (!config.mcp().paramHeaders() || schema == null || schema.getJsonObject("properties") == null) {
             return schema;
         }
         JsonObject copy = schema.copy();
@@ -208,7 +208,7 @@ public class McpToolRegistrar {
     }
 
     private ToolResponse toResponse(ToolResult result) {
-        return toResponse(result, config.structuredContent());
+        return toResponse(result, config.tools().structuredContent());
     }
 
     /**

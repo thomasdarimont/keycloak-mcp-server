@@ -94,7 +94,7 @@ public class MetaTools {
     @Inject
     public MetaTools(ToolCatalog catalog, AccessPolicy policy, ToolInvoker invoker, ProgressiveState progressive,
             McpServerConfig config, ConfirmationGuidance guidance, KcMcpMetrics metrics) {
-        this(catalog, policy, invoker, progressive, config.searchLimitDefault(), config.delegation());
+        this(catalog, policy, invoker, progressive, config.tools().searchLimitDefault(), config.mcp().delegation());
         this.guidance = guidance;
         this.metrics = metrics;
     }

@@ -39,8 +39,8 @@ public class RealmManagerTestResource implements QuarkusTestResourceLifecycleMan
         return Map.of("kc-mcp.systems.default.url", base, "kc-mcp.systems.default.grant-type", "client_credentials",
                 "kc-mcp.systems.default.auth-realm", REALM, "kc-mcp.systems.default.client-id", "mcp-mgr",
                 "kc-mcp.systems.default.client-secret", "mgr-secret", "kc-mcp.systems.default.allowed-realms", REALM,
-                "kc-mcp.systems.default.default-realm", REALM, "kc-mcp.tool-exposure", "direct", "kc-mcp.startup-check",
-                "fail");
+                "kc-mcp.systems.default.default-realm", REALM, "kc-mcp.tools.exposure", "direct",
+                "kc-mcp.startup-check", "fail");
     }
 
     private void bootstrap() throws IOException, InterruptedException {

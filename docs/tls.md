@@ -59,7 +59,7 @@ depend on the headers of each request:
 - the JWKS URLs the admin API reports
 
 Its host is also accepted by the DNS rebinding check, so an anonymous server behind a proxy needs no
-`kc-mcp.dns-rebinding-allowed-hosts` entry for it.
+`kc-mcp.mcp.dns-rebinding-allowed-hosts` entry for it.
 
 Without it these links come from the request, so behind a proxy set
 `quarkus.http.proxy.proxy-address-forwarding=true` and `quarkus.http.proxy.trusted-proxies`. The browser login of the

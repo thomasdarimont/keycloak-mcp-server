@@ -20,7 +20,7 @@ MCP client (agent)
   │    → access token of the Keycloak user linked to e-1001: aud http://localhost:8103 and keycloak-mcp,
   │      may_act = keycloak-mcp, no roles, no Admin API audience
   ▼
-MCP server (KC_MCP_DELEGATION=exchange, the client keycloak-mcp)
+MCP server (KC_MCP_MCP_DELEGATION=exchange, the client keycloak-mcp)
   │ 5. token exchange at Keycloak: subject_token = alice's token, actor_token = its own
   │    → delegated token: sub alice, act keycloak-mcp, alice's realm-management roles
   ▼
@@ -97,7 +97,7 @@ Edit `idp/policy.json` (re-read on every request) to move users between groups o
 | users | `alice`, `carol`, `bob` linked to the IdP subjects `e-1001`, `e-1003`, `e-1002` (`federatedIdentities` in the realm file); `erin`, `frank` (disabled) to look at |
 | `idp/idp.py` | stand-in enterprise IdP, Python standard library only: password sign-in → ID token, token exchange → ID-JAG under `policy.json`, JWKS. Keycloak cannot issue ID-JAGs yet ([keycloak#48818](https://github.com/keycloak/keycloak/issues/48818)) |
 | `idp/policy.json` | clients (`agent` / `agent-at-idp`), users with `sub` and groups, apps: `audience` (AS issuer), `resource` (MCP server), `clients` (IdP client id → `client_id` at the AS), allowed `groups`, `scopes` |
-| MCP server | `env/xaa.env`: `KC_MCP_DELEGATION=exchange`, the `client_credentials` of `keycloak-mcp`, `KC_MCP_MCP_OAUTH_ENABLED=true`, `KC_MCP_MCP_OAUTH_AUDIENCE=http://localhost:8103`; no admin role of its own |
+| MCP server | `env/xaa.env`: `KC_MCP_MCP_DELEGATION=exchange`, the `client_credentials` of `keycloak-mcp`, `KC_MCP_MCP_OAUTH_ENABLED=true`, `KC_MCP_MCP_OAUTH_AUDIENCE=http://localhost:8103`; no admin role of its own |
 
 ## Delegation without a consent page
 

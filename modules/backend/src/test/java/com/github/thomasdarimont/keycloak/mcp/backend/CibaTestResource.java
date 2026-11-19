@@ -135,7 +135,7 @@ public class CibaTestResource extends CallerTestResource {
     protected Map<String, String> extraConfig() {
         return Map.of("kc-mcp.spi.confirmer.ciba.enabled", "true", "kc-mcp.spi.confirmer.ciba.client-id", "mcp-ciba",
                 "kc-mcp.spi.confirmer.ciba.client-secret", CLIENT_SECRET, "kc-mcp.spi.confirmer.ciba.timeout-seconds",
-                "6", "kc-mcp.spi.confirmer.ciba.poll-wait-seconds", "3", "kc-mcp.confirm-fallback", "deny");
+                "6", "kc-mcp.spi.confirmer.ciba.poll-wait-seconds", "3", "kc-mcp.confirm.fallback", "deny");
     }
 
     @Override

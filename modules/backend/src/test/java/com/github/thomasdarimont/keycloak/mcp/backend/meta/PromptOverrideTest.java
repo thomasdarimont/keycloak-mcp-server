@@ -35,7 +35,7 @@ class PromptOverrideTest {
                 () -> McpPromptRegistrar.effective(found, false));
         assertTrue(
                 e.getMessage().contains("keycloak_onboard_user") && e.getMessage().contains("'built-in'")
-                        && e.getMessage().contains("'acme'") && e.getMessage().contains("kc-mcp.prompt-overrides"),
+                        && e.getMessage().contains("'acme'") && e.getMessage().contains("kc-mcp.prompts.overrides"),
                 e.getMessage());
         assertEquals(1, McpPromptRegistrar.effective(found.subList(0, 1), false).size());
     }

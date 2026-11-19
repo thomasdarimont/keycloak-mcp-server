@@ -16,7 +16,7 @@
               <entry key="KC_MCP_JWT_ALGORITHM" value="RS256" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="demo" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
-              <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
+              <entry key="KC_MCP_TOOLS_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />
               <entry key="KC_MCP_DEV_MODE" value="true" />
               <entry key="KC_MCP_UI_OPERATOR_ROLE" value="realm-management.realm-admin" />

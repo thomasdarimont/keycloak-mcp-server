@@ -34,7 +34,7 @@ flowchart LR
 
 ## 2. Users log in and act with their own roles
 
-The quick start and the shape a shared server has (`examples/run-modes/env/user-login.env`, `KC_MCP_DELEGATION=exchange`).
+The quick start and the shape a shared server has (`examples/run-modes/env/user-login.env`, `KC_MCP_MCP_DELEGATION=exchange`).
 The MCP endpoint answers 401 with protected resource metadata, the client logs the user in at Keycloak with the
 authorization code flow and PKCE, and the user consents to the server's client acting for them. The token the client
 then presents only opens the MCP server: the MCP specification forbids passing it on. For the Admin REST API the
@@ -114,7 +114,7 @@ the `delegate` permission).
 `examples/xaa/`, MCP Enterprise-Managed Authorization: the client trades the user's SSO identity for an ID-JAG at the
 enterprise IdP and redeems it at Keycloak with the JWT authorization grant. There is no login page and no consent screen
 of Keycloak; the IdP's policy decides whether this agent may connect for this user, Keycloak's roles decide what they may
-do. The server exchanges the token as in scenario 3 (`KC_MCP_DELEGATION=exchange`). As nobody is asked to consent, the
+do. The server exchanges the token as in scenario 3 (`KC_MCP_MCP_DELEGATION=exchange`). As nobody is asked to consent, the
 realm's administrator names the server's client as the allowed actor instead: mappers on the agent's client write the
 `may_act` claim and a client policy checks it against the `delegate` permission.
 
@@ -351,13 +351,13 @@ sequenceDiagram
 
 `examples/troubleshooting/`: a support engineer asks why a login misbehaves, and the model answers from what Keycloak
 records and how it is configured. The server cannot change anything, twice over: its service account holds only
-`view-*` roles, and `KC_MCP_READ_ONLY=true` leaves the read tools only and sends nothing but `GET` to the Admin API.
+`view-*` roles, and `KC_MCP_TOOLS_READ_ONLY=true` leaves the read tools only and sends nothing but `GET` to the Admin API.
 A fix is proposed, not applied.
 
 ```mermaid
 flowchart LR
     U("Support engineer<br/>'what causes this<br/>redirect loop?'") --> M("MCP client<br/>free question or<br/>a troubleshooting prompt")
-    M -- "MCP over HTTP" --> S("keycloak-mcp-server<br/>KC_MCP_READ_ONLY=true:<br/>read tools, GET only")
+    M -- "MCP over HTTP" --> S("keycloak-mcp-server<br/>KC_MCP_TOOLS_READ_ONLY=true:<br/>read tools, GET only")
     S -- "client mcp-support<br/>view-* roles" --> K("Keycloak<br/>realm shop")
     subgraph evidence["What the server reads"]
         E1("login events<br/>the pattern, the error codes")

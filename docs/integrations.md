@@ -9,7 +9,7 @@ system or realm uses `/mcp/systems/<system>[/<realm>]` instead ([Several Keycloa
 Two cases run through every client:
 
 - **No login** (`local` profile, the server holds a service account): the client only needs the URL.
-- **Login** (`KC_MCP_MCP_OAUTH_ENABLED=true`, with `KC_MCP_DELEGATION=exchange` or `KC_MCP_REQUIRE_CALLER=true`): the server answers 401
+- **Login** (`KC_MCP_MCP_OAUTH_ENABLED=true`, with `KC_MCP_MCP_DELEGATION=exchange` or `KC_MCP_MCP_REQUIRE_CALLER=true`): the server answers 401
   with a `resource_metadata` link, the client reads the protected resource metadata, finds the realm and logs the user
   in with authorization code and PKCE in the browser. The client needs an OAuth client at Keycloak, `mcp-consumer` in
   the examples, and Keycloak needs the client's callback address.
@@ -129,7 +129,7 @@ body; the `Mcp-Session-Id` header of the `initialize` answer goes on every later
 - **The client.** A public client with PKCE, `mcp-consumer` in the demo realms, holding an *Audience* mapper that adds
   the server's audience (`aud=mcp-admin`, what `KC_MCP_MCP_OAUTH_AUDIENCE` requires) and the `kc-admin-api` client
   scope (Keycloak 26.8.2+ checks it for Admin API tokens). The humans carry the `realm-management` roles, groups
-  preferred. `KC_MCP_DELEGATION=exchange` also needs consent on the client and the delegation scope
+  preferred. `KC_MCP_MCP_DELEGATION=exchange` also needs consent on the client and the delegation scope
   ([Security](security.md#callers), `examples/delegated-auth/`).
 - **Callbacks.** Every client's callback must be a redirect URI of that client. The demo realms register LM Studio's,
   most also Claude Code's, Codex's and VS Code's; add the ones you use from the sections above. For a loopback callback (`127.0.0.1`, `localhost`) Keycloak ignores

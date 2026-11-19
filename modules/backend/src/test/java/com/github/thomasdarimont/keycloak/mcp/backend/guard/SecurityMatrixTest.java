@@ -83,18 +83,18 @@ class SecurityMatrixTest {
 
     @Test
     void explicitSettingsWinOverTheProfile() {
-        McpServerConfig loosened = config(
-                Map.of("kc-mcp.security-profile", "shared", "kc-mcp.confirm-fallback", "flag", "kc-mcp.explicit-target",
-                        "off", "kc-mcp.dynamic-private-hosts", "allow", "kc-mcp.audit-on-failure", "allow"));
+        McpServerConfig loosened = config(Map.of("kc-mcp.security-profile", "shared", "kc-mcp.confirm.fallback", "flag",
+                "kc-mcp.tools.explicit-target", "off", "kc-mcp.dynamic-private-hosts", "allow",
+                "kc-mcp.audit-on-failure", "allow"));
         assertEquals(ConfirmFallback.FLAG, loosened.effectiveConfirmFallback());
         assertEquals(ExplicitTarget.OFF, loosened.effectiveExplicitTarget());
         assertEquals(PrivateHosts.ALLOW, loosened.effectiveDynamicPrivateHosts());
         assertEquals(AuditOnFailure.ALLOW, loosened.effectiveAuditOnFailure());
         assertTrue(loosened.callerRequired(), "shared always requires callers");
 
-        McpServerConfig tightened = config(Map.of("kc-mcp.confirm-fallback", "deny", "kc-mcp.explicit-target", "write",
-                "kc-mcp.dynamic-private-hosts", "listed", "kc-mcp.require-caller", "true", "kc-mcp.audit-on-failure",
-                "refuse-changes"));
+        McpServerConfig tightened = config(Map.of("kc-mcp.confirm.fallback", "deny", "kc-mcp.tools.explicit-target",
+                "write", "kc-mcp.dynamic-private-hosts", "listed", "kc-mcp.mcp.require-caller", "true",
+                "kc-mcp.audit-on-failure", "refuse-changes"));
         assertEquals(ConfirmFallback.DENY, tightened.effectiveConfirmFallback());
         assertEquals(ExplicitTarget.WRITE, tightened.effectiveExplicitTarget());
         assertEquals(PrivateHosts.LISTED, tightened.effectiveDynamicPrivateHosts());

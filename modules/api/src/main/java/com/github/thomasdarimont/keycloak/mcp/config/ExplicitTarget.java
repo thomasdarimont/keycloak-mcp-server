@@ -6,8 +6,8 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.ToolLevel;
 
 /**
  * Which tools must name their target instead of relying on the default system and default
- * realm ({@code kc-mcp.explicit-target}): a model that omits the arguments then gets
- * {@code system_required} / {@code realm_required} rather than the default. A
+ * realm ({@code kc-mcp.tools.explicit-target}): a model that omits the arguments then
+ * gets {@code system_required} / {@code realm_required} rather than the default. A
  * system-specific MCP endpoint ({@code /mcp/<system>[/<realm>]}) counts as explicit.
  */
 public enum ExplicitTarget {

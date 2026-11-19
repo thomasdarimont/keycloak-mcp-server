@@ -113,7 +113,7 @@ public class AdminServerInfo {
         m.put("instanceRole", config.instanceRole().name().toLowerCase(Locale.ROOT));
         m.put("securityProfile", config.securityProfile().name().toLowerCase(Locale.ROOT));
         m.put("devMode", config.devMode());
-        m.put("toolExposure", config.toolExposure().name().toLowerCase(Locale.ROOT));
+        m.put("toolExposure", config.tools().exposure().name().toLowerCase(Locale.ROOT));
         return m;
     }
 

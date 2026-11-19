@@ -14,10 +14,15 @@ properties of Quarkus OIDC (`quarkus.oidc.tenant-enabled`, `auth-server-url`, `t
 naming the new one. Property → environment variable: `kc-mcp.systems.default.url` →
 `KC_MCP_SYSTEMS_DEFAULT_URL` (a system name from the environment is lower-case letters and digits).
 
+What is not about one of those surfaces is grouped by topic: `kc-mcp.mcp.*` (the MCP endpoint: who may call it, how
+requests are checked), `kc-mcp.tools.*` (which tools exist, how the model sees them, what they return; the same keys
+as the `tools` section of a system, realm or preset), `kc-mcp.confirm.*` (how a destructive call gets confirmed) and
+`kc-mcp.prompts.*`.
+
 Where a setting comes from, the first one found wins:
 
-1. the command line: `bin/kcmcp.sh start --kc-mcp.tool-exposure=lazy`, or `java -Dkc-mcp.tool-exposure=lazy -jar ...`
-2. the environment: `KC_MCP_TOOL_EXPOSURE=lazy`, also from a `.env` file in the working directory, which ranks just below it
+1. the command line: `bin/kcmcp.sh start --kc-mcp.tools.exposure=lazy`, or `java -Dkc-mcp.tools.exposure=lazy -jar ...`
+2. the environment: `KC_MCP_TOOLS_EXPOSURE=lazy`, also from a `.env` file in the working directory, which ranks just below it
 3. the configuration files, `conf/kcmcp.conf` and those given with `--config`, a later file over an earlier one
 4. the server's defaults
 
@@ -118,19 +123,19 @@ the database connection.
 | `kc-mcp.spi.audit-listener.db.retention-days` |                        | delete audit rows older than this (startup, then hourly); unset keeps all |
 | `kc-mcp.spi.key-vault.db.retired-key-grace-seconds` | `3600`    | how long a rotated-away key stays in the JWKS; then its private key is deleted (hourly purge) |
 | `kc-mcp.spi.audit-scrubber.pii.mode` | `keep`                  | `keep`, `pseudonymize`, `drop`; `args` argument names, `targets` listeners (default `db`) |
-| `kc-mcp.delegation`             | `off`                       | `exchange`: calls run with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); needs `kc-mcp.mcp.oauth.enabled=true`. The caller's own token is never sent to the Admin API ([Security](security.md#callers)) |
+| `kc-mcp.mcp.delegation`             | `off`                       | `exchange`: calls run with a delegated token Keycloak issues for caller + server client (26.8 token exchange delegation); needs `kc-mcp.mcp.oauth.enabled=true`. The caller's own token is never sent to the Admin API ([Security](security.md#callers)) |
 | `kc-mcp.admin-api-scope`        | `kc-admin-api`              | scope requested with Admin API tokens and advertised to MCP clients (Keycloak 26.8.2+ audience check); dropped on `invalid_scope`; blank: none |
-| `kc-mcp.dns-rebinding-protection` | `auto`                    | `auto` (on while anonymous), `on`, `off`: `Host`/`Origin` of MCP requests must be localhost or in `kc-mcp.dns-rebinding-allowed-hosts` |
+| `kc-mcp.mcp.dns-rebinding-protection` | `auto`                    | `auto` (on while anonymous), `on`, `off`: `Host`/`Origin` of MCP requests must be localhost or in `kc-mcp.mcp.dns-rebinding-allowed-hosts` |
 | `kc-mcp.dev-mode`               | `false`                     | what `bin/kcmcp.sh start-dev` sets; see [Development mode](#development-mode-start-dev) |
 | `kc-mcp.security-profile`       | `local`                     | `local` or `shared`: defaults of the five rows below, and `shared` refuses to start without caller authentication + audience (on instances that serve the MCP endpoint, see `kc-mcp.instance-role`), `allowed-hosts`, admin audience, storage `secret-key` ([Guardrails](security.md#guardrails)) |
-| `kc-mcp.require-caller`         | `false`, `shared`: always   | refuse anonymous requests with the OAuth challenge even with `delegation=off` |
-| `kc-mcp.param-headers`          | `true`                      | mark `execute_tool`'s `name` and the `system` and `realm` arguments with `x-mcp-header`, so that clients of protocol version 2026-07-28 mirror them as `Mcp-Param-Tool`, `Mcp-Param-System`, `Mcp-Param-Realm` for proxies; a request whose headers do not match its body answers 400 ([Tools](tools.md#http-headers)) |
-| `kc-mcp.confirm-fallback`       | `flag`, `shared`: `deny`    | without elicitation: `flag` accepts `confirm: true`, `deny` refuses destructive tools |
-| `kc-mcp.explicit-target`        | `off`, `shared`: `destructive` | `destructive` or `write` tools must pass `system` (several systems) and `realm` instead of the defaults |
+| `kc-mcp.mcp.require-caller`         | `false`, `shared`: always   | refuse anonymous requests with the OAuth challenge even with `delegation=off` |
+| `kc-mcp.mcp.param-headers`          | `true`                      | mark `execute_tool`'s `name` and the `system` and `realm` arguments with `x-mcp-header`, so that clients of protocol version 2026-07-28 mirror them as `Mcp-Param-Tool`, `Mcp-Param-System`, `Mcp-Param-Realm` for proxies; a request whose headers do not match its body answers 400 ([Tools](tools.md#http-headers)) |
+| `kc-mcp.confirm.fallback`       | `flag`, `shared`: `deny`    | without elicitation: `flag` accepts `confirm: true`, `deny` refuses destructive tools |
+| `kc-mcp.tools.explicit-target`        | `off`, `shared`: `destructive` | `destructive` or `write` tools must pass `system` (several systems) and `realm` instead of the defaults |
 | `kc-mcp.audit-on-failure`       | `allow`, `shared`: `refuse-changes` | while the audit trail (the database) cannot be written: `allow` runs every tool, `refuse-changes` answers `audit_unavailable` to write and destructive tools; reads run either way ([When the database is away](storage.md#when-the-database-is-away)) |
 | `kc-mcp.dynamic-private-hosts`  | `allow`, `shared`: `listed` | `listed`: a runtime-registered system on a private, loopback or link-local address needs its host named literally in `allowed-hosts` |
-| `kc-mcp.model-confirmation`     | `auto`                      | guidance to the model about destructive tools: `ask`, `server`, `auto` ([Guardrails](security.md#guardrails)) |
-| `kc-mcp.model-confirmation-trusted-roles` |                   | role refs whose holders are told to pass `confirm: true` right away in `ask` mode |
+| `kc-mcp.confirm.model`     | `auto`                      | guidance to the model about destructive tools: `ask`, `server`, `auto` ([Guardrails](security.md#guardrails)) |
+| `kc-mcp.confirm.model-trusted-roles` |                   | role refs whose holders are told to pass `confirm: true` right away in `ask` mode |
 | `kc-mcp.mcp.oauth.enabled`      | `false`                     | authenticate callers of the MCP endpoint: requests need an access token of `kc-mcp.mcp.oauth.issuer` |
 | `kc-mcp.mcp.oauth.issuer`       | the default system's auth realm | the MCP endpoint's authorization server, a realm URL at the address the server reaches |
 | `kc-mcp.mcp.oauth.audience`     |                             | required `aud`: only tokens issued for this server are accepted (set it whenever callers log in) |
@@ -140,24 +145,24 @@ the database connection.
 | `kc-mcp.mcp.oauth.resource-metadata.resource` | from the request, or `kc-mcp.hostname` | the address of the MCP endpoint as clients know it |
 | `kc-mcp.explanations`           | `auto`                      | refusal wording: `admins` (config details, `howToFix`), `users` (plain words), `auto` (by caller roles in delegation mode, else admins) |
 | `kc-mcp.allowed-hosts`          | any                         | `[scheme://]host[:port]` patterns with `*`, checked at startup |
-| `kc-mcp.tool-prefix`            |                             | prefix for all tool names (`prod_`) |
-| `kc-mcp.read-only`              | `false`                     | |
-| `kc-mcp.allowed-tools` / `denied-tools` / `allowed-categories` | all | explicit narrowing; systems and realms can narrow further (`tools`) |
-| `kc-mcp.unlisted-tools` | `deny` with `allowed-tools`, else `allow` | what happens to tools `allowed-tools` does not name: `allow`, `read` (only if they read), `deny` ([New, removed and renamed tools](security.md#new-removed-and-renamed-tools)) |
-| `kc-mcp.confirm-tools` | | tools that need confirmation as destructive ones do ([Confirming destructive tools](security.md#confirming-destructive-tools)) |
-| `kc-mcp.confirm-writes` | `false` | every tool that changes Keycloak needs confirmation |
-| `kc-mcp.role-filter`            | `true`                      | hide/refuse tools the token's roles do not cover |
+| `kc-mcp.tools.prefix`            |                             | prefix for all tool names (`prod_`) |
+| `kc-mcp.tools.read-only`              | `false`                     | |
+| `kc-mcp.tools.allowed` / `denied` / `categories` | all | explicit narrowing; systems and realms can narrow further (`tools`) |
+| `kc-mcp.tools.unlisted` | `deny` with `allowed`, else `allow` | what happens to tools `allowed` does not name: `allow`, `read` (only if they read), `deny` ([New, removed and renamed tools](security.md#new-removed-and-renamed-tools)) |
+| `kc-mcp.tools.confirm` | | tools that need confirmation as destructive ones do ([Confirming destructive tools](security.md#confirming-destructive-tools)) |
+| `kc-mcp.tools.confirm-writes` | `false` | every tool that changes Keycloak needs confirmation |
+| `kc-mcp.tools.role-filter`            | `true`                      | hide/refuse tools the token's roles do not cover |
 | `kc-mcp.startup-check`          | `warn`                      | `warn`, `fail`, `off` |
-| `kc-mcp.tool-exposure`          | `hybrid`                    | `direct` / `lazy` / `hybrid` / `progressive` |
-| `kc-mcp.hot-tools`              | user_search, user_get, realm_get_config, server_info | listed directly in hybrid mode |
-| `kc-mcp.search-limit-default`   | `5`                         | hits per `search_tools` (max 10) |
-| `kc-mcp.result-max-items`       | `100`                       | cap for list results |
-| `kc-mcp.structured-content`     | `true`                      | mirror results as `structuredContent` |
-| `kc-mcp.confirm-timeout-seconds`| `120`                       | elicitation timeout |
+| `kc-mcp.tools.exposure`          | `hybrid`                    | `direct` / `lazy` / `hybrid` / `progressive` |
+| `kc-mcp.tools.hot`              | user_search, user_get, realm_get_config, server_info | listed directly in hybrid mode |
+| `kc-mcp.tools.search-limit-default`   | `5`                         | hits per `search_tools` (max 10) |
+| `kc-mcp.tools.result-max-items`       | `100`                       | cap for list results |
+| `kc-mcp.tools.structured-content`     | `true`                      | mirror results as `structuredContent` |
+| `kc-mcp.confirm.timeout-seconds`| `120`                       | elicitation timeout |
 | `kc-mcp.config-files`           |                             | comma-separated properties files read at startup, between the built-in defaults and the environment; a directory stands for its `*.conf` and `*.properties` files in name order; a later file overrides an earlier one (the distribution's `conf/kcmcp.conf`, then its `--config` files); a missing path stops the start; a path cannot contain a comma |
 | `kc-mcp.providers-dir`          | `providers`                 | extension jars ([Extension jars](extending.md#extension-jars-providers)) |
-| `kc-mcp.prompts-dir`            | `prompts`                   | prompts as text files, one `.md` per prompt; resolved like `providers-dir`, the distribution sets `conf/prompts` ([Prompts as text files](tools.md#prompts-as-text-files)) |
-| `kc-mcp.prompt-overrides`       | `true`                      | a later prompt replaces an earlier one of the same name, logged at startup; `false`: a name used twice stops the start |
+| `kc-mcp.prompts.dir`            | `prompts`                   | prompts as text files, one `.md` per prompt; resolved like `providers-dir`, the distribution sets `conf/prompts` ([Prompts as text files](tools.md#prompts-as-text-files)) |
+| `kc-mcp.prompts.overrides`       | `true`                      | a later prompt replaces an earlier one of the same name, logged at startup; `false`: a name used twice stops the start |
 | `kc-mcp.spi.<spi>.provider`    | lowest `order()`            | which extension serves `key-vault`, `key-generator`, `session-store`, `approval-store`, `rate-limit-store` or `state-store` ([Extending](extending.md)) |
 | `kc-mcp.spi.<spi>.<id>.<key>`         |                             | per extension; `enabled=false` disables; id kebab-case (`acmeTicketChecker` → `acme-ticket-checker`, env `KC_MCP_SPI_ACCESS_CHECK_ACME_TICKET_CHECKER_*`, resolved by the server) |
 | `quarkus.http.cors.origins`     | local origins               | browser MCP clients; set to the client origin(s) in production |

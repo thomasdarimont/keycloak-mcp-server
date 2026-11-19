@@ -39,4 +39,15 @@ class RemovedSettingsTest {
                 + " KC_MCP_UI_OIDC_IDPS_*)"), problems(Map.of("kc-mcp.ui.idps.corp.issuer", "https://corp")));
         assertEquals(1, problems(Map.of("KC_MCP_UI_IDPS_CORP_ISSUER", "https://corp")).size());
     }
+
+    @Test
+    void groupedSettingsAreToldTheirGroup() {
+        assertEquals(List.of("kc-mcp.tool-exposure (env KC_MCP_TOOL_EXPOSURE) is now kc-mcp.tools.exposure (env"
+                + " KC_MCP_TOOLS_EXPOSURE)"), problems(Map.of("kc-mcp.tool-exposure", "lazy")));
+        assertEquals(1, problems(Map.of("kc-mcp.delegation", "exchange")).size());
+        assertEquals(1, problems(Map.of("kc-mcp.prompts-dir", "conf/prompts")).size());
+        assertTrue(problems(Map.of("kc-mcp.tools.exposure", "lazy", "kc-mcp.mcp.delegation", "exchange",
+                "kc-mcp.prompts.dir", "conf/prompts"))
+            .isEmpty());
+    }
 }

@@ -77,7 +77,7 @@ class KeycloakAdminDelegateTest {
         KeycloakAdmin base = admin();
         String token = jwt(System.currentTimeMillis() / 1000 + 600);
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> base.forToken(token));
-        assertTrue(e.getMessage().contains("kc-mcp.delegation is off"), e.getMessage());
+        assertTrue(e.getMessage().contains("kc-mcp.mcp.delegation is off"), e.getMessage());
         base.close();
     }
 }

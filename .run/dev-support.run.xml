@@ -14,8 +14,8 @@
               <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET" value="mcp-support-secret" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="shop" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="shop" />
-              <entry key="KC_MCP_READ_ONLY" value="true" />
-              <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
+              <entry key="KC_MCP_TOOLS_READ_ONLY" value="true" />
+              <entry key="KC_MCP_TOOLS_EXPOSURE" value="hybrid" />
               <entry key="QUARKUS_HTTP_PORT" value="8105" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />

@@ -97,7 +97,7 @@ class CustomRootPathTest {
         public Map<String, String> getConfigOverrides() {
             return Map.ofEntries(Map.entry("quarkus.mcp.server.http.root-path", "/review-mcp"),
                     Map.entry("quarkus.http.test-port", String.valueOf(PORT)),
-                    Map.entry("kc-mcp.require-caller", "true"),
+                    Map.entry("kc-mcp.mcp.require-caller", "true"),
                     Map.entry("kc-mcp.systems.default.url", "http://127.0.0.1:1"),
                     Map.entry("kc-mcp.systems.default.grant-type", "client_credentials"),
                     Map.entry("kc-mcp.systems.default.client-auth", "private_key_jwt"),

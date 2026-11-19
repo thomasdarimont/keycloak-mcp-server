@@ -128,7 +128,7 @@ services:
       KC_MCP_DEV_MODE: "true"
       # the MCP server may only talk to these two Keycloaks
       KC_MCP_ALLOWED_HOSTS: keycloak:8080,keycloak-globex:8080
-      KC_MCP_TOOL_EXPOSURE: hybrid
+      KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
     ports:
       - "8091:8081"
@@ -156,9 +156,9 @@ services:
       KC_MCP_STATIC_SYSTEMS: "false"
       KC_MCP_DYNAMIC_SYSTEMS: "true"
       KC_MCP_ALLOWED_HOSTS: keycloak:8080,keycloak-globex:8080
-      KC_MCP_TOOL_EXPOSURE: hybrid
+      KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
-      KC_MCP_DELEGATION: exchange
+      KC_MCP_MCP_DELEGATION: exchange
       # the default OIDC tenant (root /mcp) is the master realm; an entry /mcp/systems/<system>[/<realm>] verifies
       # tokens of that system's realm and asks for the scope delegation:client:<the system's client>
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080

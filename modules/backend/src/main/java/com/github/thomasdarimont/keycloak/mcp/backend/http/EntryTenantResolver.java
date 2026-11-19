@@ -225,7 +225,8 @@ public class EntryTenantResolver implements TenantConfigResolver {
      * {@code kc-mcp.admin-api-scope}; empty for none.
      */
     private Set<String> scopesFor(KeycloakSystem system) {
-        if (config.delegation() == DelegationMode.EXCHANGE && system.clientId().filter(v -> !v.isBlank()).isPresent()) {
+        if (config.mcp().delegation() == DelegationMode.EXCHANGE
+                && system.clientId().filter(v -> !v.isBlank()).isPresent()) {
             return new LinkedHashSet<>(List.of("openid", TokenExchange.delegationScope(system.clientId().get())));
         }
         String scope = config.adminApiScope();

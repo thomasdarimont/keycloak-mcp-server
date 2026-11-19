@@ -100,7 +100,7 @@ public class StartupChecks {
             problems.add("[" + sys + "] cannot read its signing key: " + root(e));
             return problems;
         }
-        if (config.delegation() == DelegationMode.EXCHANGE) {
+        if (config.mcp().delegation() == DelegationMode.EXCHANGE) {
             return checkActor(admin);
         }
         GrantedRoles granted;

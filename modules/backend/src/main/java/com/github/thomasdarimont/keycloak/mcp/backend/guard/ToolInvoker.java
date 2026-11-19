@@ -72,9 +72,9 @@ public class ToolInvoker {
     @Inject
     public ToolInvoker(ToolCatalog catalog, AccessPolicy policy, ConfirmerChain confirmer, McpServerConfig config,
             KeycloakSystems systems, AuditLog audit, Tracer tracer) {
-        this(catalog, policy, confirmer, config.resultMaxItems(), systems, config.delegation(), audit);
+        this(catalog, policy, confirmer, config.tools().resultMaxItems(), systems, config.mcp().delegation(), audit);
         this.tracer = tracer;
-        this.confirmTimeout = Duration.ofSeconds(config.confirmTimeoutSeconds());
+        this.confirmTimeout = Duration.ofSeconds(config.confirm().timeoutSeconds());
         this.explicitTarget = config.effectiveExplicitTarget();
         this.confirmFallback = config.effectiveConfirmFallback();
         this.auditOnFailure = config.effectiveAuditOnFailure();
@@ -93,7 +93,7 @@ public class ToolInvoker {
 
     /**
      * Which tools must name system and realm instead of taking the defaults
-     * ({@code kc-mcp.explicit-target}).
+     * ({@code kc-mcp.tools.explicit-target}).
      */
     public ToolInvoker explicitTarget(ExplicitTarget explicitTarget) {
         this.explicitTarget = explicitTarget == null ? ExplicitTarget.OFF : explicitTarget;
@@ -282,7 +282,7 @@ public class ToolInvoker {
         if (realmDefaulted && explicit) {
             return Optional.of(ToolResult.error("realm_required",
                     "This server does not apply the default realm to " + spec.level().name().toLowerCase()
-                            + " tools (kc-mcp.explicit-target=" + explicitTarget.name().toLowerCase()
+                            + " tools (kc-mcp.tools.explicit-target=" + explicitTarget.name().toLowerCase()
                             + "): pass the realm argument.",
                     "defaultRealm", realm));
         }
@@ -302,7 +302,7 @@ public class ToolInvoker {
         if (requested == null && explicit && systems.names().size() > 1) {
             return ToolResult.error("system_required",
                     "This server does not apply the default" + " system to " + spec.level().name().toLowerCase()
-                            + " tools (kc-mcp.explicit-target=" + explicitTarget.name().toLowerCase()
+                            + " tools (kc-mcp.tools.explicit-target=" + explicitTarget.name().toLowerCase()
                             + "): pass the system argument.",
                     "systems", systems.names(), "defaultSystem", system);
         }

@@ -4,9 +4,9 @@ import java.util.Locale;
 
 /**
  * What the model is told about confirming destructive tools
- * ({@code kc-mcp.model-confirmation}): whether it should ask the user itself or leave
- * that to the server. The server enforces its confirmation either way; this only shapes
- * the guidance in the instructions, {@code search_tools} hits, {@code whoami} and the
+ * ({@code kc-mcp.confirm.model}): whether it should ask the user itself or leave that to
+ * the server. The server enforces its confirmation either way; this only shapes the
+ * guidance in the instructions, {@code search_tools} hits, {@code whoami} and the
  * {@code confirmation_required} answers, so that a model does not ask "shall I really?"
  * when the user's device or the MCP client is going to ask anyway.
  */
@@ -14,7 +14,7 @@ public enum ModelConfirmation {
     /**
      * The model asks the user once after the server answered
      * {@code confirmation_required}, then calls again with {@code confirm: true}. Callers
-     * holding one of {@code kc-mcp.model-confirmation-trusted-roles} are told to pass
+     * holding one of {@code kc-mcp.confirm.model-trusted-roles} are told to pass
      * {@code confirm: true} right away.
      */
     ASK,

@@ -23,14 +23,14 @@ class OptionCatalogueTest {
 
     @Test
     void readsPlainNestedAndWildcardKeys() {
-        assertTrue(OptionCatalogue.known("kc-mcp.tool-exposure"));
-        assertTrue(OptionCatalogue.known("kc-mcp.dns-rebinding-allowed-hosts"));
+        assertTrue(OptionCatalogue.known("kc-mcp.tools.exposure"));
+        assertTrue(OptionCatalogue.known("kc-mcp.mcp.dns-rebinding-allowed-hosts"));
         assertTrue(OptionCatalogue.known("kc-mcp.admin.token"));
         assertTrue(OptionCatalogue.known("kc-mcp.systems.prod.client-secret"));
         assertTrue(OptionCatalogue.known("kc-mcp.systems.\"a.b\".url"));
         assertTrue(OptionCatalogue.known("kc-mcp.ui.oidc.idps.corp.issuer"));
         assertTrue(OptionCatalogue.known("kc-mcp.storage.secret-key"));
-        assertTrue(OptionCatalogue.known("kc-mcp.hot-tools[0]"));
+        assertTrue(OptionCatalogue.known("kc-mcp.tools.hot[0]"));
     }
 
     @Test
@@ -56,7 +56,7 @@ class OptionCatalogueTest {
     void aTypoIsUnknownAndGetsASuggestion() {
         assertFalse(OptionCatalogue.known("kc-mcp.tool-exposur"));
         assertFalse(OptionCatalogue.known("kc-mcp.systems.prod.urll"));
-        assertEquals(Optional.of("kc-mcp.tool-exposure"), OptionCatalogue.suggestion("kc-mcp.tool-exposur"));
+        assertEquals(Optional.of("kc-mcp.tools.exposure"), OptionCatalogue.suggestion("kc-mcp.tool-exposur"));
         assertEquals(Optional.of("kc-mcp.systems.prod.url"), OptionCatalogue.suggestion("kc-mcp.systems.prod.urll"));
         assertEquals(Optional.empty(), OptionCatalogue.suggestion("kc-mcp.something-entirely-different"));
     }
@@ -64,8 +64,8 @@ class OptionCatalogueTest {
     @Test
     void theEnvironmentIsCheckedToo() {
         assertEquals(List.of(),
-                OptionCatalogue.unknown(List.of(), Map.of("KC_MCP_TOOL_EXPOSURE", "lazy", "KC_MCP_SYSTEMS_PROD_URL",
-                        "u", "KC_MCP_SPI_TOOLS_ACME_X", "1", "PATH", "/bin", "KC_MCP_HOT_TOOLS_0_", "a")));
+                OptionCatalogue.unknown(List.of(), Map.of("KC_MCP_TOOLS_EXPOSURE", "lazy", "KC_MCP_SYSTEMS_PROD_URL",
+                        "u", "KC_MCP_SPI_TOOLS_ACME_X", "1", "PATH", "/bin", "KC_MCP_TOOLS_HOT_0_", "a")));
         assertEquals(List.of("Unknown setting in the environment: KC_MCP_TOOL_EXPOSUR"),
                 OptionCatalogue.unknown(List.of(), Map.of("KC_MCP_TOOL_EXPOSUR", "lazy")));
     }

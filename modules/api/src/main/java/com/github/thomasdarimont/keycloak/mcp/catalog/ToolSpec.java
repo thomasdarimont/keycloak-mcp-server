@@ -265,7 +265,7 @@ public final class ToolSpec {
      *
      * @param name the tool's name as models call it: snake_case, starting with
      * {@code keycloak_} like the built-in tools ({@code keycloak_acme_user_summary}),
-     * unique among all tools; the server may put {@code kc-mcp.tool-prefix} before it
+     * unique among all tools; the server may put {@code kc-mcp.tools.prefix} before it
      */
     public static Builder builder(String name) {
         return new Builder(name);
@@ -338,8 +338,8 @@ public final class ToolSpec {
 
         /**
          * The area the tool belongs to: groups the tools in {@code search_tools} and is
-         * what {@code kc-mcp.allowed-categories} and the {@code categories} restriction
-         * of systems and realms select by. Required.
+         * what {@code kc-mcp.tools.categories} and the {@code categories} restriction of
+         * systems and realms select by. Required.
          */
         public Builder category(Category category) {
             this.category = category;
@@ -363,7 +363,7 @@ public final class ToolSpec {
          * The tool changes Keycloak in a way that can be undone or repeated (create,
          * update, assign a role, disable a user). Hidden in read-only mode; needs
          * confirmation only where {@code confirm-writes} or {@code confirm} asks for it;
-         * must name its target where {@code kc-mcp.explicit-target=write}.
+         * must name its target where {@code kc-mcp.tools.explicit-target=write}.
          */
         public Builder write() {
             this.level = ToolLevel.WRITE;
@@ -373,7 +373,7 @@ public final class ToolSpec {
         /**
          * The tool deletes or irreversibly changes something (delete a user, regenerate a
          * client secret). Hidden in read-only mode, always needs confirmation, must name
-         * its target where {@code kc-mcp.explicit-target} is {@code destructive} or
+         * its target where {@code kc-mcp.tools.explicit-target} is {@code destructive} or
          * {@code write}; announced by the MCP {@code destructiveHint}.
          */
         public Builder destructive() {
@@ -397,8 +397,8 @@ public final class ToolSpec {
          * {@code oneOf}, which small models handle badly. Arguments arrive validated and
          * coerced. Do not declare {@code realm} or {@code system}: the catalog adds them
          * (see {@link #global()}), and clamps {@code max} to
-         * {@code kc-mcp.result-max-items}. Without a schema the tool takes no parameters
-         * of its own.
+         * {@code kc-mcp.tools.result-max-items}. Without a schema the tool takes no
+         * parameters of its own.
          */
         public Builder schema(InputSchema.Builder schema) {
             this.inputSchema = schema.build();
@@ -420,7 +420,7 @@ public final class ToolSpec {
          * Listed directly in the {@code hybrid} and {@code progressive} exposure modes,
          * next to {@code search_tools} and {@code execute_tool}, instead of being found
          * by search first. Keep it for the few tools nearly every session needs; a set
-         * {@code kc-mcp.hot-tools} replaces every tool's own flag.
+         * {@code kc-mcp.tools.hot} replaces every tool's own flag.
          */
         public Builder hot() {
             this.hot = true;
@@ -522,10 +522,10 @@ public final class ToolSpec {
 
         /**
          * Whether the tool may run when the server acts for the caller with a delegated
-         * token ({@code kc-mcp.delegation}) instead of its own service account: default
-         * {@link Delegation#ALLOWED}; {@link Delegation#FORBIDDEN} for tools that expose
-         * secrets or reshape the realm, {@link Delegation#REQUIRED} for actions that must
-         * always be attributable to a person.
+         * token ({@code kc-mcp.mcp.delegation}) instead of its own service account:
+         * default {@link Delegation#ALLOWED}; {@link Delegation#FORBIDDEN} for tools that
+         * expose secrets or reshape the realm, {@link Delegation#REQUIRED} for actions
+         * that must always be attributable to a person.
          */
         public Builder delegation(Delegation delegation) {
             this.delegation = delegation;

@@ -24,7 +24,7 @@ public class ExposurePolicy {
 
     @Inject
     public ExposurePolicy(McpServerConfig config, ToolCatalog catalog, ProgressiveState progressive) {
-        this(config.toolExposure(), catalog, progressive);
+        this(config.tools().exposure(), catalog, progressive);
     }
 
     public ExposurePolicy(ExposureMode mode, ToolCatalog catalog, ProgressiveState progressive) {

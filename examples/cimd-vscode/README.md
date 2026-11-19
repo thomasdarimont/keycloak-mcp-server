@@ -5,7 +5,7 @@ The realm has no OAuth client for VS Code. VS Code uses the URL of its published
 use. Keycloak's guide: [Integrating with MCP](https://www.keycloak.org/securing-apps/mcp-authz-server).
 
 The user consents to the MCP server's client `keycloak-mcp` acting on their behalf, and the server exchanges the
-user's token for a delegated one before it calls the Admin API (`KC_MCP_DELEGATION=exchange`, Keycloak's token
+user's token for a delegated one before it calls the Admin API (`KC_MCP_MCP_DELEGATION=exchange`, Keycloak's token
 exchange delegation, preview). [delegated-auth](../delegated-auth/) explains that part in detail.
 
 CIMD is an experimental Keycloak feature (`--features=cimd`) and the specification is still a draft. Keycloak fetches

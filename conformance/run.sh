@@ -32,7 +32,7 @@ if [ -z "$URL" ]; then
   rm -rf conformance/providers && mkdir -p conformance/providers && cp "$FIXTURES" conformance/providers/
   # no Keycloak: the fixtures never call one, the Keycloak tools would answer keycloak_unreachable
   KC_MCP_PROVIDERS_DIR="$PWD/conformance/providers" KC_MCP_STARTUP_CHECK=off KC_MCP_SYSTEMS_DEFAULT_URL=http://127.0.0.1:1 \
-  KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID=conformance KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET=conformance KC_MCP_TOOL_EXPOSURE=direct \
+  KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID=conformance KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET=conformance KC_MCP_TOOLS_EXPOSURE=direct \
   QUARKUS_HTTP_PORT=$PORT QUARKUS_LOG_LEVEL=WARN \
     java -jar "$JAR" start > conformance/results-server.log 2>&1 &
   SERVER_PID=$!

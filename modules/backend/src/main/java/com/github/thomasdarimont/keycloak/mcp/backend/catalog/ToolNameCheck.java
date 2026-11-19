@@ -58,9 +58,9 @@ public class ToolNameCheck {
     /** Where each tool name is mentioned: the setting, then the names. */
     static Map<String, List<String>> names(McpServerConfig config, DefaultKeycloakSystems systems) {
         Map<String, List<String>> out = new LinkedHashMap<>();
-        config.allowedTools().ifPresent(v -> out.put("kc-mcp.allowed-tools", v));
-        config.deniedTools().ifPresent(v -> out.put("kc-mcp.denied-tools", v));
-        config.confirmTools().ifPresent(v -> out.put("kc-mcp.confirm-tools", v));
+        config.tools().allowed().ifPresent(v -> out.put("kc-mcp.tools.allowed", v));
+        config.tools().denied().ifPresent(v -> out.put("kc-mcp.tools.denied", v));
+        config.tools().confirm().ifPresent(v -> out.put("kc-mcp.tools.confirm", v));
         ProviderConfig self = ProviderConfig.forExtension("access-check", "self-protection", config);
         self.get("tools").ifPresent(v -> out.put("kc-mcp.spi.access-check.self-protection.tools", toolsOf(v)));
         Presets server = Presets.fromConfig(config.presets());

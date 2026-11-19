@@ -31,7 +31,7 @@ MCP client logs the user in at the right realm.
 | `clients/*.json` | the same two clients and the management UI's `keycloak-mcp-ui` for the master realm, created by `setup.sh` (an import cannot touch `master`); `keycloak-mcp-server` and `keycloak-mcp-ui` get the `admin` role in their role scope |
 | `init/grant-delegation.sh` | the Admin Permissions grant that lets `keycloak-mcp-server` act on behalf of a realm's users; run by `setup.sh` inside the Keycloak container for `master` and `demo` (a realm import cannot carry it) |
 | `setup.sh` | the server's key pair, the master realm's clients and the user `root`, the delegation grants, the admin API's token |
-| `conf/server.conf` | the server: port 9080, user login with delegated tokens (`kc-mcp.delegation=exchange`), `private_key_jwt`, the audience, the admin API on; read in place by `--config` |
+| `conf/server.conf` | the server: port 9080, user login with delegated tokens (`kc-mcp.mcp.delegation=exchange`), `private_key_jwt`, the audience, the admin API on; read in place by `--config` |
 | `conf/systems/sso.conf` | the one system: login realm `master`, default realm `master`; read in place by `--config` |
 | `mcp.json` | LM Studio: both entries, logging in as `mcp-consumer` |
 | `mcp-call.py` | calls a tool from the command line, logging a user in the way a browser does (login form, consent page, code with PKCE) |
@@ -134,7 +134,7 @@ MCP client logs the user in at the right realm.
 
 ## How the pieces fit
 
-- **User login and delegation.** `kc-mcp.delegation=exchange` with `kc-mcp.mcp.oauth.enabled=true`: the MCP
+- **User login and delegation.** `kc-mcp.mcp.delegation=exchange` with `kc-mcp.mcp.oauth.enabled=true`: the MCP
   endpoint answers 401 with the protected resource metadata, LM Studio reads it, finds the realm of the entry
   (`master` or `demo`) and the scope to ask for (`delegation:client:keycloak-mcp-server`), logs the user in with PKCE
   as `mcp-consumer` and sends the token. `kc-mcp.mcp.oauth.audience=keycloak-mcp-server` requires the audience the

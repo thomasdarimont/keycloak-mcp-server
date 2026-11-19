@@ -13,7 +13,7 @@
               <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID" value="admin-cli" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_USERNAME" value="admin" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_PASSWORD" value="admin" />
-              <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
+              <entry key="KC_MCP_TOOLS_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />
               <entry key="KC_MCP_DEV_MODE" value="true" />
               <entry key="KC_MCP_UI_OIDC_ISSUER" value="http://localhost:8080/realms/demo" />

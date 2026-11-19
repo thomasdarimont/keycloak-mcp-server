@@ -8,4 +8,4 @@ kc-mcp.systems.default.grant-type=password
 kc-mcp.systems.default.client-id=admin-cli
 kc-mcp.systems.default.username=admin
 kc-mcp.systems.default.password=admin
-kc-mcp.tool-exposure=hybrid
+kc-mcp.tools.exposure=hybrid

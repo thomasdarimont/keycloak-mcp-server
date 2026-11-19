@@ -61,7 +61,7 @@ public class CapabilityDiscovery {
         // client has no admin role and the read fails quietly
         this(systems::names, name -> {
             KeycloakAdmin admin = systems.get(name);
-            return load(admin, config.delegation() == DelegationMode.OFF || admin.system().hasCredentials());
+            return load(admin, config.mcp().delegation() == DelegationMode.OFF || admin.system().hasCredentials());
         });
     }
 

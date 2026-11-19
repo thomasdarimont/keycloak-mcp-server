@@ -119,7 +119,7 @@ public class DefaultKeycloakAdmin implements KeycloakAdmin {
         if (delegation != DelegationMode.EXCHANGE) {
             // the caller's own token is never sent to the Admin API (MCP authorization:
             // no token passthrough)
-            throw new IllegalStateException("kc-mcp.delegation is off: no admin call runs for a caller");
+            throw new IllegalStateException("kc-mcp.mcp.delegation is off: no admin call runs for a caller");
         }
         // the token stays within the trust domain that issued it: a token of Keycloak A
         // is never sent to

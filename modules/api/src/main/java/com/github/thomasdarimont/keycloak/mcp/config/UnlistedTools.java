@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * What happens to the tools an allow-list does not name: {@code kc-mcp.unlisted-tools} on
+ * What happens to the tools an allow-list does not name: {@code kc-mcp.tools.unlisted} on
  * the server, {@code tools.unlisted} for a system, realm or preset. Without it, the old
  * rule: {@link #ALLOW} without an allow-list, {@link #DENY} with one.
  */

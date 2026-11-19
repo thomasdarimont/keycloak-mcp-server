@@ -88,7 +88,7 @@ The MCP endpoint answers anonymous requests with a `401` and
 `WWW-Authenticate: Bearer resource_metadata="http://localhost:8081/.well-known/oauth-protected-resource"`; LM Studio
 follows that, logs the user in at Keycloak as the public client `mcp-consumer` (authorization code + PKCE) and sends
 the user's access token. That token only opens the MCP server. For the Admin API the server exchanges it at Keycloak
-for a delegated token (`KC_MCP_DELEGATION=exchange`, Keycloak's token exchange delegation, preview in 26.8): `sub` is
+for a delegated token (`KC_MCP_MCP_DELEGATION=exchange`, Keycloak's token exchange delegation, preview in 26.8): `sub` is
 the user, `act` the server's client `keycloak-mcp`. So Keycloak enforces the user's own `realm-management` roles, its
 events name both, and the audit line names the human. The server's client holds no admin role; without a user's
 token its credentials reach nothing. The user's own token is never sent to the Admin API: the MCP specification

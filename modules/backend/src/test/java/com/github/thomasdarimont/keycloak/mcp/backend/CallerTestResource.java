@@ -20,11 +20,11 @@ import io.vertx.core.json.JsonObject;
  * ({@code mcp-admin}), {@code alice} with {@code realm-admin}, {@code carol} with
  * {@code view-users} only, {@code bob} with nothing, and a second client
  * {@code other-app} without the audience. The server requires a caller
- * ({@code kc-mcp.require-caller}) with the OIDC tenant on, and its admin calls run as the
- * service account of {@code mcp-server}, a realm admin: a caller's token is never sent to
- * Keycloak. Calls with the caller's own roles are {@link ExchangeTestResource}'s. The
- * realm lives in the {@link SharedKeycloak} unless a subclass needs a Keycloak of its own
- * ({@link #shared()}).
+ * ({@code kc-mcp.mcp.require-caller}) with the OIDC tenant on, and its admin calls run as
+ * the service account of {@code mcp-server}, a realm admin: a caller's token is never
+ * sent to Keycloak. Calls with the caller's own roles are {@link ExchangeTestResource}'s.
+ * The realm lives in the {@link SharedKeycloak} unless a subclass needs a Keycloak of its
+ * own ({@link #shared()}).
  */
 public class CallerTestResource implements QuarkusTestResourceLifecycleManager {
 
@@ -89,12 +89,13 @@ public class CallerTestResource implements QuarkusTestResourceLifecycleManager {
 
     Map<String, String> baseConfig() {
         return Map.ofEntries(Map.entry("kc-mcp.systems.default.url", base),
-                Map.entry("kc-mcp.systems.default.auth-realm", "demo"), Map.entry("kc-mcp.delegation", "off"),
-                Map.entry("kc-mcp.require-caller", "true"),
+                Map.entry("kc-mcp.systems.default.auth-realm", "demo"), Map.entry("kc-mcp.mcp.delegation", "off"),
+                Map.entry("kc-mcp.mcp.require-caller", "true"),
                 Map.entry("kc-mcp.systems.default.client-id", SERVICE_CLIENT),
                 Map.entry("kc-mcp.systems.default.client-secret", SERVICE_SECRET),
                 Map.entry("kc-mcp.systems.default.default-realm", "demo"),
-                Map.entry("kc-mcp.systems.default.allowed-realms", "demo"), Map.entry("kc-mcp.tool-exposure", "direct"),
+                Map.entry("kc-mcp.systems.default.allowed-realms", "demo"),
+                Map.entry("kc-mcp.tools.exposure", "direct"),
                 Map.entry("kc-mcp.systems.default.grant-type", "client_credentials"),
                 Map.entry("kc-mcp.systems.default.username", ""), Map.entry("kc-mcp.systems.default.password", ""),
                 Map.entry("kc-mcp.mcp.oauth.enabled", "true"),

@@ -39,7 +39,7 @@ public class AdoptionTestResource implements QuarkusTestResourceLifecycleManager
                 Map.entry("kc-mcp.storage.secret-key", "test-passphrase"), Map.entry("kc-mcp.dynamic-systems", "true"),
                 Map.entry("kc-mcp.static-systems", "false"), Map.entry("kc-mcp.dynamic-private-hosts", "allow"),
                 Map.entry("kc-mcp.startup-check", "off"), Map.entry("kc-mcp.admin.enabled", "true"),
-                Map.entry("kc-mcp.admin.token", TOKEN), Map.entry("kc-mcp.tool-exposure", "direct"));
+                Map.entry("kc-mcp.admin.token", TOKEN), Map.entry("kc-mcp.tools.exposure", "direct"));
     }
 
     @Override

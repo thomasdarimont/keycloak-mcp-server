@@ -73,12 +73,12 @@ Off by default: the endpoint is anonymous until `kc-mcp.mcp.oauth.enabled=true`
 - An entry for one system or realm, `/mcp/systems/<system>[/<realm>]`, accepts the tokens of that system's realm
   and names it in its own protected resource metadata ([Entries](systems.md#entries-per-system-or-realm-mcpsystemssystemrealm)).
   Here the authorization server is always the Keycloak system itself.
-- With `kc-mcp.delegation=exchange` the caller's token is exchanged at the Keycloak system for a delegated one. So
+- With `kc-mcp.mcp.delegation=exchange` the caller's token is exchanged at the Keycloak system for a delegated one. So
   the authorization server has to be that Keycloak, the realm that issued the token. Another identity provider can
   still stand in front of it: the user logs in there, Keycloak brokers the login or redeems the provider's
   assertion ([Cross-App Access](scenarios.md#4-cross-app-access-the-enterprise-idp-vouches-for-the-user)), and the
   token the server sees is Keycloak's.
-- With `kc-mcp.delegation=off` the token only says who calls: it is verified, the caller is named in the audit
+- With `kc-mcp.mcp.delegation=off` the token only says who calls: it is verified, the caller is named in the audit
   trail, and the tools run with the system's service account. The authorization server need not be a Keycloak
   system then, as far as the server is concerned; this was only run with Keycloak.
 
@@ -110,7 +110,7 @@ registered through the admin API and kept in the database (dynamic). Towards a s
 | the server | with | setting |
 |---|---|---|
 | logs in as its own client in the system's auth realm | client credentials with a secret or `private_key_jwt`; locally also an admin user's password | `client-id`, `client-auth`, `grant-type`, `auth-realm` |
-| exchanges a caller's token for a delegated one | token exchange, as that client | `kc-mcp.delegation=exchange` |
+| exchanges a caller's token for a delegated one | token exchange, as that client | `kc-mcp.mcp.delegation=exchange` |
 | calls the Admin REST API | its own or the delegated token, never the caller's | `url`, `allowed-realms` |
 | asks for a step-up login or an approval | device or code flow, CIBA, at the system's realm | [Step-up](security.md#step-up-authentication), [CIBA](ciba-confirmation.md) |
 

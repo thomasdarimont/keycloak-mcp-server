@@ -6,7 +6,7 @@ How the server presents its tools to a model, which tools exist, and the prompts
 
 ## How the model sees it
 
-`tools/list` depends on `kc-mcp.tool-exposure`:
+`tools/list` depends on `kc-mcp.tools.exposure`:
 
 | mode          | `tools/list` contains |
 |---------------|-----------------------|
@@ -27,15 +27,15 @@ How the server presents its tools to a model, which tools exist, and the prompts
   confirmation → handler → audit. Structured errors, always `isError: true`: `unknown_tool` (+ `didYouMean`),
   `invalid_arguments` (+ `problems`, schema), `realm_not_allowed`, `confirmation_required`, `read_only_mode`, `not_found`,
   `conflict`, `keycloak_unreachable`, `audit_unavailable` (a change while the audit trail cannot be written).
-- `whoami(language?)`: who the session's Keycloak calls run as (signed-in user under `KC_MCP_DELEGATION=exchange`, else
+- `whoami(language?)`: who the session's Keycloak calls run as (signed-in user under `KC_MCP_MCP_DELEGATION=exchange`, else
   the service account), `realm-management` roles per realm with admin-console labels (`language: de` → "Benutzer
   anzeigen"; others fall back to English, `labelLanguage` says so), per-area summary (`users: view`), tool count unlocked.
   With roles known, `search_tools` marks unusable hits `allowed: false` + `missingRoles`; `forbidden` errors point to `whoami`.
 - Hidden tools stay callable by name.
 - Forgiving identifiers: users by id or username, clients by id or clientId, groups by id, path or name. Strings coerced
-  to booleans/integers; `max` clamped to `kc-mcp.result-max-items`.
+  to booleans/integers; `max` clamped to `kc-mcp.tools.result-max-items`.
 - Every result twice: JSON text block + MCP `structuredContent` (lists as `{"items": [...]}`, errors with `error`).
-  Off with `kc-mcp.structured-content=false`.
+  Off with `kc-mcp.tools.structured-content=false`.
 - Fewer round trips: membership and role changes return effective roles; `keycloak_user_roles_get` names each role's
   source (`direct`, `group:/path`, `composite:<role>`), default roles apart; `keycloak_group_get` shows what a group grants.
 
@@ -55,7 +55,7 @@ refuses a request whose headers are missing or say something else than its body:
 
 With `execute_tool` the name in `Mcp-Name` is `execute_tool`, whatever tool is run. So the server marks three
 arguments with `x-mcp-header` in the tools' input schemas, and the client sends them as headers too
-(`kc-mcp.param-headers`, on by default):
+(`kc-mcp.mcp.param-headers`, on by default):
 
 | argument | of | header |
 |---|---|---|
@@ -70,7 +70,7 @@ arguments with `x-mcp-header` in the tools' input schemas, and the client sends 
 - A proxy must not trust the headers of a request without `MCP-Protocol-Version: 2026-07-28` or later: older,
   session-based clients do not send them and the server does not check them there.
 - Values that are not plain ASCII arrive as `=?base64?…?=`.
-- `kc-mcp.param-headers=false` removes the marks, for a client of the new protocol version that does not send such
+- `kc-mcp.mcp.param-headers=false` removes the marks, for a client of the new protocol version that does not send such
   headers.
 
 ## Tool areas
@@ -161,7 +161,7 @@ Find out why {{username}} cannot log in to the VPN{{#realm}} in realm {{realm}}{
   `{{^name}}...{{/name}}` when it was not; they nest. Such a tag alone on a line takes the line with it. Only declared
   arguments; no expressions, loops or includes.
 - Where from: `META-INF/kc-mcp/prompts/` of the jars in the providers directory, so an extension can ship prompts
-  with or without code (`examples/extensions/`), and `kc-mcp.prompts-dir` (the distribution's `conf/prompts/`).
+  with or without code (`examples/extensions/`), and `kc-mcp.prompts.dir` (the distribution's `conf/prompts/`).
 - A file that does not parse stops the start, naming the file and the problem.
 - The text instructs the model: the directory deserves the protection of the configuration.
 
@@ -175,4 +175,4 @@ replacement is logged at startup:
 Prompt 'keycloak_login_troubleshoot' of prompt provider 'built-in' is overridden by /opt/kcmcp/conf/prompts/login.md
 ```
 
-`kc-mcp.prompt-overrides=false` turns a name used twice into a startup error.
+`kc-mcp.prompts.overrides=false` turns a name used twice into a startup error.

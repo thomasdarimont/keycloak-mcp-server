@@ -92,7 +92,7 @@ public class ProfileChecks {
         if (s.mcpEnabled() && !callers.required() && !isLoopback(host)) {
             LOG.warnf("The MCP endpoint is anonymous and listens on %s: everyone who reaches this address administers"
                     + " Keycloak with the server's credentials. Bind to 127.0.0.1 (quarkus.http.host), or require"
-                    + " callers (kc-mcp.require-caller / kc-mcp.security-profile=shared).",
+                    + " callers (kc-mcp.mcp.require-caller / kc-mcp.security-profile=shared).",
                     host.isEmpty() ? "all interfaces" : host);
         }
         LOG.infof(

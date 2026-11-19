@@ -4,7 +4,7 @@ The MCP server starts with no Keycloak configured. `demo.sh` registers one throu
 
 - `mcp` (:8091): admin API, calls run as the registered system's service account
 - `mcp-users` (:8092): OIDC login with consent, calls run with a delegated token: Keycloak exchanges the user's token for
-  one that names the user as `sub` and the system's client as `act` (`KC_MCP_DELEGATION=exchange`)
+  one that names the user as `sub` and the system's client as `act` (`KC_MCP_MCP_DELEGATION=exchange`)
 - Both share one PostgreSQL database (:5490); Keycloak on :8090 (`admin`/`admin`)
 - A second Keycloak on :8089 (`admin`/`admin`) with four realms of its own and nothing of the MCP server in it:
   the one to [adopt realms](#5-a-second-keycloak-adopting-realms) from

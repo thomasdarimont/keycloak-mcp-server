@@ -41,8 +41,8 @@ public class ToolCatalog {
 
     @Inject
     public ToolCatalog(DefaultExtensionRegistry providers, McpServerConfig config, KeycloakSystems systems) {
-        this(providers.specs(), commonDefaultRealm(systems), config.resultMaxItems(), config.hotTools(),
-                config.toolPrefix().orElse(""), systems.multiple() ? systems.names() : List.of(),
+        this(providers.specs(), commonDefaultRealm(systems), config.tools().resultMaxItems(), config.tools().hot(),
+                config.tools().prefix().orElse(""), systems.multiple() ? systems.names() : List.of(),
                 systems.defaultName().orElse(null), systems.dynamic());
     }
 

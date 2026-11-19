@@ -16,7 +16,7 @@ import io.vertx.ext.web.RoutingContext;
  * Refuses an MCP request with an {@code Mcp-Param-*} header whose Base64 value
  * ({@code =?base64?...?=}) cannot be decoded: HTTP 400 with {@code HeaderMismatch}, as
  * the MCP HTTP header standardization demands. The MCP extension compares such headers
- * with the request body ({@code kc-mcp.param-headers}) but decodes them leniently: it
+ * with the request body ({@code kc-mcp.mcp.param-headers}) but decodes them leniently: it
  * accepts a value without its padding, and one with characters outside the alphabet ends
  * as a 500. This check runs before it.
  */

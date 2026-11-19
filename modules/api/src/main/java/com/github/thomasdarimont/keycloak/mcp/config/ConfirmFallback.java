@@ -4,7 +4,7 @@ import java.util.Locale;
 
 /**
  * What confirms a DESTRUCTIVE tool when the MCP client does not support elicitation
- * ({@code kc-mcp.confirm-fallback}). With elicitation the human is always asked.
+ * ({@code kc-mcp.confirm.fallback}). With elicitation the human is always asked.
  */
 public enum ConfirmFallback {
     /**

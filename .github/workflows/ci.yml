@@ -237,7 +237,7 @@ jobs:
         shell: pwsh
         run: |
           .\dist\bin\kcmcp.bat --version
-          "quarkus.http.port=8085`nkc-mcp.tool-exposure=lazy`n" | Set-Content dist\conf\smoke.conf
+          "quarkus.http.port=8085`nkc-mcp.tools.exposure=lazy`n" | Set-Content dist\conf\smoke.conf
           $p = Start-Process -FilePath ".\dist\bin\kcmcp.bat" -ArgumentList "start","--config","conf\smoke.conf","--kc-mcp.startup-check=off","--kc-mcp.systems.default.url=http://127.0.0.1:1","--kc-mcp.systems.default.client-id=smoke","--kc-mcp.systems.default.client-secret=smoke" -RedirectStandardOutput server.log -RedirectStandardError server.err -PassThru -NoNewWindow
           $body = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
           $ok = $false

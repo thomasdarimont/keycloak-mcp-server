@@ -46,7 +46,7 @@ services:
       KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET: mcp-admin-secret
       KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM: demo
       KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS: demo
-      KC_MCP_TOOL_EXPOSURE: hybrid
+      KC_MCP_TOOLS_EXPOSURE: hybrid
       # the extensions (kc-mcp.spi.<spi>.<id>.<key>)
       KC_MCP_SPI_TOOLS_ACME_COMPANY: ACME
       KC_MCP_SPI_AUDIT_LISTENER_ACME_FILE: /deployments/data/acme-audit.jsonl

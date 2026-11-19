@@ -70,7 +70,7 @@ device. Keycloak allows 50 characters without spaces in the binding message.
   same `sub` as the MCP caller when their token comes from the same issuer, else the username or email of the login
   hint. Anything else answers `cancelled` with the reason and confirms nothing.
 - **Nothing falls back to the model.** The confirmer refuses to start unless callers are required
-  (`kc-mcp.require-caller`, a delegation mode or the `shared` profile). An anonymous or unaddressable caller gets
+  (`kc-mcp.mcp.require-caller`, a delegation mode or the `shared` profile). An anonymous or unaddressable caller gets
   `confirmation_required`, never the default confirmer's `confirm: true`. The one deliberate hand-over is
   `when=without-elicitation`, which leaves the question to clients that can ask the human themselves.
 - **Several instances.** With the [database storage](storage.md) on, pending approvals live in
@@ -90,7 +90,7 @@ On the Keycloak side, as in `examples/ciba-confirm/realms/demo-realm.json`:
 - The device application behind that URL: it receives Keycloak's POST, lets the right user approve or decline, and
   answers Keycloak's callback. The example's `approver` shows the shape of it.
 - Callers must be authenticated at the MCP server, because the login hint is the caller's username: exchange
-  delegation, or `kc-mcp.require-caller=true` ([Security](security.md#callers)).
+  delegation, or `kc-mcp.mcp.require-caller=true` ([Security](security.md#callers)).
 
 On the server side, the example's `env/ciba.env` is a template:
 
@@ -106,7 +106,7 @@ KC_MCP_CONFIRM_FALLBACK=deny                       # no confirm: true for client
 When the server reaches Keycloak at an internal address (Docker), set `issuer` to that address and `token-issuer` to
 the public one the tokens name.
 
-The model is told about the device by `kc-mcp.model-confirmation`: in `auto` it picks `server` whenever a confirmer
+The model is told about the device by `kc-mcp.confirm.model`: in `auto` it picks `server` whenever a confirmer
 asks the human itself, so the model calls right away and relays the answer instead of asking "shall I really?"
 ([Guardrails](security.md#guardrails)). The `kc_mcp.ciba.*` metrics count requests and decisions by outcome
 ([Metrics](metrics.md)); alert on `rejected`, which means an approval's ID token was invalid or named someone else.

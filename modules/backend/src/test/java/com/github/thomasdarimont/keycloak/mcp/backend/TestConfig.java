@@ -11,7 +11,7 @@ import com.google.auto.service.AutoService;
  * Baseline configuration of every test, pinned above the environment (ordinal 350: above
  * env vars at 300, below the system properties at 400 that {@code QuarkusTestProfile}s
  * and {@code QuarkusTestResource}s use). A shell that still has one of the demo env files
- * sourced ({@code KC_MCP_CLIENT_SECRET}, {@code KC_MCP_DELEGATION},
+ * sourced ({@code KC_MCP_CLIENT_SECRET}, {@code KC_MCP_MCP_DELEGATION},
  * {@code KC_MCP_MCP_OAUTH_ENABLED}, ...) must not change what the tests see. Empty values
  * clear a leaked setting: SmallRye treats them as absent for optional properties.
  */
@@ -28,11 +28,11 @@ public class TestConfig implements ConfigSource {
             Map.entry("kc-mcp.systems.default.password", "admin"), Map.entry("kc-mcp.systems.default.client-id", ""),
             Map.entry("kc-mcp.systems.default.client-secret", ""), Map.entry("kc-mcp.systems.default.client-auth", ""),
             Map.entry("kc-mcp.jwt.key-file", ""), Map.entry("kc-mcp.jwt.algorithm", "RS256"),
-            Map.entry("kc-mcp.delegation", "off"), Map.entry("kc-mcp.default-system", ""),
+            Map.entry("kc-mcp.mcp.delegation", "off"), Map.entry("kc-mcp.default-system", ""),
             Map.entry("kc-mcp.systems.default.default-realm", ""),
             Map.entry("kc-mcp.systems.default.allowed-realms", ""), Map.entry("kc-mcp.allowed-hosts", ""),
-            Map.entry("kc-mcp.denied-tools", ""), Map.entry("kc-mcp.read-only", "false"),
-            Map.entry("kc-mcp.tool-exposure", "hybrid"), Map.entry("kc-mcp.startup-check", "off"),
+            Map.entry("kc-mcp.tools.denied", ""), Map.entry("kc-mcp.tools.read-only", "false"),
+            Map.entry("kc-mcp.tools.exposure", "hybrid"), Map.entry("kc-mcp.startup-check", "off"),
             Map.entry("kc-mcp.keys-dir", "target/test-keys"),
             // the runtime system repository of the tests is opt-in per profile
             Map.entry("kc-mcp.dynamic-systems", "false"), Map.entry("kc-mcp.systems-file", ""),

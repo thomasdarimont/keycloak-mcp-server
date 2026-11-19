@@ -33,7 +33,7 @@ be set on its own in either profile.
 
 ### Fencing the server in
 
-- **Read-only.** `KC_MCP_READ_ONLY=true` hides and refuses WRITE and DESTRUCTIVE tools.
+- **Read-only.** `KC_MCP_TOOLS_READ_ONLY=true` hides and refuses WRITE and DESTRUCTIVE tools.
 - **Realms.** `kc-mcp.systems.<name>.allowed-realms=a,b` (or `kc-mcp.system-defaults.allowed-realms` for all systems) restricts every call. The startup check verifies the realms are reachable
   (`kc-mcp.startup-check=warn|fail|off`).
 - **Keycloak hosts.** `KC_MCP_ALLOWED_HOSTS=*.example.com,localhost:8080`: every configured Keycloak URL, top level
@@ -44,13 +44,13 @@ be set on its own in either profile.
   registered URL cannot point the server at its own network. Static systems are the operator's choice and not checked.
   The admin client and the UI's discovery never follow redirects. The address is checked when the system is registered
   or changes, not on every connection.
-- **Tools.** `KC_MCP_ALLOWED_TOOLS`, `KC_MCP_DENIED_TOOLS` and `KC_MCP_ALLOWED_CATEGORIES` narrow the tool set
+- **Tools.** `KC_MCP_TOOLS_ALLOWED`, `KC_MCP_TOOLS_DENIED` and `KC_MCP_TOOLS_CATEGORIES` narrow the tool set
   explicitly. Per system, realm and preset, a `tools` section narrows it further for the calls into them
   ([Tool restrictions per system and realm](#tool-restrictions-per-system-and-realm)).
 - **DNS rebinding.** While the MCP endpoint is anonymous, requests whose `Host` or `Origin` is not localhost answer
   403 `forbidden_host`, so a web page cannot reach the local server through a name rebound to 127.0.0.1
-  (`kc-mcp.dns-rebinding-protection`, default `auto`). It is off once callers authenticate.
-  `kc-mcp.dns-rebinding-allowed-hosts` adds `host[:port]` values for an anonymous server reached by name or through a
+  (`kc-mcp.mcp.dns-rebinding-protection`, default `auto`). It is off once callers authenticate.
+  `kc-mcp.mcp.dns-rebinding-allowed-hosts` adds `host[:port]` values for an anonymous server reached by name or through a
   proxy. The host of `kc-mcp.hostname` counts too. JWKS and admin routes are not covered.
 
 ### Tool restrictions per system and realm
@@ -77,10 +77,10 @@ kc-mcp.systems.prod.realms.audit.preset=viewer
 ```
 
 Among the tenant levels the most specific key wins, as with `access`: the system's preset, the system, the realm's
-preset, the realm. Against the server a section can only take tools away. The server's `kc-mcp.read-only`,
-`denied-tools`, `allowed-tools` and `allowed-categories` are checked first and on their own, so no system or realm can
-re-enable what the server closed, and no section can take a confirmation away. The keys of a section do not repeat
-"tools" (`confirm`, not `confirm-tools`); an unknown key stops the start rather than be ignored. That is why a `tools` section needs no lock, unlike an access check: whoever
+preset, the realm. Against the server a section can only take tools away. The server's `kc-mcp.tools.read-only`,
+`denied`, `allowed` and `categories` are checked first and on their own, so no system or realm can
+re-enable what the server closed, and no section can take a confirmation away. The keys of a section are those of the server's own
+`kc-mcp.tools.*`; an unknown key stops the start rather than be ignored. That is why a `tools` section needs no lock, unlike an access check: whoever
 registers a system through the admin API can only narrow its tools. The admin API refuses names of tools that do not
 exist (`unknown_tool`) and unknown categories (`unknown_category`), since a misspelt name would deny nothing.
 
@@ -90,7 +90,7 @@ naming system and realm). The tool list and the search are the server's and show
 ### New, removed and renamed tools
 
 A new tool, from an upgrade or an extension, is available wherever no allow-list stands in its way. The server's
-`kc-mcp.unlisted-tools` (and `tools.unlisted` of a system, realm or preset) decides what happens to the tools nobody
+`kc-mcp.tools.unlisted` (and `tools.unlisted` of a system, realm or preset) decides what happens to the tools nobody
 named:
 
 | `unlisted` | a tool no `allowed` list names |
@@ -105,7 +105,7 @@ can only be stricter than the server (`deny` before `read` before `allow`).
 A removed tool, an uninstalled extension or a switched-off provider takes the tool out of the catalog: it is neither
 listed nor found, and a call answers `unknown_tool`. What still names it is reported: at startup as a warning, by
 `bin/kcmcp.sh validate` as a problem (stored systems included), since such an entry restricts nothing. That covers the
-server's `allowed-tools` and `denied-tools`, the `tools` sections of systems, realms and presets, and
+server's `kc-mcp.tools.allowed` and `kc-mcp.tools.denied`, the `tools` sections of systems, realms and presets, and
 `self-protection.tools`.
 
 A renamed tool keeps its old names as former names (`ToolSpec.Builder.formerly(...)`). They only ever restrict:
@@ -133,7 +133,7 @@ Keycloak provider. Work a tool hands to a pooled thread escapes the guard.
 
 ### Roles decide what the model sees
 
-Role filtering is on by default (`kc-mcp.role-filter`). Tools declare the roles they need with `ToolSpec.roles(...)`:
+Role filtering is on by default (`kc-mcp.tools.role-filter`). Tools declare the roles they need with `ToolSpec.roles(...)`:
 
 | form | meaning |
 |---|---|
@@ -170,29 +170,29 @@ runs, the server looks up the users, clients, groups and organizations a destruc
 
 The handlers resolve their targets again when they run: something may change between the approval and the call.
 
-More tools can need confirmation, the same way: server-wide `kc-mcp.confirm-tools=user_set_enabled` or
-`kc-mcp.confirm-writes=true` (every tool that changes Keycloak), and per system, realm or preset the `confirm` and
+More tools can need confirmation, the same way: server-wide `kc-mcp.tools.confirm=user_set_enabled` or
+`kc-mcp.tools.confirm-writes=true` (every tool that changes Keycloak), and per system, realm or preset the `confirm` and
 `confirm-writes` keys of the [tools section](#tool-restrictions-per-system-and-realm). Confirmation can only be
 added: a destructive tool is confirmed everywhere, a read tool never.
 
 - **Elicitation first.** When the MCP client supports it, the server asks the human through the client.
-- **Without elicitation**, `kc-mcp.confirm-fallback` decides: `flag` (the `local` default) requires and explains
+- **Without elicitation**, `kc-mcp.confirm.fallback` decides: `flag` (the `local` default) requires and explains
   `confirm: true`; `deny` (the `shared` default) refuses with `confirmation_required` and does not offer the flag,
   since the model would write it.
 - **Own confirmers** run first ([Extending](extending.md)), so a ticket check can still confirm under `deny`.
 - **CIBA** (`kc-mcp.spi.confirmer.ciba.enabled=true`, off by default) moves the decision to the caller's own device,
   with number matching ([CIBA confirmation](ciba-confirmation.md)). Neither the model nor the MCP client is in that channel.
-- **Explicit targets.** `kc-mcp.explicit-target=off|destructive|write` makes tools of that level answer
+- **Explicit targets.** `kc-mcp.tools.explicit-target=off|destructive|write` makes tools of that level answer
   `system_required` or `realm_required` instead of using the default system or realm, so an ambiguous request cannot
   land on the production system. A per-system entry (`/mcp/systems/<system>[/<realm>]`) counts as explicit.
 
-What the model is told about confirming is separate from what is enforced. `kc-mcp.model-confirmation` (default
+What the model is told about confirming is separate from what is enforced. `kc-mcp.confirm.model` (default
 `auto`) shapes the server instructions, the `search_tools` hits of destructive tools, `whoami` and the
 `confirmation_required` answers: in `ask` mode the model asks the user once after `confirmation_required` and then
 passes `confirm: true`; in `server` mode it calls right away and relays the answer, because the server asks through the
 client's elicitation or on the user's device, or refuses. `auto` picks `server` whenever a confirmer asks the human
 itself (`Confirmer.asksTheHuman()`, the CIBA confirmer does), the client supports elicitation, or `confirm: true` is not
-accepted; `ask` otherwise. Callers holding one of `kc-mcp.model-confirmation-trusted-roles` are told to pass
+accepted; `ask` otherwise. Callers holding one of `kc-mcp.confirm.model-trusted-roles` are told to pass
 `confirm: true` right away in `ask` mode. This stops the "shall I really delete?" question where the device asks anyway;
 the confirmers enforce either way.
 
@@ -227,8 +227,8 @@ The real boundary is the roles of the identity the server uses. Pick the level, 
 |---|---|---|
 | full admin | client in `master` with `admin`, or an admin user via `admin-cli` | nothing |
 | realm admin | confidential client **in the realm** with `realm-admin` | `kc-mcp.systems.default.allowed-realms=<realm>`, `kc-mcp.systems.default.default-realm=<realm>` |
-| realm manager | client in the realm with only the `realm-management` roles needed | as realm admin; role filtering hides the rest. Narrow further: `KC_MCP_DENIED_TOOLS=keycloak_user_delete`, `KC_MCP_READ_ONLY=true` |
-| delegated agent (exchange) | the human holds the roles and consents to the server's client acting for them (Keycloak 26.8 token exchange delegation, preview); the client's role scope caps every delegated token | `KC_MCP_DELEGATION=exchange` + the client's `client_credentials` + `KC_MCP_MCP_OAUTH_ENABLED=true` ([Callers](#callers), `examples/delegated-auth`) |
+| realm manager | client in the realm with only the `realm-management` roles needed | as realm admin; role filtering hides the rest. Narrow further: `KC_MCP_TOOLS_DENIED=keycloak_user_delete`, `KC_MCP_TOOLS_READ_ONLY=true` |
+| delegated agent (exchange) | the human holds the roles and consents to the server's client acting for them (Keycloak 26.8 token exchange delegation, preview); the client's role scope caps every delegated token | `KC_MCP_MCP_DELEGATION=exchange` + the client's `client_credentials` + `KC_MCP_MCP_OAUTH_ENABLED=true` ([Callers](#callers), `examples/delegated-auth`) |
 
 A `master` client may also manage realms through `<realm>-realm` client roles; the filter understands both.
 
@@ -256,7 +256,7 @@ tool("keycloak_user_delete")
   runs after the realm and role checks and before the confirmation. A denial answers `{"error": <code>, "message": ...}`.
 - Global checks come from `ToolProvider.accessChecks(...)` or any CDI bean implementing `AccessCheck`. Which of them
   run, in which order and with which settings can differ per system and realm ([Access checks](access-checks.md)).
-- `Delegation` says whether a tool may run with a delegated identity. Under `KC_MCP_DELEGATION=exchange` every call is
+- `Delegation` says whether a tool may run with a delegated identity. Under `KC_MCP_MCP_DELEGATION=exchange` every call is
   delegated (`Caller.delegated()`): `FORBIDDEN` tools are refused, `REQUIRED` tools usable; service account mode is the
   reverse. `FORBIDDEN` by default: `client_get_secret`, `client_regenerate_secret`, `realm_update`, `auth_flow_bind`,
   `federation_sync`.
@@ -458,20 +458,20 @@ This is about the MCP endpoint and its authorization server; the admin API and t
 `CallerProvider` reads the Quarkus `SecurityIdentity`: subject, username, issuing realm, roles. The OIDC tenant is off
 by default, so the endpoint is anonymous. `KC_MCP_MCP_OAUTH_ENABLED=true` verifies bearer tokens of
 the default system's auth realm, `<url>/realms/<auth-realm>` (`kc-mcp.mcp.oauth.issuer` to change it, `KC_MCP_MCP_OAUTH_AUDIENCE` to
-require an audience). `KC_MCP_DELEGATION` then decides whose identity reaches Keycloak:
+require an audience). `KC_MCP_MCP_DELEGATION` then decides whose identity reaches Keycloak:
 
 | | `off` (default) | `exchange` |
 |---|---|---|
 | admin calls run as | the service account | a delegated token Keycloak exchanges the caller's for: `sub` the caller, `act` the server's client |
 | roles that count | the service account's (role filter) | the delegated token's: the caller's roles within the client's role scope; Keycloak enforces again |
-| anonymous requests | allowed unless `KC_MCP_REQUIRE_CALLER=true` or `KC_MCP_SECURITY_PROFILE=shared` | `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` |
+| anonymous requests | allowed unless `KC_MCP_MCP_REQUIRE_CALLER=true` or `KC_MCP_SECURITY_PROFILE=shared` | `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` |
 | server credentials | required | the client's `client_credentials` (secret or `private_key_jwt`); no admin role on it |
 | Keycloak side | | a public client with an *Audience* mapper for the server and consent required, *Standard Token Exchange* on the server's client, an Admin Permissions `delegate` grant for it; Keycloak 26.8+ with `--features=token-exchange-delegation,parameterized-scopes` (preview) |
 
 - **No token passthrough.** The token a caller presents is never sent to the Admin API. The MCP authorization
   specification forbids it ("The MCP server MUST NOT pass through the token it received from the MCP client"): the
   token used upstream is a separate one that Keycloak issued to the server as its client, the service account's or a
-  delegated one. An earlier mode that did forward it, `KC_MCP_DELEGATION=forward`, is gone, and the server refuses to
+  delegated one. An earlier mode that did forward it, `KC_MCP_MCP_DELEGATION=forward`, is gone, and the server refuses to
   start with it. One consequence: the caller's token only has to open the MCP server, so it needs neither the Admin
   API audience nor admin roles that work anywhere else, and nobody can take it to the Admin API to get around the
   checks, confirmations and audit of this server.
@@ -522,7 +522,7 @@ So the Keycloak side decides what a stolen credential is worth:
 
 - **The narrowest roles per service client.** Only the `realm-management` roles the tools of that system need, in
   the realms they need them (`GET /api/admin/systems/<alias>/client-setup?roles=read|manage|admin` prints them).
-- **The user's identity instead of the service account's.** With `KC_MCP_DELEGATION=exchange` the server's client
+- **The user's identity instead of the service account's.** With `KC_MCP_MCP_DELEGATION=exchange` the server's client
   holds no admin role at all: its credentials alone get a token that cannot call the Admin API, so a stolen
   credential is useless without a user's token.
 - **Short access token lifespans** for the service clients, so a token taken from memory is good for minutes, not

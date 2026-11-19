@@ -60,7 +60,7 @@ public class LdapTestResource implements QuarkusTestResourceLifecycleManager {
             throw new IllegalStateException("LDAP bootstrap failed", e);
         }
         return Map.of("kc-mcp.systems.default.url", base, "kc-mcp.systems.default.allowed-realms", REALM,
-                "kc-mcp.systems.default.default-realm", REALM, "kc-mcp.tool-exposure", "direct");
+                "kc-mcp.systems.default.default-realm", REALM, "kc-mcp.tools.exposure", "direct");
     }
 
     /** Adds an inetOrgPerson with the password {@code <uid>-pw}. */

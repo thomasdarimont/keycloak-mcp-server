@@ -86,10 +86,10 @@ public class AccessPolicy {
     private final CapabilityDiscovery capabilities;
     private final Explanations explanations;
     private final List<AccessCheck> globalChecks;
-    /** What happens to the tools kc-mcp.allowed-tools does not name. */
+    /** What happens to the tools kc-mcp.tools.allowed does not name. */
     private volatile UnlistedTools unlisted;
     /**
-     * What needs confirmation besides the destructive tools: kc-mcp.confirm-tools,
+     * What needs confirmation besides the destructive tools: kc-mcp.tools.confirm,
      * confirm-writes.
      */
     private volatile Set<String> confirmTools = Set.of();
@@ -112,16 +112,16 @@ public class AccessPolicy {
     @Inject
     public AccessPolicy(McpServerConfig config, RoleDiscovery roles, CapabilityDiscovery capabilities,
             DefaultExtensionRegistry registry, KeycloakSystems systems) {
-        this(config.readOnly(), config.systemDefaults().allowedRealms().orElse(List.of()),
-                config.allowedTools().orElse(List.of()), config.deniedTools().orElse(List.of()),
-                config.allowedCategories().orElse(List.of()), roles, collectChecks(registry),
+        this(config.tools().readOnly(), config.systemDefaults().allowedRealms().orElse(List.of()),
+                config.tools().allowed().orElse(List.of()), config.tools().denied().orElse(List.of()),
+                config.tools().categories().orElse(List.of()), roles, collectChecks(registry),
                 name -> systems.find(name).map(a -> a.system().allowedRealms()).orElse(Set.of()), capabilities,
-                config.explanations(), systems, config.delegation());
+                config.explanations(), systems, config.mcp().delegation());
         this.plan = new AccessCheckChain(globalChecks,
                 id -> ProviderConfig.forExtension(AccessCheckSpi.NAME, id, config));
         this.serverConfig = config;
-        this.unlisted = UnlistedTools.effective(config.unlistedTools(), List.copyOf(this.allowedTools));
-        confirmation(config.confirmTools().orElse(List.of()), config.confirmWrites());
+        this.unlisted = UnlistedTools.effective(config.tools().unlisted(), List.copyOf(this.allowedTools));
+        confirmation(config.tools().confirm().orElse(List.of()), config.tools().confirmWrites());
         LOG.infof("Access checks, in server order: %s",
                 plan.plan(null, null).steps().stream().map(st -> st.check().id() + "@" + st.order()).toList());
     }
@@ -365,9 +365,9 @@ public class AccessPolicy {
 
     /**
      * Whether a call needs confirmation: every destructive tool, and what the server
-     * ({@code kc-mcp.confirm-tools}, {@code kc-mcp.confirm-writes}) and the system's and
-     * realm's {@code tools} section ({@code confirm}, {@code confirmWrites}) add. Nothing
-     * takes it away from a destructive tool.
+     * ({@code kc-mcp.tools.confirm}, {@code kc-mcp.tools.confirm-writes}) and the
+     * system's and realm's {@code tools} section ({@code confirm}, {@code confirmWrites})
+     * add. Nothing takes it away from a destructive tool.
      */
     public boolean needsConfirmation(ToolSpec spec, String realm, KeycloakAdmin admin) {
         return needsConfirmation(spec, realm, admin == null ? null : admin.system());
@@ -515,8 +515,8 @@ public class AccessPolicy {
                     && !allowedTools.contains(shortName(spec.name()))) {
                 return Optional.of(ToolResult.error("tool_not_allowed",
                         spec.name() + " changes Keycloak and is not in"
-                                + " kc-mcp.allowed-tools; this server makes unlisted tools available only if they read"
-                                + " (kc-mcp.unlisted-tools=read)."));
+                                + " kc-mcp.tools.allowed; this server makes unlisted tools available only if they read"
+                                + " (kc-mcp.tools.unlisted=read)."));
             }
             return Optional.of(ToolResult.error("tool_not_allowed", spec.name() + " is disabled on this server."));
         }

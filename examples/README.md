@@ -22,7 +22,7 @@ not up. The `demo.sh` scripts check first that the server they reach is the one 
 | [multi-tenant](multi-tenant/) | two tenants as systems, keys per tenant, one MCP entry per tenant or realm, user login per realm |
 | [dynamic-systems](dynamic-systems/) | no system at startup; registration through the admin API into PostgreSQL with a generated key; a second Keycloak whose realms are adopted, by script or in the management UI |
 | [split-deployment](split-deployment/) | an admin instance and MCP instances on one database (`kc-mcp.instance-role`), the MCP side with a read-only database user |
-| [delegated-auth](delegated-auth/) | the server as a delegated agent (`KC_MCP_DELEGATION=exchange`) with Keycloak's token exchange delegation |
+| [delegated-auth](delegated-auth/) | the server as a delegated agent (`KC_MCP_MCP_DELEGATION=exchange`) with Keycloak's token exchange delegation |
 | [xaa](xaa/) | Cross-App Access (MCP Enterprise-Managed Authorization): an enterprise IdP's ID-JAG becomes the user's token, no login page or consent; the realm names the server as the actor (experimental in Keycloak) |
 | [troubleshooting](troubleshooting/) | read-only access for support: a realm with a redirect loop, a locked-out user and slow logins, and the prompts that find the causes |
 | [ciba-confirm](ciba-confirm/) | destructive tools approved on the user's device, with an approver app standing in for the phone |

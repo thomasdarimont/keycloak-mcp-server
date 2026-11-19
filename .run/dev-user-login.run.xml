@@ -9,18 +9,18 @@
             <map>
               <entry key="KC_MCP_SYSTEMS_DEFAULT_URL" value="http://localhost:8080" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM" value="demo" />
-              <entry key="KC_MCP_DELEGATION" value="exchange" />
+              <entry key="KC_MCP_MCP_DELEGATION" value="exchange" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_GRANT_TYPE" value="client_credentials" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_ID" value="keycloak-mcp" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET" value="keycloak-mcp-secret" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="demo" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
-              <entry key="KC_MCP_TOOL_EXPOSURE" value="hybrid" />
+              <entry key="KC_MCP_TOOLS_EXPOSURE" value="hybrid" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_VERSION" value="26.8.2" />
               <entry key="KC_MCP_MCP_OAUTH_ENABLED" value="true" />
               <entry key="KC_MCP_MCP_OAUTH_AUDIENCE" value="keycloak-mcp" />
               <entry key="KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES" value="openid,delegation:client:keycloak-mcp" />
-              <entry key="KC_MCP_MODEL_CONFIRMATION_TRUSTED_ROLES" value="realm-management.realm-admin" />
+              <entry key="KC_MCP_CONFIRM_MODEL_TRUSTED_ROLES" value="realm-management.realm-admin" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />
               <entry key="KC_MCP_DEV_MODE" value="true" />
               <entry key="KC_MCP_UI_OPERATOR_ROLE" value="realm-management.realm-admin" />

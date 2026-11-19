@@ -14,8 +14,8 @@
               <entry key="KC_MCP_SYSTEMS_DEFAULT_CLIENT_SECRET" value="mcp-readonly-secret" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_DEFAULT_REALM" value="demo" />
               <entry key="KC_MCP_SYSTEMS_DEFAULT_ALLOWED_REALMS" value="demo" />
-              <entry key="KC_MCP_READ_ONLY" value="true" />
-              <entry key="KC_MCP_TOOL_EXPOSURE" value="lazy" />
+              <entry key="KC_MCP_TOOLS_READ_ONLY" value="true" />
+              <entry key="KC_MCP_TOOLS_EXPOSURE" value="lazy" />
               <entry key="KC_MCP_UI_ENABLED" value="true" />
               <entry key="KC_MCP_DEV_MODE" value="true" />
               <entry key="KC_MCP_UI_OPERATOR_ROLE" value="realm-management.realm-admin" />

@@ -137,7 +137,7 @@ public class CibaConfirmer implements Confirmer {
     private final ExtensionRegistry registry;
     private final TlsConfigurationRegistry tls;
     private final OutboundClients.Timeouts timeouts;
-    /** {@code kc-mcp.confirm-timeout-seconds}, the default of {@code timeout-seconds}. */
+    /** {@code kc-mcp.confirm.timeout-seconds}, the default of {@code timeout-seconds}. */
     private final int defaultTimeout;
     private final Map<String, CibaClient> byIssuer = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
@@ -168,11 +168,11 @@ public class CibaConfirmer implements Confirmer {
         this.givenClients = null;
         this.givenVerifiers = null;
         this.givenStore = null;
-        this.callersRequired = config.callerRequired() || config.delegation().delegating();
+        this.callersRequired = config.callerRequired() || config.mcp().delegation().delegating();
         this.registry = registry;
         this.tls = tls.isResolvable() ? tls.get() : null;
         this.timeouts = OutboundClients.Timeouts.of(config);
-        this.defaultTimeout = config.confirmTimeoutSeconds();
+        this.defaultTimeout = config.confirm().timeoutSeconds();
         this.metrics = metrics;
         if (systems.isResolvable()) {
             KeycloakSystems all = systems.get();
@@ -252,8 +252,8 @@ public class CibaConfirmer implements Confirmer {
         if (!callersRequired) {
             problems.add(ConfigProblem.error(CALLERS_REQUIRED,
                     "kc-mcp.spi.confirmer.ciba.enabled=true needs authenticated callers, or"
-                            + " there is nobody whose device could be asked: set kc-mcp.require-caller=true (with"
-                            + " kc-mcp.mcp.oauth.enabled=true), kc-mcp.delegation=exchange, or"
+                            + " there is nobody whose device could be asked: set kc-mcp.mcp.require-caller=true (with"
+                            + " kc-mcp.mcp.oauth.enabled=true), kc-mcp.mcp.delegation=exchange, or"
                             + " kc-mcp.security-profile=shared"));
         }
         if (givenStore == null && registry != null && registry.extensions(PendingApprovalStore.class).isEmpty()) {

@@ -20,10 +20,11 @@ public interface McpServerConfig {
     /**
      * Security profile: {@code local} (default, one person's machine) or {@code shared}
      * (a server others reach over the network). The profile sets the defaults of
-     * {@link #requireCaller()}, {@link #confirmFallback()} and {@link #explicitTarget()}
-     * and, as {@code shared}, refuses to start without caller authentication with an
-     * audience (where the instance serves the MCP endpoint, {@link #instanceRole()}),
-     * {@link #allowedHosts()}, an admin API audience and an encrypted storage.
+     * {@link Mcp#requireCaller()}, {@link Confirm#fallback()} and
+     * {@link Tools#explicitTarget()} and, as {@code shared}, refuses to start without
+     * caller authentication with an audience (where the instance serves the MCP endpoint,
+     * {@link #instanceRole()}), {@link #allowedHosts()}, an admin API audience and an
+     * encrypted storage.
      */
     @WithDefault("local")
     @WithConverter(SecurityProfile.Converter.class)
@@ -73,12 +74,6 @@ public interface McpServerConfig {
     @WithConverter(Explanations.Converter.class)
     Explanations explanations();
 
-    /**
-     * Optional prefix for every tool name, e.g. {@code prod_} ->
-     * {@code prod_keycloak_user_search}.
-     */
-    Optional<String> toolPrefix();
-
     /** Key settings for {@link ClientAuth#PRIVATE_KEY_JWT}. */
     Jwt jwt();
 
@@ -127,19 +122,6 @@ public interface McpServerConfig {
     String keysDir();
 
     /**
-     * {@code off} (default): admin calls use the server's own credentials;
-     * {@code exchange}: the caller's token is exchanged for a delegated token whose actor
-     * is the server's own client (Keycloak 26.8 token exchange delegation, needs the
-     * caller's consent and the client's {@code delegate} permission), so Keycloak
-     * enforces the user's own roles. It requires the MCP endpoint to authenticate callers
-     * ({@code kc-mcp.mcp.oauth.enabled=true}) and a confidential client with a service
-     * account. The caller's token itself is never sent to the Admin API.
-     */
-    @WithDefault("off")
-    @WithConverter(DelegationMode.Converter.class)
-    DelegationMode delegation();
-
-    /**
      * Scope requested with every token the server obtains for the Admin API and
      * advertised to MCP clients in the protected resource metadata: Keycloak 26.8.2 and
      * later only accept Admin API tokens that carry the audience the built-in
@@ -151,100 +133,21 @@ public interface McpServerConfig {
     String adminApiScope();
 
     /**
-     * Rejects MCP requests whose {@code Host} or {@code Origin} is not a localhost value
-     * ({@code localhost}, {@code 127.0.0.1}, {@code ::1}, any port) or one of
-     * {@link #dnsRebindingAllowedHosts()}: a web page on the same machine would otherwise
-     * reach the anonymous endpoint through a DNS name that resolves to 127.0.0.1 (DNS
-     * rebinding). {@code auto} (default) protects while the endpoint is anonymous
-     * ({@code kc-mcp.mcp.oauth.enabled=false} and no required caller) and stands down
-     * once callers authenticate; {@code on} and {@code off} decide outright. Only the MCP
-     * endpoint is covered, JWKS and admin routes are not.
+     * Effective value: {@link Mcp#requireCaller()}, or always in profile {@code shared}.
      */
-    @WithDefault("auto")
-    String dnsRebindingProtection();
-
-    /**
-     * {@code host} or {@code host:port} values accepted besides localhost, for an
-     * anonymous server reached by name or through a proxy ({@code mcp.internal:8081}).
-     */
-    Optional<List<String>> dnsRebindingAllowedHosts();
-
-    /**
-     * Refuse unauthenticated MCP requests with a 401 challenge even when the server acts
-     * with its own credentials (the caller then only matters for policies and the audit
-     * log). Implied by {@code delegation=exchange}.
-     */
-    @WithDefault("false")
-    boolean requireCaller();
-
-    /**
-     * Marks the arguments a proxy in front of the server may want to route, limit or log
-     * by with {@code x-mcp-header} in the tools' input schemas (MCP HTTP header
-     * standardization, protocol version {@code 2026-07-28}): the {@code name} of
-     * {@code execute_tool} as {@code Mcp-Param-Tool}, {@code system} as
-     * {@code Mcp-Param-System} and {@code realm} as {@code Mcp-Param-Realm}. A client of
-     * that protocol version then sends the headers, and a request whose header is missing
-     * or says something else than its body is refused with HTTP 400
-     * ({@code HeaderMismatch}). Without it a proxy sees {@code Mcp-Name: execute_tool}
-     * for every tool run through {@code execute_tool}. Older, session-based clients are
-     * not affected. {@code false}: no argument is mirrored, for a client of the new
-     * protocol version that does not send such headers.
-     */
-    @WithDefault("true")
-    boolean paramHeaders();
-
-    /** Effective value: {@link #requireCaller()}, or always in profile {@code shared}. */
     default boolean callerRequired() {
-        return requireCaller() || securityProfile().shared();
+        return mcp().requireCaller() || securityProfile().shared();
     }
 
-    /**
-     * What confirms a DESTRUCTIVE tool when the client has no elicitation: {@code flag}
-     * ({@code confirm: true} in the arguments) or {@code deny} (refused until a client
-     * with elicitation or another {@code Confirmer} confirms). Default: {@code flag} in
-     * profile {@code local}, {@code deny} in {@code shared}.
-     */
-    @WithConverter(ConfirmFallback.Converter.class)
-    Optional<ConfirmFallback> confirmFallback();
-
-    /**
-     * What the model is told about confirming destructive tools: {@code ask} (ask the
-     * user once after {@code confirmation_required}, then {@code confirm: true}),
-     * {@code server} (the server asks, through the client or the user's device: call
-     * right away) or {@code auto} (default: {@code server} when a confirmer asks the
-     * human itself, the client supports elicitation or {@code confirm: true} is not
-     * accepted; else {@code ask}). Guidance only; the server enforces its confirmation
-     * either way.
-     */
-    @WithDefault("auto")
-    @WithConverter(ModelConfirmation.Converter.class)
-    ModelConfirmation modelConfirmation();
-
-    /**
-     * Callers holding one of these roles ({@code realm:<role>} or
-     * {@code <client>.<role>}, as in the policies) are assumed to know what they do: in
-     * {@code ask} mode the model is told to pass {@code confirm: true} right away instead
-     * of asking them first. Does not apply where the server asks itself.
-     */
-    Optional<List<String>> modelConfirmationTrustedRoles();
-
-    /** Effective value of {@link #confirmFallback()}, by profile when unset. */
+    /** Effective value of {@link Confirm#fallback()}, by profile when unset. */
     default ConfirmFallback effectiveConfirmFallback() {
-        return confirmFallback().orElse(securityProfile().shared() ? ConfirmFallback.DENY : ConfirmFallback.FLAG);
+        return confirm().fallback().orElse(securityProfile().shared() ? ConfirmFallback.DENY : ConfirmFallback.FLAG);
     }
 
-    /**
-     * Which tools must name {@code system} (when several exist) and {@code realm} instead
-     * of taking the defaults: {@code off}, {@code destructive} or {@code write}. A
-     * system-specific endpoint counts as explicit. Default: {@code off} in profile
-     * {@code local}, {@code destructive} in {@code shared}.
-     */
-    @WithConverter(ExplicitTarget.Converter.class)
-    Optional<ExplicitTarget> explicitTarget();
-
-    /** Effective value of {@link #explicitTarget()}, by profile when unset. */
+    /** Effective value of {@link Tools#explicitTarget()}, by profile when unset. */
     default ExplicitTarget effectiveExplicitTarget() {
-        return explicitTarget().orElse(securityProfile().shared() ? ExplicitTarget.DESTRUCTIVE : ExplicitTarget.OFF);
+        return tools().explicitTarget()
+            .orElse(securityProfile().shared() ? ExplicitTarget.DESTRUCTIVE : ExplicitTarget.OFF);
     }
 
     /**
@@ -287,80 +190,12 @@ public interface McpServerConfig {
      */
     Optional<List<String>> allowedHosts();
 
-    /** Hide and refuse every WRITE / DESTRUCTIVE tool. */
-    @WithDefault("false")
-    boolean readOnly();
-
-    /** Only these tools exist on this server (csv of tool names). Empty = all. */
-    Optional<List<String>> allowedTools();
-
-    /**
-     * These tools never exist on this server (csv). Wins over {@link #allowedTools()}.
-     */
-    Optional<List<String>> deniedTools();
-
-    /**
-     * Only tools of these categories exist (csv, e.g. {@code users,groups}). Empty = all.
-     */
-    Optional<List<String>> allowedCategories();
-
-    /**
-     * What happens to the tools {@link #allowedTools()} does not name: {@code allow},
-     * {@code read} (only if they read: new write and destructive tools wait until listed)
-     * or {@code deny}. Unset: {@code deny} with an allow-list, {@code allow} without.
-     */
-    @WithConverter(UnlistedTools.Converter.class)
-    Optional<UnlistedTools> unlistedTools();
-
-    /**
-     * These tools need confirmation, as destructive ones do (csv). Systems, realms and
-     * presets can add their own ({@code tools.confirm}).
-     */
-    Optional<List<String>> confirmTools();
-
-    /**
-     * Every tool that changes Keycloak needs confirmation, not only the destructive ones.
-     */
-    @WithDefault("false")
-    boolean confirmWrites();
-
-    /**
-     * Hide and refuse tools whose realm-management roles the server's own token does not
-     * hold.
-     */
-    @WithDefault("true")
-    boolean roleFilter();
-
     /**
      * Startup check that every allowed realm is reachable with the credentials: off, warn
      * or fail.
      */
     @WithDefault("warn")
     String startupCheck();
-
-    /** Which tools show up in {@code tools/list}. */
-    @WithDefault("hybrid")
-    @WithConverter(ExposureMode.Converter.class)
-    ExposureMode toolExposure();
-
-    /** Tools exposed directly in hybrid / progressive mode. */
-    @WithDefault("keycloak_user_search,keycloak_user_get,keycloak_realm_get_config,keycloak_server_info")
-    List<String> hotTools();
-
-    /** Default number of hits returned by {@code search_tools}. */
-    @WithDefault("5")
-    int searchLimitDefault();
-
-    /** Upper bound for the {@code max} pagination argument of list tools. */
-    @WithDefault("100")
-    int resultMaxItems();
-
-    /**
-     * Also return every tool result as MCP {@code structuredContent} (the JSON object
-     * next to the text block), so clients can render it without parsing text.
-     */
-    @WithDefault("true")
-    boolean structuredContent();
 
     /**
      * Per tool-provider settings: {@code kc-mcp.spi.<spi>.<id>.<key>=value} (env
@@ -388,10 +223,6 @@ public interface McpServerConfig {
      */
     Map<String, Map<String, String>> presets();
 
-    /** Elicitation / confirmation prompt timeout in seconds. */
-    @WithDefault("120")
-    int confirmTimeoutSeconds();
-
     /**
      * Directory with extension jars ({@code ToolProvider}, {@code PromptProvider},
      * {@code AccessCheck}, {@code Confirmer}, {@code AuditListener} implementations
@@ -402,24 +233,6 @@ public interface McpServerConfig {
      */
     @WithDefault("providers")
     String providersDir();
-
-    /**
-     * Directory with prompts as plain text files: every {@code .md} file in it is one
-     * prompt, a header that declares it followed by the recipe with placeholders
-     * ({@code docs/tools.md}). Resolved like {@code kc-mcp.providers-dir}; a missing
-     * directory loads nothing. Read once at startup, after the prompts of the extensions,
-     * so a file here replaces a prompt of the same name from anywhere else.
-     */
-    @WithDefault("prompts")
-    String promptsDir();
-
-    /**
-     * Whether a prompt may replace an earlier one of the same name: an extension's a
-     * built-in one, a file of the prompts directory any other. Each replacement is logged
-     * at startup. {@code false}: a name used twice stops the start.
-     */
-    @WithDefault("true")
-    boolean promptOverrides();
 
     /**
      * Properties files read at startup, comma separated: the distribution's
@@ -441,6 +254,169 @@ public interface McpServerConfig {
     boolean devMode();
 
     /**
+     * The tools ({@code kc-mcp.tools.*}): which ones exist on this server, how the model
+     * gets to see them and what they return. {@code read-only}, {@code denied},
+     * {@code allowed}, {@code categories}, {@code unlisted}, {@code confirm} and
+     * {@code confirm-writes} are the keys a system, a realm and a preset use in their own
+     * {@code tools} section, which can only narrow what the server allows here.
+     */
+    Tools tools();
+
+    interface Tools {
+        /**
+         * Optional prefix for every tool name, e.g. {@code prod_} ->
+         * {@code prod_keycloak_user_search}.
+         */
+        Optional<String> prefix();
+
+        /** Which tools show up in {@code tools/list}. */
+        @WithDefault("hybrid")
+        @WithConverter(ExposureMode.Converter.class)
+        ExposureMode exposure();
+
+        /** Tools exposed directly in hybrid / progressive mode. */
+        @WithDefault("keycloak_user_search,keycloak_user_get,keycloak_realm_get_config,keycloak_server_info")
+        List<String> hot();
+
+        /** Only these tools exist on this server (csv of tool names). Empty = all. */
+        Optional<List<String>> allowed();
+
+        /**
+         * These tools never exist on this server (csv). Wins over {@link #allowed()}.
+         */
+        Optional<List<String>> denied();
+
+        /**
+         * Only tools of these categories exist (csv, e.g. {@code users,groups}). Empty =
+         * all.
+         */
+        Optional<List<String>> categories();
+
+        /**
+         * What happens to the tools {@link #allowed()} does not name: {@code allow},
+         * {@code read} (only if they read: new write and destructive tools wait until
+         * listed) or {@code deny}. Unset: {@code deny} with an allow-list, {@code allow}
+         * without.
+         */
+        @WithConverter(UnlistedTools.Converter.class)
+        Optional<UnlistedTools> unlisted();
+
+        /** Hide and refuse every WRITE / DESTRUCTIVE tool. */
+        @WithDefault("false")
+        boolean readOnly();
+
+        /**
+         * Hide and refuse tools whose realm-management roles the server's own token does
+         * not hold.
+         */
+        @WithDefault("true")
+        boolean roleFilter();
+
+        /**
+         * Which tools must name {@code system} (when several exist) and {@code realm}
+         * instead of taking the defaults: {@code off}, {@code destructive} or
+         * {@code write}. A system-specific endpoint counts as explicit. Default:
+         * {@code off} in profile {@code local}, {@code destructive} in {@code shared}.
+         */
+        @WithConverter(ExplicitTarget.Converter.class)
+        Optional<ExplicitTarget> explicitTarget();
+
+        /** Default number of hits returned by {@code search_tools}. */
+        @WithDefault("5")
+        int searchLimitDefault();
+
+        /** Upper bound for the {@code max} pagination argument of list tools. */
+        @WithDefault("100")
+        int resultMaxItems();
+
+        /**
+         * Also return every tool result as MCP {@code structuredContent} (the JSON object
+         * next to the text block), so clients can render it without parsing text.
+         */
+        @WithDefault("true")
+        boolean structuredContent();
+
+        /**
+         * These tools need confirmation, as destructive ones do (csv). Systems, realms
+         * and presets can add their own ({@code tools.confirm}).
+         */
+        Optional<List<String>> confirm();
+
+        /**
+         * Every tool that changes Keycloak needs confirmation, not only the destructive
+         * ones.
+         */
+        @WithDefault("false")
+        boolean confirmWrites();
+    }
+
+    /**
+     * How a destructive call gets confirmed ({@code kc-mcp.confirm.*}); which tools need
+     * a confirmation is {@link Tools#confirm()} and {@link Tools#confirmWrites()}.
+     */
+    Confirm confirm();
+
+    interface Confirm {
+        /**
+         * What confirms a DESTRUCTIVE tool when the client has no elicitation:
+         * {@code flag} ({@code confirm: true} in the arguments) or {@code deny} (refused
+         * until a client with elicitation or another {@code Confirmer} confirms).
+         * Default: {@code flag} in profile {@code local}, {@code deny} in {@code shared}.
+         */
+        @WithConverter(ConfirmFallback.Converter.class)
+        Optional<ConfirmFallback> fallback();
+
+        /** Elicitation / confirmation prompt timeout in seconds. */
+        @WithDefault("120")
+        int timeoutSeconds();
+
+        /**
+         * What the model is told about confirming destructive tools: {@code ask} (ask the
+         * user once after {@code confirmation_required}, then {@code confirm: true}),
+         * {@code server} (the server asks, through the client or the user's device: call
+         * right away) or {@code auto} (default: {@code server} when a confirmer asks the
+         * human itself, the client supports elicitation or {@code confirm: true} is not
+         * accepted; else {@code ask}). Guidance only; the server enforces its
+         * confirmation either way.
+         */
+        @WithDefault("auto")
+        @WithConverter(ModelConfirmation.Converter.class)
+        ModelConfirmation model();
+
+        /**
+         * Callers holding one of these roles ({@code realm:<role>} or
+         * {@code <client>.<role>}, as in the policies) are assumed to know what they do:
+         * in {@code ask} mode the model is told to pass {@code confirm: true} right away
+         * instead of asking them first. Does not apply where the server asks itself.
+         */
+        Optional<List<String>> modelTrustedRoles();
+    }
+
+    /** Prompts read from text files ({@code kc-mcp.prompts.*}). */
+    Prompts prompts();
+
+    interface Prompts {
+        /**
+         * Directory with prompts as plain text files: every {@code .md} file in it is one
+         * prompt, a header that declares it followed by the recipe with placeholders
+         * ({@code docs/tools.md}). Resolved like {@code kc-mcp.providers-dir}; a missing
+         * directory loads nothing. Read once at startup, after the prompts of the
+         * extensions, so a file here replaces a prompt of the same name from anywhere
+         * else.
+         */
+        @WithDefault("prompts")
+        String dir();
+
+        /**
+         * Whether a prompt may replace an earlier one of the same name: an extension's a
+         * built-in one, a file of the prompts directory any other. Each replacement is
+         * logged at startup. {@code false}: a name used twice stops the start.
+         */
+        @WithDefault("true")
+        boolean overrides();
+    }
+
+    /**
      * The MCP endpoint itself ({@code kc-mcp.mcp.*}). Off on an instance that serves only
      * the admin API or the management UI next to the MCP-facing ones, all on one
      * database: the endpoint and its entries answer a plain 404, everything else stays.
@@ -450,6 +426,65 @@ public interface McpServerConfig {
     interface Mcp {
         @WithDefault("true")
         boolean enabled();
+
+        /**
+         * {@code off} (default): admin calls use the server's own credentials;
+         * {@code exchange}: the caller's token is exchanged for a delegated token whose
+         * actor is the server's own client (Keycloak 26.8 token exchange delegation,
+         * needs the caller's consent and the client's {@code delegate} permission), so
+         * Keycloak enforces the user's own roles. It requires the MCP endpoint to
+         * authenticate callers ({@code kc-mcp.mcp.oauth.enabled=true}) and a confidential
+         * client with a service account. The caller's token itself is never sent to the
+         * Admin API.
+         */
+        @WithDefault("off")
+        @WithConverter(DelegationMode.Converter.class)
+        DelegationMode delegation();
+
+        /**
+         * Refuse unauthenticated MCP requests with a 401 challenge even when the server
+         * acts with its own credentials (the caller then only matters for policies and
+         * the audit log). Implied by {@code delegation=exchange}.
+         */
+        @WithDefault("false")
+        boolean requireCaller();
+
+        /**
+         * Rejects MCP requests whose {@code Host} or {@code Origin} is not a localhost
+         * value ({@code localhost}, {@code 127.0.0.1}, {@code ::1}, any port) or one of
+         * {@link #dnsRebindingAllowedHosts()}: a web page on the same machine would
+         * otherwise reach the anonymous endpoint through a DNS name that resolves to
+         * 127.0.0.1 (DNS rebinding). {@code auto} (default) protects while the endpoint
+         * is anonymous ({@code kc-mcp.mcp.oauth.enabled=false} and no required caller)
+         * and stands down once callers authenticate; {@code on} and {@code off} decide
+         * outright. Only the MCP endpoint is covered, JWKS and admin routes are not.
+         */
+        @WithDefault("auto")
+        String dnsRebindingProtection();
+
+        /**
+         * {@code host} or {@code host:port} values accepted besides localhost, for an
+         * anonymous server reached by name or through a proxy
+         * ({@code mcp.internal:8081}).
+         */
+        Optional<List<String>> dnsRebindingAllowedHosts();
+
+        /**
+         * Marks the arguments a proxy in front of the server may want to route, limit or
+         * log by with {@code x-mcp-header} in the tools' input schemas (MCP HTTP header
+         * standardization, protocol version {@code 2026-07-28}): the {@code name} of
+         * {@code execute_tool} as {@code Mcp-Param-Tool}, {@code system} as
+         * {@code Mcp-Param-System} and {@code realm} as {@code Mcp-Param-Realm}. A client
+         * of that protocol version then sends the headers, and a request whose header is
+         * missing or says something else than its body is refused with HTTP 400
+         * ({@code HeaderMismatch}). Without it a proxy sees
+         * {@code Mcp-Name: execute_tool} for every tool run through {@code execute_tool}.
+         * Older, session-based clients are not affected. {@code false}: no argument is
+         * mirrored, for a client of the new protocol version that does not send such
+         * headers.
+         */
+        @WithDefault("true")
+        boolean paramHeaders();
 
         /**
          * The authorization server of the MCP endpoint ({@code kc-mcp.mcp.oauth.*}): the

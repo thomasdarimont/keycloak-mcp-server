@@ -18,7 +18,7 @@ public class KeycloakTestResource implements QuarkusTestResourceLifecycleManager
         return Map.ofEntries(Map.entry("kc-mcp.system-defaults.grant-type", "password"),
                 Map.entry("kc-mcp.system-defaults.auth-realm", "master"),
                 Map.entry("kc-mcp.system-defaults.username", "admin"),
-                Map.entry("kc-mcp.system-defaults.password", "admin"), Map.entry("kc-mcp.tool-exposure", "direct"),
+                Map.entry("kc-mcp.system-defaults.password", "admin"), Map.entry("kc-mcp.tools.exposure", "direct"),
                 // the baseline's "default" system is switched off: this test has primary
                 // and mirror
                 Map.entry("kc-mcp.systems.default.url", ""), Map.entry("kc-mcp.systems.primary.url", url),

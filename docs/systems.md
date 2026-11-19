@@ -276,7 +276,7 @@ Same server, bound to one system or realm.
   naming the resource it was asked for. An entry's document is served before the entry got its first request, so
   it does not matter which instance behind a load balancer answers. With `quarkus.http.root-path` the documents
   are under that prefix, where the 401 points; a document at the host's root needs the proxy in front to route it.
-- With `KC_MCP_DELEGATION=exchange` the caller's token is exchanged in the realm that issued it. For a realm entry
+- With `KC_MCP_MCP_DELEGATION=exchange` the caller's token is exchanged in the realm that issued it. For a realm entry
   whose realm is not the system's auth realm that is the entry's realm: the server's client logs in there and
   exchanges there. So the system's client has to exist in every realm users log in at, with the same client id and
   credentials (with `private_key_jwt`, the same JWKS URL), *Standard Token Exchange*, a role scope and the `delegate`
@@ -295,5 +295,5 @@ Same server, bound to one system or realm.
 
 Support desk: realm entry. Operator: system entry or root.
 
-One process per Keycloak instead: `kc-mcp.tool-prefix=prod_` renames tools (`prod_keycloak_user_search`);
+One process per Keycloak instead: `kc-mcp.tools.prefix=prod_` renames tools (`prod_keycloak_user_search`);
 `execute_tool` and config lists accept both spellings.

@@ -73,7 +73,7 @@ clients want the server on the host. IntelliJ: `.run/` has `quarkus:dev (delegat
 | users | `alice` (`/mcp-admins` → `realm-admin`, realm role `group-manager`), `carol` (`/mcp-support` → `view-users`, `view-events`), `bob` (nothing), `dave` (disabled). Password `<username>-demo` |
 | events | `TOKEN_EXCHANGE`, `TOKEN_EXCHANGE_ERROR`, `GRANT_CONSENT`, logins; admin events |
 
-Server side (`env/delegation.env`): `KC_MCP_DELEGATION=exchange`, the actor's `client_credentials`,
+Server side (`env/delegation.env`): `KC_MCP_MCP_DELEGATION=exchange`, the actor's `client_credentials`,
 `KC_MCP_MCP_OAUTH_ENABLED=true`, `KC_MCP_MCP_OAUTH_AUDIENCE=keycloak-mcp`, and
 `KC_MCP_MCP_OAUTH_RESOURCE_METADATA_SCOPES=openid,delegation:client:keycloak-mcp` so the protected resource metadata
 tells MCP clients which scope to ask for. `env/delegation-policies.env` adds the server's policy layer on top
@@ -166,14 +166,14 @@ people in.
     | jq '.policies |= map(if .name == "validate-delegation-claims" then .enabled = true else . end)' \
     | $KCADM update client-policies/policies -r demo -f -
   ```
-- **Tool-level rules**: the server's policies provider (`env/delegation-policies.env`), `KC_MCP_DENIED_TOOLS`,
-  `KC_MCP_READ_ONLY`, or an `AccessCheck` extension (`examples/extensions`); Keycloak Authorization Services on the
+- **Tool-level rules**: the server's policies provider (`env/delegation-policies.env`), `KC_MCP_TOOLS_DENIED`,
+  `KC_MCP_TOOLS_READ_ONLY`, or an `AccessCheck` extension (`examples/extensions`); Keycloak Authorization Services on the
   `keycloak-mcp` client (resources = tool areas, scopes = verbs) are the next step for policies managed in the
   console.
 
 ## Notes
 
-- Preview feature: Keycloak ≥ 26.8 started with both features; `kc-mcp.delegation=exchange` on an older server
+- Preview feature: Keycloak ≥ 26.8 started with both features; `kc-mcp.mcp.delegation=exchange` on an older server
   answers `delegation_failed` naming the missing feature.
 - The delegated token has no refresh token; the server exchanges again when the caller's token or the delegated one
   expires (the caller's lives 30 min in this realm).

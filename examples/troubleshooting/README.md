@@ -6,7 +6,7 @@ A support engineer asks why a login misbehaves, and the model finds out from wha
 configured, without being able to change anything. The server reads, and nothing else, twice over:
 
 - **Keycloak** gives its service account `mcp-support` only `view-*` roles of the realm, so it refuses any change.
-- **The server** runs with `KC_MCP_READ_ONLY=true`: write and destructive tools are neither listed nor callable, and
+- **The server** runs with `KC_MCP_TOOLS_READ_ONLY=true`: write and destructive tools are neither listed nor callable, and
   a request to the Admin API that is not a `GET` is not sent, whatever a tool declares.
 
 The realm `shop` has one planted fault per question, and `seed.py` produces the symptoms:
@@ -109,7 +109,7 @@ The administrator who regenerated the secret appears in the admin event as a use
 ## Beyond one machine
 
 `env/support.env` uses the security profile `local`: nobody logs in at the MCP endpoint, which suits a support
-engineer's own machine. For a server other people reach, keep `KC_MCP_READ_ONLY=true` and let the users log in
+engineer's own machine. For a server other people reach, keep `KC_MCP_TOOLS_READ_ONLY=true` and let the users log in
 (`examples/run-modes/env/shared.env`): each call then runs with the caller's own `view-*` roles and the audit trail
 names them. Read-only for one system or realm of several: `kc-mcp.systems.<name>.tools.read-only=true`
 ([Security](../../docs/security.md#tool-restrictions-per-system-and-realm)).

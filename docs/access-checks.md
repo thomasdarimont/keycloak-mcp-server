@@ -119,7 +119,7 @@ not ignored: the entry belongs under `access`, a tool restriction under `tools`.
 Every section follows the same order. What applies to a call, each over the one before, entry by entry and key by
 key:
 
-1. the server's settings (`kc-mcp.spi.access-check.<id>.*`, `kc-mcp.read-only`, ...)
+1. the server's settings (`kc-mcp.spi.access-check.<id>.*`, `kc-mcp.tools.read-only`, ...)
 2. the system's preset (with its parents)
 3. the system's own section
 4. the realm's preset (with its parents)

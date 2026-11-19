@@ -75,13 +75,14 @@ public class ExchangeTestResource implements QuarkusTestResourceLifecycleManager
             throw new IllegalStateException("Keycloak bootstrap failed", e);
         }
         return Map.ofEntries(Map.entry("kc-mcp.systems.default.url", base),
-                Map.entry("kc-mcp.systems.default.auth-realm", "demo"), Map.entry("kc-mcp.delegation", "exchange"),
+                Map.entry("kc-mcp.systems.default.auth-realm", "demo"), Map.entry("kc-mcp.mcp.delegation", "exchange"),
                 Map.entry("kc-mcp.systems.default.grant-type", "client_credentials"),
                 Map.entry("kc-mcp.systems.default.client-id", ACTOR),
                 Map.entry("kc-mcp.systems.default.client-secret", ACTOR_SECRET),
                 Map.entry("kc-mcp.systems.default.username", ""), Map.entry("kc-mcp.systems.default.password", ""),
                 Map.entry("kc-mcp.systems.default.default-realm", "demo"),
-                Map.entry("kc-mcp.systems.default.allowed-realms", "demo"), Map.entry("kc-mcp.tool-exposure", "direct"),
+                Map.entry("kc-mcp.systems.default.allowed-realms", "demo"),
+                Map.entry("kc-mcp.tools.exposure", "direct"),
                 // two systems: /mcp stays the demo realm's
                 Map.entry("kc-mcp.default-system", "default"),
                 Map.entry("kc-mcp.systems." + MASTER_SYSTEM + ".url", base),
