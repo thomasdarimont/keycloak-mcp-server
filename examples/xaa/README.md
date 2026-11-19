@@ -42,10 +42,12 @@ docker compose logs keycloak-init   # the init job grants keycloak-mcp the deleg
 Then the MCP server on the host:
 
 ```shell
-cd ../..
-set -a; source examples/xaa/env/xaa.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am     # MCP endpoint: http://localhost:8103/mcp
+./server.sh                 # env/xaa.env; MCP endpoint: http://localhost:8103/mcp
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
 
 or packaged, inside compose (`./mvnw package -DskipTests` first): `docker compose --profile mcp up -d --build`.
 IntelliJ: `.run/` has `quarkus:dev (xaa: …)`, stack up, demo, down. `docker compose down -v` resets the realm.

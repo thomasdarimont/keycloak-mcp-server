@@ -17,6 +17,10 @@ export MCP_URL=${MCP_URL:-http://localhost:8105/mcp}
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 call() { ./mcp-call.py "$@"; }
 
+# is this the server of this example? One started with another example's settings fails later, less clearly
+../preflight.sh endpoint "$MCP_URL" login=none
+call whoami | ../preflight.sh whoami system=default delegation=off readOnly=true
+
 if [ "$(call keycloak_events_login '{"client": "shop-web", "max": 1}' | jq '.items | length')" = 0 ]; then
   ./seed.py
 fi

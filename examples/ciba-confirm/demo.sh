@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The CIBA confirmation, step by step. Needs the stack up (docker compose up -d) and the MCP server running with
-# env/ciba.env (see README.md), plus python3, curl and jq.
+# The CIBA confirmation, step by step. Needs the stack up (docker compose up -d) and the MCP server running
+# (./server.sh, see README.md), plus python3, curl and jq.
 #
 #   1. alice logs in to the MCP server and consents to keycloak-mcp acting on her behalf (the script walks
 #      Keycloak's login and consent pages); whoami shows her as the caller and the delegation
@@ -40,8 +40,11 @@ call() { ./mcp-call.py "$@" || true; }
 device_token() { curl -s -d grant_type=password -d client_id=ciba-approver -d scope=openid -d "username=$1" -d "password=$2" \
   "$KEYCLOAK/realms/demo/protocol/openid-connect/token" | jq -r .access_token; }
 # one login of alice at the MCP server for the whole run, as an MCP client has it
+# is this the server of this example? One started with another example's settings fails later, less clearly
+../preflight.sh endpoint "$MCP_URL" login=required
 ALICE=$(./mcp-call.py --login alice:alice-demo --print-token) || true
 [ -n "$ALICE" ] || { echo "alice could not log in at $KEYCLOAK; is the stack up?" >&2; exit 1; }
+call --token "$ALICE" whoami | ../preflight.sh whoami system=default delegation=exchange
 ALICE_DEVICE=$(device_token alice alice-demo)
 CAROL_DEVICE=$(device_token carol carol-demo)
 device() { local token=$1; shift; curl -s -H "Authorization: Bearer $token" "$@"; }

@@ -47,9 +47,8 @@ Node or npm, nothing to install. Work on it in `quarkus:dev` against the run-mod
 
 ```shell
 etc/mkcert.sh                                         # once: a trusted localhost certificate in .certs/
-cd examples/run-modes && docker compose up -d && cd ../..
-set -a; source examples/management-ui/env/ui.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am            # https://localhost:8443/ui/, alice / alice-demo (operator)
+(cd examples/run-modes && docker compose up -d)
+examples/management-ui/server.sh                      # https://localhost:8443/ui/, alice / alice-demo (operator)
 ```
 
 - Edit a file under `frontend/` and reload the page: dev mode bundles it again, no restart. A Java change (the BFF in

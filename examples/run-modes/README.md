@@ -15,10 +15,13 @@ docker compose up -d
 Then run the MCP server on the host with one of the access levels in `env/`:
 
 ```shell
-cd ..
-set -a; source examples/run-modes/env/realm-admin.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am   # MCP endpoint: http://localhost:8081/mcp
+./server.sh                 # env/realm-admin.env; MCP endpoint: http://localhost:8081/mcp
+./server.sh read-only       # another access level: the name of an env file
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
 
 Or let compose run it from the packaged jar (`./mvnw package` first):
 
@@ -67,9 +70,8 @@ An existing stack keeps its old realm: after changes to `realms/demo-realm.json`
 ## private_key_jwt demo
 
 ```shell
-./examples/run-modes/gen-key.sh                                  # writes examples/run-modes/keys/mcp-jwt.pem (git-ignored)
-set -a; source examples/run-modes/env/private-key-jwt.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am
+./gen-key.sh                                          # writes keys/mcp-jwt.pem (git-ignored)
+./server.sh private-key-jwt
 curl http://localhost:8081/.well-known/jwks.json      # the public key Keycloak will fetch
 ```
 
@@ -99,9 +101,8 @@ Permissions grant that the `keycloak-init` job creates. [delegated-auth](../dele
 and shows a client whose role scope narrows what a delegated token may carry; here it lets `realm-admin` through.
 
 ```shell
-cd examples/run-modes && docker compose up -d && cd ..                 # Keycloak must be up before the server starts
-set -a; source examples/run-modes/env/user-login.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am
+docker compose up -d                                        # Keycloak must be up before the server starts
+./server.sh user-login
 curl -i http://localhost:8081/mcp                           # 401 + WWW-Authenticate … resource_metadata=…
 curl http://localhost:8081/.well-known/oauth-protected-resource
 ```

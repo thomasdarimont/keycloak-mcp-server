@@ -7,9 +7,8 @@ API under `/bff`. Runs on the run-modes stack.
 
 ```shell
 etc/mkcert.sh                                         # once; mkcert's CA into the trust stores, .certs/localhost*.pem
-cd examples/run-modes && docker compose up -d && cd ../..
-set -a; source examples/management-ui/env/ui.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am
+(cd examples/run-modes && docker compose up -d)
+examples/management-ui/server.sh                      # env/ui.env and nothing else from this terminal
 open https://localhost:8443/ui/
 ```
 

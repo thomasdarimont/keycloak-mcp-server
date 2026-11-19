@@ -21,8 +21,12 @@ step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 call() { ./xaa-call.py "$@" 2>/dev/null; }
 
 step "1. alice: the whole chain, progress on stderr"
-./xaa-call.py --login alice:alice-demo ${SHOW_TOKENS:+--show-tokens} whoami \
-  | jq -c '{caller: .caller.username, keycloakCallsRunAs, delegation, roles: (.roles.acme | length | tostring + " realm-management roles")}'
+# is this the server of this example? One started with another example's settings fails later, less clearly
+../preflight.sh endpoint "$MCP_URL" login=required
+WHOAMI=$(./xaa-call.py --login alice:alice-demo ${SHOW_TOKENS:+--show-tokens} whoami)
+../preflight.sh whoami system=default delegation=exchange <<<"$WHOAMI"
+jq -c <<<"$WHOAMI" \
+  '{caller: .caller.username, keycloakCallsRunAs, delegation, roles: (.roles.acme | length | tostring + " realm-management roles")}'
 
 step "2. what each user may do is Keycloak's call: alice (realm-admin), carol (view-users, view-events)"
 call --login alice:alice-demo keycloak_user_search '{"search": "*"}' | jq -c '[.items[]?.username] // .'

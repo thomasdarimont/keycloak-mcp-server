@@ -28,10 +28,12 @@ docker compose up -d        # Keycloak 26.8.2 on http://localhost:8104 (admin / 
 Then run the MCP server on the host:
 
 ```shell
-cd ../..
-set -a; source examples/troubleshooting/env/support.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am     # MCP endpoint: http://localhost:8105/mcp
+./server.sh                 # env/support.env; MCP endpoint: http://localhost:8105/mcp
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
 
 or packaged, inside compose (`./mvnw package -DskipTests` first):
 

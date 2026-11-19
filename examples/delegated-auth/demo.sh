@@ -18,8 +18,12 @@ step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 call() { ./mcp-call.py "$@" 2>/dev/null; }
 
 step "1. alice logs in and consents to keycloak-mcp acting on her behalf; whoami"
-./mcp-call.py --login alice:alice-demo ${SHOW_TOKENS:+--show-tokens} whoami \
-  | jq '{caller: .caller.username, keycloakCallsRunAs, delegation, roles: .roles.demo | map(.role), can: .can.demo}'
+# is this the server of this example? One started with another example's settings fails later, less clearly
+../preflight.sh endpoint "$MCP_URL" login=required
+WHOAMI=$(./mcp-call.py --login alice:alice-demo ${SHOW_TOKENS:+--show-tokens} whoami)
+../preflight.sh whoami system=default delegation=exchange <<<"$WHOAMI"
+jq <<<"$WHOAMI" \
+  '{caller: .caller.username, keycloakCallsRunAs, delegation, roles: .roles.demo | map(.role), can: .can.demo}'
 
 step "2. alice is realm-admin, yet the delegated token only carries the roles in keycloak-mcp's scope"
 call --login alice:alice-demo keycloak_user_search '{"search": "*"}' | jq -c '[.items[]?.username] // .'

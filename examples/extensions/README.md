@@ -43,8 +43,9 @@ for one person's machine only.
 ```
 ./mvnw package                                               # repository root: server and extension jar, with the tests
 cp examples/extensions/target/acme-keycloak-mcp-extensions-1.0-SNAPSHOT.jar modules/backend/target/quarkus-app/providers/
-set -a; source examples/run-modes/env/full-admin.env; set +a  # any run mode; Keycloak from examples/run-modes
-KC_MCP_SPI_AUDIT_LISTENER_ACME_FILE=/tmp/acme-audit.jsonl java -jar modules/backend/target/quarkus-app/quarkus-run.jar start
+# any run mode, Keycloak from examples/run-modes; in a subshell, so the settings do not stay in the terminal
+( set -a; source examples/run-modes/env/full-admin.env; set +a
+  KC_MCP_SPI_AUDIT_LISTENER_ACME_FILE=/tmp/acme-audit.jsonl java -jar modules/backend/target/quarkus-app/quarkus-run.jar start )
 ```
 
 Startup log: `Extensions directory .../providers: [acme-keycloak-mcp-extensions-1.0-SNAPSHOT.jar]` and the two tools in

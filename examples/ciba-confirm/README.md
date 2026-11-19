@@ -64,22 +64,21 @@ docker compose up -d        # Keycloak 26.8.2 on http://localhost:8098 (admin / 
 The one-shot job `keycloak-init` then grants `keycloak-mcp` the permission to act for the realm's users
 (`init/grant-delegation.sh`), which a realm import cannot carry.
 
-Then run the MCP server on the host, **in a fresh shell** (see the note below):
+Then run the MCP server on the host, in a second terminal:
 
 ```shell
-cd ../..
-set -a; source examples/ciba-confirm/env/ciba.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am     # MCP endpoint: http://localhost:8099/mcp
+./server.sh                 # env/ciba.env; MCP endpoint: http://localhost:8099/mcp
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
 
 Or let compose run it from the packaged jar (`./mvnw package -DskipTests` first):
 
 ```shell
 docker compose --profile mcp up -d --build
 ```
-
-> A shell that has sourced another example's env file keeps the variables this one does not set, and the server then
-> runs with settings that belong to another realm.
 
 Users, all in realm `demo`:
 

@@ -18,10 +18,12 @@ cd examples/cimd-vscode
 ../../etc/mkcert.sh                 # once: a trusted certificate for localhost in .certs/, its CA in the trust stores
 docker compose up -d --wait         # Keycloak 26.8.2 on https://localhost:8100 (admin / admin)
 docker compose logs keycloak-init   # the init job grants keycloak-mcp the permission to act for users
-../../mvnw -f ../../pom.xml package -DskipTests
-set -a; . env/cimd.env; set +a
-java -jar ../../modules/backend/target/quarkus-app/quarkus-run.jar start     # the MCP server on http://localhost:8101
+./server.sh                         # env/cimd.env; the MCP server on http://localhost:8101
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
 
 `.vscode/mcp.json`, with no client ID or secret:
 

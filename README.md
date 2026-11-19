@@ -73,8 +73,7 @@ logging in through your MCP client, so every call runs with your own roles. Need
    the realm's discovery document at startup.
 
    ```shell
-   set -a; source examples/run-modes/env/user-login.env; set +a
-   ./mvnw quarkus:dev -pl modules/backend -am        # MCP endpoint: http://localhost:8081/mcp
+   examples/run-modes/server.sh user-login           # MCP endpoint: http://localhost:8081/mcp
    ```
 
    The delegated token is Keycloak's token exchange delegation, a preview feature of Keycloak 26.8 that the demo

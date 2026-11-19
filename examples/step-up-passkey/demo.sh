@@ -18,19 +18,14 @@ export KEYCLOAK_URL=${KEYCLOAK_URL:-http://localhost:8108}
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 call() { ./mcp-call.py "$@" || true; }
 
-# A server that requires a login names it in its challenge. Without one, the endpoint is not there or does not ask
-# for a login (the env file was not sourced): say so instead of running into a 401 at each step.
-CHALLENGE=$(curl -s -o /dev/null -D - -X POST "$MCP_URL" -H 'Content-Type: application/json' -d '{}' | tr -d '\r' | grep -i '^www-authenticate:' || true)
-if ! grep -q 'resource_metadata=' <<<"$CHALLENGE"; then
-  echo "No MCP server that asks for a login answers at $MCP_URL. Start it with env/step-up-device.env or" >&2
-  echo "env/step-up-browser.env sourced (see README.md)." >&2
-  exit 1
-fi
+# is this the server of this example? One started with another example's settings fails later, less clearly
+../preflight.sh endpoint "$MCP_URL" login=required
 
 step "1. alice logs in to the MCP server; whoami"
 # one login for the whole run, as an MCP client has it: a step-up counts for the session it was asked in
 TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token) || true
 [ -n "$TOKEN" ] || { echo "alice could not log in at $KEYCLOAK_URL; is the stack up?" >&2; exit 1; }
+call --token "$TOKEN" whoami | ../preflight.sh whoami system=default delegation=exchange
 call --token "$TOKEN" whoami | jq -c '{caller: .caller, delegation}'
 
 step "2. delete a user: refused, with a link to sign in again"

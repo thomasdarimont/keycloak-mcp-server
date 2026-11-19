@@ -11,6 +11,11 @@ dev mode without HTTPS, for one person's machine only (`cimd-vscode` uses its mk
 env file brings an H2 file database for it, the server has to be the default H2 build. `xaa` has no UI: its users
 hold no password at Keycloak, which is the point of that example. `distribution` has it with `start-dev`.
 
+Where the server runs on the host, start it with the example's `./server.sh`. It passes the server the settings of
+the example's env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables a terminal still carries from another
+example are dropped, and none are exported into the terminal. It also stops when the port is taken or Keycloak is
+not up. The `demo.sh` scripts check first that the server they reach is the one of their example (`preflight.sh`).
+
 | example | shows |
 |---|---|
 | [run-modes](run-modes/) | one Keycloak, a demo realm, one env file per access level; the place to start |

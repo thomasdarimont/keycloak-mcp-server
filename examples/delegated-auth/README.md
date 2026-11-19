@@ -41,10 +41,13 @@ docker compose logs keycloak-init
 Then run the MCP server on the host as the actor client:
 
 ```shell
-cd ../..
-set -a; source examples/delegated-auth/env/delegation.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am     # MCP endpoint: http://localhost:8097/mcp
+./server.sh                 # env/delegation.env; MCP endpoint: http://localhost:8097/mcp
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
+`./server.sh delegation-policies` takes the other env file.
 
 or packaged, inside compose (`./mvnw package -DskipTests` first):
 

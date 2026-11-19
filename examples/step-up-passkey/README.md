@@ -70,13 +70,16 @@ The one-shot job `keycloak-init` then grants `keycloak-mcp` the permission to ac
 (`init/grant-delegation.sh`), which a realm import cannot carry. It takes a few seconds more;
 `docker compose logs keycloak-init` ends with `delegation to keycloak-mcp granted`.
 
-Then run the MCP server on the host, in a fresh shell:
+Then run the MCP server on the host, in a second terminal:
 
 ```shell
-cd ../..
-set -a; source examples/step-up-passkey/env/step-up-device.env; set +a
-./mvnw quarkus:dev -pl modules/backend -am     # MCP endpoint: http://localhost:8109/mcp
+./server.sh                 # env/step-up-device.env; MCP endpoint: http://localhost:8109/mcp
 ```
+
+`server.sh` starts `quarkus:dev` with the settings of the env file and nothing else: `KC_MCP_*` and `QUARKUS_*` variables
+the terminal still carries from another example are dropped, and none are exported into it. `./server.sh --jar` runs
+the packaged server instead.
+`./server.sh step-up-browser` takes the other env file.
 
 Users: `alice` / `alice-demo` (realm admin), `carol` / `carol-demo` (may only view users).
 
