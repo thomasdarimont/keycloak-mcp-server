@@ -59,6 +59,28 @@
       }
     },
     {
+      "username": "bob",
+      "realmRoles": ["offline_access"],
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Usermanager",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob-demo",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users"
+        ]
+      }
+    },
+    {
       "username": "dave",
       "realmRoles": ["offline_access"],
       "enabled": true,

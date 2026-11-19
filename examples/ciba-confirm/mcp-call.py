@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Call a tool on the MCP server as a user of the demo realm:
-mcp-call.py --login user:password [--scope "..."] [--new-session] <tool> [json-args]
+mcp-call.py --login user:password [--scope "..."] [--new-session] <tool> [json-args | name=value ...]
 
     ./mcp-call.py --login alice:alice-demo whoami
     ./mcp-call.py --login alice:alice-demo keycloak_user_delete '{"id": "<uuid>", "username": "temp"}'
+    ./mcp-call.py --login alice:alice-demo keycloak_user_delete id=<uuid> username=temp    # the same, no quoting
     ./mcp-call.py --login alice:alice-demo --scope openid whoami          # a login without the delegation scope
     TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token)         # only log in, print the access token
     ./mcp-call.py --token "$TOKEN" whoami                                 # one login for several calls
@@ -164,6 +165,39 @@ def start_session():
     rpc("notifications/initialized", msg_id=None)
 
 
+def tool_arguments(rest):
+    """The tool's arguments from the command line: one JSON object, or name=value pairs."""
+    if not rest:
+        return {}
+    if rest[0].lstrip().startswith(("{", "[")):
+        hint = ("Put the JSON in single quotes so the shell leaves its double quotes alone:\n"
+                "    '{\"username\": \"temp\", \"id\": \"<uuid>\"}'\n"
+                "or pass the arguments as name=value, which needs no quoting:\n"
+                "    username=temp id=<uuid>")
+        if len(rest) > 1:
+            sys.exit(f"The arguments came as {len(rest)} words, expected one JSON object: {' '.join(rest)}\n{hint}")
+        try:
+            arguments = json.loads(rest[0])
+        except ValueError as e:
+            sys.exit(f"The arguments are not valid JSON ({e}).\n  got: {rest[0]}\n{hint}")
+        if not isinstance(arguments, dict):
+            sys.exit(f"The arguments must be a JSON object, got: {rest[0]}\n{hint}")
+        return arguments
+    arguments = {}
+    for pair in rest:
+        name, eq, value = pair.partition("=")
+        if not eq or not name:
+            sys.exit(f"Cannot read the argument '{pair}': expected name=value, or one JSON object in single quotes.")
+        # true, 5, [..] and {..} keep their JSON type; everything else is text
+        if value in ("true", "false", "null") or re.fullmatch(r"-?\d+(\.\d+)?", value) or value[:1] in ("[", "{"):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                pass
+        arguments[name] = value
+    return arguments
+
+
 def main(argv):
     global BEARER, SESSION, SESSION_FILE
     args = list(argv)
@@ -189,6 +223,8 @@ def main(argv):
             user = token_user(BEARER)
         else:
             sys.exit(__doc__)
+    # read the arguments before logging in: a typo should not cost a login and a consent page
+    arguments = tool_arguments(args[1:])
     if credentials:
         user, _, password = credentials.partition(":")
         BEARER = login(user, password, scope)
@@ -197,14 +233,14 @@ def main(argv):
         return 0 if BEARER else 1
     if not args:
         sys.exit(__doc__)
-    tool, raw = args[0], (args[1] if len(args) > 1 else "{}")
+    tool = args[0]
     SESSION_FILE = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"mcp-call-session-{user}")
     if not fresh and os.path.exists(SESSION_FILE):
         with open(SESSION_FILE) as f:
             SESSION = f.read().strip() or None
     if SESSION is None:
         start_session()
-    answer = rpc("tools/call", {"name": tool, "arguments": json.loads(raw)}, 2)
+    answer = rpc("tools/call", {"name": tool, "arguments": arguments}, 2)
     if "error" in answer:
         print(json.dumps(answer["error"], indent=2))
         return 1

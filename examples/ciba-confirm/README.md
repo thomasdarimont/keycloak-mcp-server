@@ -85,6 +85,7 @@ Users, all in realm `demo`:
 | user | password | role |
 |---|---|---|
 | `alice` | `alice-demo` | realm admin |
+| `bob` | `bob-demo` | `manage-users`, `view-users`: may create and delete users, nothing else |
 | `carol` | `carol-demo` | `view-users` |
 | `dave` | `dave-demo` | none |
 
@@ -124,6 +125,7 @@ approve it in the browser:
 
    ```shell
    ./mcp-call.py --login alice:alice-demo keycloak_user_delete '{"id": "<id>", "username": "<username>"}'
+   # or without quoting: ./mcp-call.py --login alice:alice-demo keycloak_user_delete id=<id> username=<username>
    ```
 
    ```
