@@ -1,4 +1,10 @@
-# Delegated authentication: the MCP server as an agent acting on the user's behalf
+# Delegation explained: the MCP server acting on the user's behalf
+
+Acting as the signed-in user is what most of the other examples build on ([ciba-confirm](../ciba-confirm/),
+[step-up-passkey](../step-up-passkey/), [run-modes](../run-modes/) with `user-login.env`, [cimd-vscode](../cimd-vscode/),
+[xaa](../xaa/)). They switch it on and move on to their own subject. This example is about the delegation itself: what
+Keycloak needs for it, what the tokens look like, how the server's client caps what a user can do through it, and what
+Keycloak records.
 
 The MCP server holds no admin credentials and acts *for* the signed-in user, with Keycloak's own delegation
 (RFC 8693 `may_act` / `act`, Keycloak 26.8 **token exchange delegation**, preview). The user logs in through the
@@ -19,16 +25,21 @@ keycloak-mcp (the MCP server; confidential client, service account, Standard Tok
 Admin REST API with T_del → Keycloak enforces the user's realm-management roles; admin events name the user
 ```
 
-What that buys over passing the user's own token through to the Admin API, which the MCP authorization
-specification forbids and this server no longer does:
+What that gives:
 
-| | token passed through | exchange |
-|---|---|---|
-| Keycloak sees | the user | the user **and** the agent (`act`, `TOKEN_EXCHANGE` event with actor) |
-| the user's token | goes to the Admin API as is, and opens it without the server too | stays with the MCP server and opens nothing else; a transient delegated token (no refresh, no session) goes out |
-| narrowing | none: the user's full roles | the actor client's role scope caps every delegated token, whoever the user is |
-| consent | none | explicit, every login session (Keycloak never stores it) |
-| can be revoked | with the user's session | per client (Admin Permissions) or per client policy (`may-act` executor) |
+- **Keycloak sees both.** The delegated token names the user (`sub`) and the agent (`act`); the `TOKEN_EXCHANGE` event
+  carries the actor, the admin events the user.
+- **The user's token opens the MCP server and nothing else.** It stays with the server. What goes to the Admin API
+  is a transient delegated token, without refresh token or session.
+- **The agent is capped.** The role scope of `keycloak-mcp` limits every delegated token, whoever the user is: alice
+  is realm admin and still cannot list clients through this server.
+- **The user is asked.** Consent is explicit and asked every login session; Keycloak never stores it.
+- **It can be taken away** per client (Admin Permissions) or per client policy (the `may-act` executor), without
+  touching the users' sessions.
+
+It is also the only way the server acts as a user: passing the user's own token on to the Admin API is forbidden by
+the MCP authorization specification, and the server does not offer it. Without delegation
+(`kc-mcp.mcp.delegation=off`, the default) every call runs with the server's own service account.
 
 ## Start
 
@@ -130,7 +141,7 @@ console (`http://localhost:8096/realms/demo/account`) and reconnect.
 
 ## Management UI
 
-`Both env files` also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8097/ui/>, sign in as
+Both env files also turn the [management UI](../../docs/management-ui.md) on: <http://localhost:8097/ui/>, sign in as
 `alice` / `alice-demo`. *Systems* shows the system and its realm, *Audit* the tool calls of the demo, each with the caller it ran for.
 
 It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's

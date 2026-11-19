@@ -120,7 +120,7 @@ TOKEN=$(./mcp-call.py --login alice:alice-demo --print-token)                   
 
 ## Management UI
 
-`Both env files` also turns the [management UI](../../docs/management-ui.md) on: <http://localhost:8109/ui/>, sign in as
+Both env files also turn the [management UI](../../docs/management-ui.md) on: <http://localhost:8109/ui/>, sign in as
 `alice` / `alice-demo`. *Systems* shows the system and its realm, *Audit* the tool calls of the demo.
 
 It runs without HTTPS in dev mode (`KC_MCP_DEV_MODE=true`: the session cookie drops `Secure`, for one person's
