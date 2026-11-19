@@ -8,24 +8,51 @@ the MCP client trades the user's SSO identity for an **ID-JAG** at the enterpris
 server's authorization server. No login page of that server, no consent screen; the IdP admin decides which apps an
 agent may connect for whom. [oauth.net/cross-app-access](https://oauth.net/cross-app-access/) lists implementations.
 
+```mermaid
+sequenceDiagram
+    actor U as alice
+    participant C as MCP client (agent)
+    participant I as Enterprise IdP
+    participant K as Keycloak (realm acme)
+    participant S as keycloak-mcp-server
+    rect rgba(127,127,127,0.10)
+    C->>S: POST /mcp
+    S-->>C: 401, protected resource metadata:<br/>resource, authorization server realm acme
+    U->>I: SSO login (once)
+    I-->>C: ID token of alice
+    end
+    rect rgba(127,127,127,0.10)
+    C->>I: token exchange: subject_token ID token,<br/>requested_token_type id-jag, audience realm acme, resource server
+    I->>I: policy: may alice connect this agent to the server?
+    I-->>C: ID-JAG
+    C->>K: JWT authorization grant: assertion ID-JAG
+    K-->>C: access token of the linked Keycloak user:<br/>aud server, may_act keycloak-mcp, no roles
+    end
+    rect rgba(127,127,127,0.10)
+    C->>S: POST /mcp with alice's access token
+    S->>K: token exchange: subject_token alice's token, actor_token its own
+    K-->>S: delegated token: sub alice, act keycloak-mcp, her roles
+    S->>K: Admin REST API with the delegated token
+    S-->>C: tool result
+    end
 ```
-MCP client (agent)
-  │ 1. POST /mcp → 401 resource_metadata → PRM: resource http://localhost:8103, AS http://localhost:8101/realms/acme
-  │ 2. SSO at the enterprise IdP → ID token                               (once; a browser flow in a real IdP)
-  │ 3. token exchange at the IdP (RFC 8693)                                 ◀── IdP policy: may alice connect agent
-  │      subject_token = ID token, requested_token_type = …:id-jag,              to http://localhost:8103?
-  │      audience = http://localhost:8101/realms/acme, resource = http://localhost:8103
-  │    → ID-JAG: typ oauth-id-jag+jwt, iss IdP, sub e-1001, aud realm acme, client_id agent, resource, 5 min
-  │ 4. JWT authorization grant at Keycloak (RFC 7523): grant_type = …:jwt-bearer, assertion = ID-JAG
-  │    → access token of the Keycloak user linked to e-1001: aud http://localhost:8103 and keycloak-mcp,
-  │      may_act = keycloak-mcp, no roles, no Admin API audience
-  ▼
-MCP server (KC_MCP_MCP_DELEGATION=exchange, the client keycloak-mcp)
-  │ 5. token exchange at Keycloak: subject_token = alice's token, actor_token = its own
-  │    → delegated token: sub alice, act keycloak-mcp, alice's realm-management roles
-  ▼
-Admin API with the delegated token → her realm-management roles apply, admin events name alice
-```
+
+No step shows a login page or a consent screen of Keycloak: there is none. In detail:
+
+1. **Discovery.** `POST /mcp` answers `401` with `resource_metadata`; the protected resource metadata names the
+   resource `http://localhost:8103` and the authorization server `http://localhost:8101/realms/acme`.
+2. **SSO at the enterprise IdP**, once, yields an ID token; a browser flow in a real IdP.
+3. **Token exchange at the IdP** (RFC 8693): `subject_token` = the ID token, `requested_token_type` = `…:id-jag`,
+   `audience` = `http://localhost:8101/realms/acme`, `resource` = `http://localhost:8103`. The IdP's policy decides
+   whether alice may connect this agent to that resource. The answer is the **ID-JAG**: `typ` `oauth-id-jag+jwt`,
+   `iss` the IdP, `sub` `e-1001`, `aud` the realm, `client_id` the agent, the `resource`, valid for five minutes.
+4. **JWT authorization grant at Keycloak** (RFC 7523): `grant_type` = `…:jwt-bearer`, `assertion` = the ID-JAG. The
+   answer is an access token of the Keycloak user linked to `e-1001`: `aud` `http://localhost:8103` and
+   `keycloak-mcp`, `may_act` = `keycloak-mcp`, no roles, no Admin API audience.
+5. **Token exchange at Keycloak** by the MCP server (`KC_MCP_MCP_DELEGATION=exchange`, client `keycloak-mcp`):
+   `subject_token` = alice's token, `actor_token` = its own. The delegated token has `sub` alice, `act`
+   `keycloak-mcp` and alice's `realm-management` roles.
+6. **Admin REST API with the delegated token:** her roles apply, and the admin events name alice.
 
 The MCP server works as in [delegated-auth](../delegated-auth/): it checks `aud`, exchanges the caller's token and
 never sends that token to the Admin API. What differs is how the caller's token comes to name the server as its
