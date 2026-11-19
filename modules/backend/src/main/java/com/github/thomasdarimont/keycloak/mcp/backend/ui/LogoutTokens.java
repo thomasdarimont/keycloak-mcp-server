@@ -24,11 +24,10 @@ import io.smallrye.jwt.auth.principal.ParseException;
 /**
  * Verifies OIDC back-channel logout tokens (OpenID Connect Back-Channel Logout 1.0,
  * section 2.6): the unverified {@code iss} and {@code aud} pick the identity provider
- * ({@link UiTenant#idpsFor}), its JWKS ({@link IdpDiscovery}) checks the signature,
- * SmallRye JWT the issuer, audience and expiry; then the token must carry the
- * {@code events} entry {@value #EVENT}, a {@code sid} or {@code sub}, and no
- * {@code nonce}. Keys are refetched when a {@code kid} is unknown, so a rotated Keycloak
- * key is picked up.
+ * ({@link UiTenant#idps}), its JWKS ({@link IdpDiscovery}) checks the signature, SmallRye
+ * JWT the issuer, audience and expiry; then the token must carry the {@code events} entry
+ * {@value #EVENT}, a {@code sid} or {@code sub}, and no {@code nonce}. Keys are refetched
+ * when a {@code kid} is unknown, so a rotated Keycloak key is picked up.
  */
 @ApplicationScoped
 public class LogoutTokens {
@@ -72,7 +71,10 @@ public class LogoutTokens {
         if (issuer == null || audiences.isEmpty()) {
             throw new InvalidLogoutToken("logout_token without iss or aud");
         }
-        List<UiTenant.Idp> candidates = tenant.idpsFor(issuer, audiences);
+        List<UiTenant.Idp> candidates = tenant.idps()
+            .stream()
+            .filter(i -> audiences.contains(i.clientId()) && issuer.equals(tokenIssuerOf(i)))
+            .toList();
         if (candidates.isEmpty()) {
             throw new InvalidLogoutToken("no identity provider of the UI has issuer " + issuer + " and one of the"
                     + " clients " + audiences);
@@ -90,6 +92,20 @@ public class LogoutTokens {
         throw new InvalidLogoutToken(
                 "logout_token not valid for " + candidates.stream().map(UiTenant.Idp::alias).toList() + ": "
                         + (last == null ? "?" : last.getMessage()));
+    }
+
+    /**
+     * The issuer a provider's tokens carry: the one its discovery document names, which
+     * differs from the configured address when the server reaches the provider through an
+     * internal one. The configured one while the provider does not answer.
+     */
+    private String tokenIssuerOf(UiTenant.Idp idp) {
+        try {
+            return discovery.of(idp.issuer()).issuer();
+        }
+        catch (IdpDiscovery.Unavailable e) {
+            return idp.issuer();
+        }
     }
 
     private LogoutToken checked(JsonWebToken jwt, UiTenant.Idp idp) {
@@ -113,7 +129,8 @@ public class LogoutTokens {
      * JWKS.
      */
     JWTAuthContextInfo contextFor(UiTenant.Idp idp) {
-        JWTAuthContextInfo info = new JWTAuthContextInfo(discovery.of(idp.issuer()).jwksUri(), idp.issuer());
+        IdpDiscovery.Metadata metadata = discovery.of(idp.issuer());
+        JWTAuthContextInfo info = new JWTAuthContextInfo(metadata.jwksUri(), metadata.issuer());
         info.setExpectedAudience(Set.of(idp.clientId()));
         // a logout token names a session, not a user with a name claim
         info.setRequireNamedPrincipal(false);

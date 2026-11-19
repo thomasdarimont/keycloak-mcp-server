@@ -31,7 +31,11 @@ import io.quarkus.tls.TlsConfigurationRegistry;
 @ApplicationScoped
 public class IdpDiscovery {
 
-    /** What the server needs of a provider. */
+    /**
+     * What the server needs of a provider. {@code issuer} is the one the document names,
+     * which its tokens carry: not always the URL the document was fetched from (a
+     * Keycloak reached through an internal address still names its public one).
+     */
     public record Metadata(String issuer, String jwksUri, String tokenEndpoint) {
     }
 
@@ -60,6 +64,11 @@ public class IdpDiscovery {
         this.client = client;
     }
 
+    /**
+     * The document of the provider configured with {@code issuer}: the address this
+     * server reaches it at, never the issuer read from a token, which may be an address
+     * only browsers reach.
+     */
     public Metadata of(String issuer) {
         return byIssuer.computeIfAbsent(issuer, this::fetch);
     }
@@ -95,7 +104,7 @@ public class IdpDiscovery {
                 throw new Unavailable("discovery of " + issuer + " names no jwks_uri or token_endpoint");
             }
             LOG.debugf("Identity provider %s: keys at %s, tokens at %s", issuer, jwks, token);
-            return new Metadata(issuer, jwks, token);
+            return new Metadata(doc.path("issuer").asText(issuer), jwks, token);
         }
         catch (IOException e) {
             throw new Unavailable("discovery of " + issuer + " answered no JSON");

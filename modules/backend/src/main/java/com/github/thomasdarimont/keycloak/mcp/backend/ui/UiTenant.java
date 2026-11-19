@@ -332,13 +332,6 @@ public class UiTenant {
     }
 
     /**
-     * The providers a token of {@code issuer} for one of {@code audiences} belongs to.
-     */
-    public List<Idp> idpsFor(String issuer, List<String> audiences) {
-        return idps().stream().filter(i -> i.issuer().equals(issuer) && audiences.contains(i.clientId())).toList();
-    }
-
-    /**
      * The provider the UI's users log in at without named providers:
      * {@code kc-mcp.ui.issuer}, else {@code kc-mcp.admin.issuer}, else the server's own
      * auth realm.

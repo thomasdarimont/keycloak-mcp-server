@@ -191,7 +191,9 @@ public class UserSessionCheck {
         UiTenant.Idp idp = tenant.idp(session.idp())
             .orElseThrow(
                     () -> new IdpDiscovery.Unavailable("identity provider " + session.idp() + " is not configured"));
-        IdpDiscovery.Metadata metadata = discovery.of(session.issuer());
+        // the provider as configured, not the session's issuer: that one comes from the
+        // token and may be an address only the user's browser reaches
+        IdpDiscovery.Metadata metadata = discovery.of(idp.issuer());
         String form = "grant_type=refresh_token&client_id=" + encode(idp.clientId()) + "&refresh_token="
                 + encode(session.refreshToken())
                 + idp.clientSecret().filter(v -> !v.isBlank()).map(s -> "&client_secret=" + encode(s)).orElse("");

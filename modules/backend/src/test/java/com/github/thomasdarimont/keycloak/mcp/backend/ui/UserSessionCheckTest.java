@@ -1,5 +1,7 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.ui;
 
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,11 +12,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import jakarta.ws.rs.client.ClientBuilder;
 
 import org.junit.jupiter.api.Test;
 
 import com.github.thomasdarimont.keycloak.mcp.web.UserSession;
 import com.github.thomasdarimont.keycloak.mcp.web.UserSessionStore;
+import com.sun.net.httpserver.HttpServer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -215,5 +219,52 @@ class UserSessionCheckTest {
         assertFalse(check.check("s-1").active(), "expired ID token, nothing renews it");
         assertTrue(store.rows.isEmpty());
         assertEquals(0, redeemed.get());
+    }
+
+    /**
+     * A Keycloak in a container names its public address as issuer, which the server
+     * cannot reach: the refresh goes to the address the provider is configured with.
+     */
+    @Test
+    void theRefreshGoesToTheConfiguredAddressNotTheTokensIssuer() throws Exception {
+        HttpServer idp = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        String internal = "http://127.0.0.1:" + idp.getAddress().getPort() + "/realms/demo";
+        String publicIssuer = "http://127.0.0.1:1/realms/demo";
+        idp.createContext("/realms/demo/.well-known/openid-configuration", x -> {
+            byte[] doc = ("{\"issuer\":\"" + publicIssuer + "\",\"jwks_uri\":\"" + internal + "/certs\","
+                    + "\"token_endpoint\":\"" + internal + "/token\"}")
+                .getBytes(StandardCharsets.UTF_8);
+            x.getResponseHeaders().add("Content-Type", "application/json");
+            x.sendResponseHeaders(200, doc.length);
+            x.getResponseBody().write(doc);
+            x.close();
+        });
+        idp.createContext("/realms/demo/token", x -> {
+            byte[] body = "{\"error\":\"invalid_grant\"}".getBytes(StandardCharsets.UTF_8);
+            x.getResponseHeaders().add("Content-Type", "application/json");
+            x.sendResponseHeaders(400, body.length);
+            x.getResponseBody().write(body);
+            x.close();
+        });
+        idp.start();
+        IdpDiscovery discovery = new IdpDiscovery(ClientBuilder.newClient());
+        try {
+            UserSessionCheck check = new UserSessionCheck();
+            check.discovery = discovery;
+            check.tenant = new UiTenant() {
+                @Override
+                public Optional<Idp> idp(String alias) {
+                    return Optional.of(Idp.builder(alias).issuer(internal).clientId("ui").build());
+                }
+            };
+            UserSession session = new UserSession("s-1", "default", publicIssuer, "u-1", "sid-1", "id-token", "access",
+                    "rt-1", 300L, "openid", 1L, Long.MAX_VALUE);
+            assertEquals(400, check.redeem(session).status());
+            assertEquals(publicIssuer, discovery.of(internal).issuer());
+        }
+        finally {
+            discovery.close();
+            idp.stop(0);
+        }
     }
 }
