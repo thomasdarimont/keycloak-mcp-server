@@ -76,6 +76,11 @@ public class Approver {
     record Decision(long id, Instant at, String by, String text) {
     }
 
+    /** Colours a decision in the list: approved green, declined red, anything else (expired, failed) plain. */
+    static String outcomeClass(Decision d) {
+        return d.text().startsWith("approved:") ? "approved" : d.text().startsWith("declined:") ? "declined" : "other";
+    }
+
     /** Newest first, as a list on a phone. */
     static final Comparator<Request> NEWEST_FIRST = Comparator.comparingLong(Request::id).reversed();
 
@@ -140,7 +145,14 @@ public class Approver {
                        padding: .6em .9em; margin: 0 0 1em }
               @media (prefers-color-scheme: dark) { .error { background: #450a0a; color: #fecaca; border-color: #7f1d1d } }
               ul.history { list-style: none; padding: 0; margin: 0 }
-              ul.history li { padding: .6em 0; border-bottom: 1px solid var(--line); font-size: .92em }
+              ul.history li { padding: .6em .8em; margin-bottom: .4em; border-radius: 8px; font-size: .92em;
+                              border: 1px solid var(--line); border-left-width: 4px }
+              ul.history li.approved { background: #f0fdf4; border-color: #bbf7d0; border-left-color: #16a34a }
+              ul.history li.declined { background: #fef2f2; border-color: #fecaca; border-left-color: #dc2626 }
+              @media (prefers-color-scheme: dark) {
+                ul.history li.approved { background: #052e16; border-color: #14532d; border-left-color: #22c55e }
+                ul.history li.declined { background: #450a0a; border-color: #7f1d1d; border-left-color: #ef4444 }
+              }
               ul.history li time { color: var(--muted); margin-right: .5em }
             </style>
             <script>
@@ -512,7 +524,7 @@ public class Approver {
         String history = DECIDED.values().stream()
             .filter(d -> d.by().equals(u.username()))
             .sorted(Comparator.comparingLong(Decision::id).reversed())
-            .map(d -> "<li><time datetime=\"" + d.at() + "\">" + d.at() + "</time><span class=num>#" + d.id()
+            .map(d -> "<li class=" + outcomeClass(d) + "><time datetime=\"" + d.at() + "\">" + d.at() + "</time><span class=num>#" + d.id()
                     + "</span>" + esc(d.text()) + "</li>")
             .collect(Collectors.joining());
         if (!history.isEmpty()) {
