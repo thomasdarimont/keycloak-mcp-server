@@ -7,12 +7,27 @@
 #      administers the realm (port 8091), and the realm's users may let it act on their behalf (port 8092);
 #      keycloak-mcp-admin and keycloak-mcp-ui in master, for the admin API and the management UI
 #   4. call tools: as the service account (port 8091) and as the realm's users (port 8092)
+#   5. a second Keycloak (:8089) with four realms of its own: register it as the system "globex", create the
+#      server's client there with the setup script the admin API generates, list its realms, adopt two of them and
+#      call a tool in one; the other two are left to adopt in the management UI (system globex, tab Adopt)
+#
+#   ./demo.sh                 all steps; idempotent
+#   ./demo.sh --skip-adopt    without step 5, to do all of it in the management UI (README.md, "Adopting realms")
 set -euo pipefail
 cd "$(dirname "$0")"
 MCP=http://localhost:8091
 MCP_INTERNAL=http://mcp:8081                       # how Keycloak reaches the MCP server inside the compose network
 ADMIN_TOKEN=${KC_MCP_ADMIN_TOKEN:-demo-admin-token}
 KCADM="docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh"
+
+SKIP_ADOPT=
+for arg in "$@"; do
+  case "$arg" in
+    --skip-adopt) SKIP_ADOPT=1 ;;
+    -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown argument: $arg (try --help)" >&2; exit 2 ;;
+  esac
+done
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 admin() {
@@ -21,6 +36,10 @@ admin() {
     -H 'Content-Type: application/json' \
     "$@"
 }
+
+# docker compose up returns before the servers listen
+for _ in $(seq 1 60); do curl -s -o /dev/null "$MCP/mcp" && break; sleep 1; done
+curl -s -o /dev/null "$MCP/mcp" || { echo "no MCP server at $MCP: docker compose up -d --build first" >&2; exit 1; }
 
 step "1. register the system 'acme' (stored in PostgreSQL, key pair generated in the database vault)"
 SYSTEM=$(admin -X PUT "$MCP/admin/systems/acme" -d @- <<'JSON'
@@ -134,6 +153,45 @@ export MCP_CALL_QUIET=1                             # the login and consent step
 ./mcp-call.py --login dave:dave-demo "$U" keycloak_client_list '{}' | jq -c '[.items[]?.clientId] // .'
 ./mcp-call.py --login dave:dave-demo "$U" keycloak_user_delete '{"id": "bob", "username": "bob"}' | jq -c '{error, message}'
 ./mcp-call.py --login alice:alice-demo "$U" keycloak_user_set_enabled '{"id": "bob", "enabled": false}' | jq -c '{username, enabled} // .'
+
+if [ -z "$SKIP_ADOPT" ]; then
+  step "5a. a second Keycloak, Globex' (:8089): registered as the system 'globex', its client lives in master"
+  GLOBEX_SYSTEM='{"displayName":"Globex Corp.","description":"Globex\u0027 Keycloak, its realms adopted one by one","url":"http://keycloak-globex:8080","issuer":"http://localhost:8089/realms/master","authRealm":"master","clientId":"keycloak-mcp-server","clientAuth":"private_key_jwt","version":"26.8.2"}'
+  GLOBEX=$(admin -X PUT "$MCP/admin/systems/globex" -d "$(jq -c '. + {signingKey: "generate"}' <<<"$GLOBEX_SYSTEM")")
+  if jq -e '.error == "signing_key_exists"' >/dev/null <<<"$GLOBEX"; then
+    echo "(already registered with a key; keeping the key and the realms adopted so far)"
+    GLOBEX=$(admin "$MCP/admin/systems/globex")
+  fi
+  jq -c '{alias, url, authRealm, clientAuth, allowedRealms, entries}' <<<"$GLOBEX"
+
+  step "5b. the server creates nothing in Keycloak: it hands out the client as JSON and as a kcadm script to run there"
+  KCADM_GLOBEX="docker compose exec -T keycloak-globex /opt/keycloak/bin/kcadm.sh"
+  $KCADM_GLOBEX config credentials --server http://localhost:8080 --realm master --user admin --password admin >/dev/null
+  if [ -n "$($KCADM_GLOBEX get clients -r master -q clientId=keycloak-mcp-server --fields id --format csv --noquotes | head -1)" ]; then
+    echo "client keycloak-mcp-server exists in Globex' master realm"
+  else
+    echo "before the client exists, listing the realms answers:"
+    admin "$MCP/admin/systems/globex/keycloak-realms" | jq -c '{error}'
+    # roles=admin: the master admin role, every realm; credential=public-key: the key is copied into the client,
+    # for a Keycloak that cannot fetch it from the server's JWKS URL
+    SETUP=$(admin "$MCP/admin/systems/globex/client-setup?roles=admin&credential=public-key")
+    jq -c '{client: (.client | {clientId, clientAuthenticatorType, fullScopeAllowed}), roles: .roles.mode}' <<<"$SETUP"
+    jq -r .script <<<"$SETUP" | ./adopt-setup.sh 2>&1 | sed '/^$/d'      # kcadm reports on stderr
+  fi
+
+  step "5c. the realms the client's service account sees there; none is adopted yet on a first run"
+  admin "$MCP/admin/systems/globex/keycloak-realms" | jq -c '.realms[] | {name, displayName, enabled, adopted}'
+
+  step "5d. adopt two of them: they become the system's allowlist, with Keycloak's realm id and display name"
+  admin -X POST "$MCP/admin/systems/globex/adoption" -d '{"realms": ["globex-staff", "globex-customers"], "restrict": true}' \
+    | jq -c 'del(.system) | with_entries(select(.value != null and .value != []))'
+  admin "$MCP/admin/systems/globex" | jq -c '{allowedRealms, entries}'
+
+  step "5e. tools in an adopted realm, and in one that was not adopted"
+  ./mcp-call.py "$MCP/mcp/systems/globex/globex-staff" keycloak_user_search '{"search": "*"}' | jq -c '[.items[]?.username] // .'
+  ./mcp-call.py "$MCP/mcp/systems/globex" keycloak_user_search '{"realm": "globex-partners", "search": "*"}' | jq -c '{error, message}'
+  echo "left to adopt in the management UI ($MCP/ui/, system globex, tab Adopt): globex-partners, globex-legacy (disabled)"
+fi
 
 step "audit rows in PostgreSQL (the console of mcp-users shows pseudonyms, the rows the real names)"
 docker compose exec -T postgres psql -U kcmcp -d kcmcp -c "select tool, outcome, caller_name, system_alias, realm from kc_mcp_audit_event order by id desc limit 8"

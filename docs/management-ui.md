@@ -4,7 +4,7 @@
 
 A browser UI for the server at `/ui`, with its backend-for-frontend (BFF) under `/bff`.
 
-**Status: work in progress.** Sign in at Keycloak, land on Overview, browse **Systems** (each system is a Keycloak
+**Status: work in progress.** Sign in at the sign-in provider (Keycloak or another OpenID Provider), land on Overview, browse **Systems** (each system is a Keycloak
 cluster / environment), open a system for **Settings** (connection and realm allowlist), **Realms** (allowlist merged
 with per-realm settings from the admin realm API) and **Keys** (signing key / rotate). Create, replace and delete
 mutable systems via the BFF; edit realm labels and presets on their own pages. Secrets and Storage are placeholders
@@ -51,7 +51,8 @@ requires the operator role. One `systems:write` covers systems, realms and key r
 
 The UI is a [Lit](https://lit.dev) single-page app under `modules/backend/src/main/resources/frontend`, bundled by
 [Quarkus Web Bundler](https://docs.quarkiverse.io/quarkus-web-bundler/dev/) (mvnpm, no Node) and served by the backend.
-The server is the OpenID Connect relying party: it runs the authorization code flow with PKCE at Keycloak, the
+The server is the OpenID Connect relying party: it runs the authorization code flow with PKCE at the sign-in provider
+([which need not be a Keycloak the server administers](providers-and-systems.md#1-sign-in-providers-the-server-as-relying-party)), the
 browser gets an HttpOnly, Secure, `SameSite=Lax` cookie holding an opaque session id, and the tokens stay on the server,
 in the database (`kc_mcp_user_session`, encrypted like the other secrets). The browser never sees a token.
 
@@ -62,8 +63,8 @@ It needs the [database storage](storage.md) and HTTPS.
 | setting | meaning |
 |---|---|
 | `kc-mcp.ui.enabled=true` | serves `/ui` and `/bff` |
-| `kc-mcp.ui.issuer` | the realm users sign in at; default `kc-mcp.admin.issuer`, else the auth realm |
-| `kc-mcp.ui.client-id` | the Keycloak client, `keycloak-mcp-ui` by default: public, PKCE S256, redirect URI `<server>/bff/login`, post-logout redirect URI `<server>/ui/*`; `kc-mcp.ui.client-secret` for a confidential client |
+| `kc-mcp.ui.issuer` | the provider users sign in at, a Keycloak realm or another OpenID Provider: the address the server reaches it at; default `kc-mcp.admin.issuer`, else the auth realm |
+| `kc-mcp.ui.client-id` | the server's client there, `keycloak-mcp-ui` by default: public, PKCE S256, redirect URI `<server>/bff/login`, post-logout redirect URI `<server>/ui/*`; `kc-mcp.ui.client-secret` for a confidential client |
 | `QUARKUS_TLS_KEY_STORE_PEM_UI_CERT` / `_KEY`, `quarkus.http.ssl-port` | HTTPS; `etc/mkcert.sh` writes `.certs/localhost*.pem` for local use; behind a TLS proxy set `quarkus.http.proxy.proxy-address-forwarding=true` instead |
 | `kc-mcp.ui.tls-configuration-name` | a named trust store for the server's own calls to the identity providers (private CA) |
 | `kc-mcp.ui.connect-timeout` / `read-timeout` | timeouts of those calls, default `kc-mcp.http.*` |

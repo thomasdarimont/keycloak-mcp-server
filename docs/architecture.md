@@ -52,6 +52,9 @@ flowchart TB
 
 ## The parts
 
+Who issues the tokens in this picture, and what the server is towards each of them:
+[Identity providers, authorization servers and Keycloak systems](providers-and-systems.md).
+
 | part | what it is | talks to |
 |---|---|---|
 | MCP client | Claude Code, Claude Desktop, VS Code with Copilot, LM Studio, Cursor, Codex on the MCP host, typically a person's workstation ([Integrations](integrations.md)) | the MCP instance, over streamable HTTP; the person logs in at Keycloak first |

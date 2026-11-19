@@ -1,0 +1,33 @@
+{
+  "realm": "globex-legacy",
+  "displayName": "Globex / legacy (switched off)",
+  "enabled": false,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": true,
+  "eventsEnabled": true,
+  "enabledEventTypes": [
+    "LOGIN",
+    "LOGIN_ERROR",
+    "LOGOUT",
+    "REGISTER",
+    "UPDATE_PASSWORD",
+    "RESET_PASSWORD",
+    "CODE_TO_TOKEN",
+    "CODE_TO_TOKEN_ERROR",
+    "CLIENT_LOGIN",
+    "CLIENT_LOGIN_ERROR"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "users": [
+    {
+      "username": "gil",
+      "enabled": true,
+      "email": "gil@old.globex.example",
+      "emailVerified": true,
+      "firstName": "Gil",
+      "lastName": "Gunderson"
+    }
+  ]
+}

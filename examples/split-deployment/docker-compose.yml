@@ -54,6 +54,18 @@ services:
       retries: 40
       start_period: 20s
 
+  # The management UI's client keycloak-mcp-ui in the master realm, which a realm import cannot create there. A
+  # one-shot job, so the UI can sign people in before demo.sh has run.
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.8.2
+    entrypoint: ["/bin/bash", "/ui-client.sh"]
+    volumes:
+      - ../dynamic-systems/init/ui-client.sh:/ui-client.sh:ro
+      - ../dynamic-systems/clients/keycloak-mcp-ui.json:/keycloak-mcp-ui.json:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
   # Internal network only: the admin API, the schema owner, the audit retention. No MCP endpoint.
   admin:
     build:
@@ -78,7 +90,7 @@ services:
       KC_MCP_ADMIN_ISSUER: http://keycloak:8080/realms/master
       # an audience of its own: a token minted for the MCP endpoint (keycloak-mcp-server) never opens the admin API
       KC_MCP_ADMIN_AUDIENCE: keycloak-mcp-admin-api
-      # the management UI: http://localhost:8094/ui/ (admin / admin, after demo.sh has created its client
+      # the management UI: http://localhost:8094/ui/ (admin / admin; the job keycloak-init creates its client
       # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_ISSUER. Dev mode lets it run
       # without HTTPS (its session cookie drops Secure; for one person's machine only). docs/management-ui.md
       KC_MCP_UI_ENABLED: "true"

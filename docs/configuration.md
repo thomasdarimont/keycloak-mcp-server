@@ -2,7 +2,9 @@
 
 [keycloak-mcp-server](../README.md) › documentation
 
-Every property, its default and meaning. Property → environment variable: `kc-mcp.systems.default.url` →
+Every property, its default and meaning. Which settings name the sign-in provider of the UI, the authorization
+servers of the MCP endpoint and the admin API, and the Keycloak systems:
+[Identity providers, authorization servers and Keycloak systems](providers-and-systems.md). Property → environment variable: `kc-mcp.systems.default.url` →
 `KC_MCP_SYSTEMS_DEFAULT_URL` (a system name from the environment is lower-case letters and digits).
 
 Where a setting comes from, the first one found wins:
@@ -100,7 +102,7 @@ the database connection.
 | `kc-mcp.spi.audit-scrubber.pii.pseudonym-key` | `secret-key`   | HMAC key of the audit pseudonyms, independent of storage key rotation |
 | `kc-mcp.instance-role`          | `all`                       | what this instance serves: `all`, `mcp` (the MCP endpoint only: admin API and UI off) or `admin` (admin API on, MCP endpoint off, the UI as configured); a switch below set against the role stops the start ([Several instances](storage.md#several-instances-on-one-database)) |
 | `kc-mcp.mcp.enabled`            | `true`                      | `false`: the MCP endpoint and its entries answer a plain 404 (no hint at what else the instance serves); for an instance that serves only the admin API or the UI ([Several instances](storage.md#several-instances-on-one-database)) |
-| `kc-mcp.admin.enabled` / `token` / `issuer` / `audience` / `role` | `false` / / / / `realm:admin` | admin API at `/admin`: static token and/or trusted issuer with role |
+| `kc-mcp.admin.enabled` / `token` / `issuer` / `audience` / `role` | `false` / / / / `realm:admin` | admin API at `/admin`: static token and/or trusted issuer (its authorization server) with role |
 | `kc-mcp.admin.allow-new-systems` | `true`                     | `false`: the admin API changes known systems only, new aliases answer 403 `registration_closed` |
 | `quarkus.mcp.server.http.root-path` | `/mcp`                  | where the MCP endpoint lives (build time); the entries, the caller authentication and the DNS rebinding protection follow it, as they do `quarkus.http.root-path` in front of everything. Known gap behind such a prefix: Quarkus writes the `resource` of an entry's protected resource metadata without the prefix, which a client that compares it with the URL it connected to may reject |
 | `kc-mcp.admin.openapi`          | `true`                      | `false`: the admin API's OpenAPI document (`/q/openapi`) and Swagger UI (`/q/swagger-ui`) answer 404 ([Several Keycloak systems](systems.md)) |
@@ -151,6 +153,10 @@ the database connection.
 | `quarkus.otel.sdk.disabled`     | `true`                      | `false` exports metrics and traces to `quarkus.otel.exporter.otlp.endpoint` ([Metrics](metrics.md)) |
 | `kc-mcp.metrics.include-realm` | `false`                    | tool call metrics carry the realm |
 | `kc-mcp.ui.trace-url`           |                             | where the Audit page links an event's trace: a URL with `{traceId}` (and `{spanId}`), e.g. `https://jaeger.example.com/trace/{traceId}`; unset: the ids without a link |
+| `kc-mcp.ui.enabled`             | `false`, `start-dev`: `true` | the management UI at `/ui` with its backend under `/bff` ([Management UI](management-ui.md)) |
+| `kc-mcp.ui.issuer`              | `kc-mcp.admin.issuer`, else the default system's auth realm | the sign-in provider of the UI: a Keycloak realm or another OpenID Provider, at the address the server reaches it |
+| `kc-mcp.ui.client-id` / `client-secret` | `keycloak-mcp-ui` /  | the server's client at the sign-in provider; public with PKCE unless a secret is set |
+| `kc-mcp.ui.idps.<alias>.*`      |                             | several sign-in providers: `issuer`, `client-id`, `client-secret`, `display-name`, `hide-on-login-page`, `scopes`, `auth-params.<name>`, `session-age-extension` |
 | `kc-mcp.ui.viewer-role`         |                             | optional read-only management UI role (`realm:<role>` or `<client>.<role>`); unset: only `kc-mcp.admin.role` opens `/bff/api` |
 | `kc-mcp.ui.tls-configuration-name` |                        | named `quarkus.tls` configuration (trust store) for the server's own calls to the UI's identity providers: discovery, keys, session checks |
 | `kc-mcp.truststore-paths`       |                             | additional trusted certificates for outbound TLS: PEM or unencrypted PKCS12 files, directories ([HTTPS and trusted certificates](tls.md)) |

@@ -2,7 +2,8 @@
 # the system "acme" through the admin API (stored in PostgreSQL, key pair generated in the database vault), creates
 # the realm acme-dev with the public mcp-consumer client and demo users, creates the keycloak-mcp-server client in
 # that realm with the JWKS URL the API answered, lets it act for the realm's users, and calls tools as service
-# account and as users.
+# account and as users. A second Keycloak (keycloak-globex, :8089) stands for another company's: demo.sh registers
+# it as the system "globex" and adopts two of its four realms, the others are left for the management UI's Adopt tab.
 # Both MCP containers share the database, so a system registered once is known to both. See README.md.
 #
 #   ../../mvnw -f ../../pom.xml package -DskipTests -Ppostgresql    # the PostgreSQL build of the server
@@ -56,6 +57,45 @@ services:
       retries: 40
       start_period: 20s
 
+  # The management UI's client keycloak-mcp-ui in the master realm, which a realm import cannot create there. A
+  # one-shot job, so the UI can sign people in before demo.sh has run.
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.8.2
+    entrypoint: ["/bin/bash", "/ui-client.sh"]
+    volumes:
+      - ./init/ui-client.sh:/ui-client.sh:ro
+      - ./clients/keycloak-mcp-ui.json:/keycloak-mcp-ui.json:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # A second Keycloak, another company's: it comes with four realms (realms-globex/) and nothing of the MCP server
+  # in it. demo.sh registers it as the system "globex", creates the server's client with the generated setup script
+  # and adopts two of its realms; the others are left for the Adopt tab of the management UI. Its data lives in the
+  # container: docker compose down throws it away, the next up imports the four realms again.
+  keycloak-globex:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8089
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: identity-brokering-api:v2
+      KC_FEATURES_DISABLED: twitter-broker
+    volumes:
+      - ./realms-globex:/opt/keycloak/data/import:ro
+    ports:
+      - "127.0.0.1:8089:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
   # The control-plane facing server: admin API on, acts with the registered system's service account.
   mcp:
     build:
@@ -81,13 +121,13 @@ services:
       # only tokens minted for the MCP server (the public client keycloak-mcp-admin); admin-cli tokens are lightweight
       # in Keycloak 26 and carry neither roles nor an audience
       KC_MCP_ADMIN_AUDIENCE: keycloak-mcp-server
-      # the management UI: http://localhost:8091/ui/ (admin / admin, after demo.sh has created its client
+      # the management UI: http://localhost:8091/ui/ (admin / admin; the job keycloak-init creates its client
       # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_ISSUER. Dev mode lets it run
       # without HTTPS (its session cookie drops Secure; for one person's machine only). docs/management-ui.md
       KC_MCP_UI_ENABLED: "true"
       KC_MCP_DEV_MODE: "true"
-      # the MCP server may only talk to this Keycloak
-      KC_MCP_ALLOWED_HOSTS: keycloak:8080
+      # the MCP server may only talk to these two Keycloaks
+      KC_MCP_ALLOWED_HOSTS: keycloak:8080,keycloak-globex:8080
       KC_MCP_TOOL_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
     ports:
@@ -115,7 +155,7 @@ services:
       KC_MCP_STORAGE_SECRET_KEY: demo-storage-key-change-me
       KC_MCP_STATIC_SYSTEMS: "false"
       KC_MCP_DYNAMIC_SYSTEMS: "true"
-      KC_MCP_ALLOWED_HOSTS: keycloak:8080
+      KC_MCP_ALLOWED_HOSTS: keycloak:8080,keycloak-globex:8080
       KC_MCP_TOOL_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
       KC_MCP_DELEGATION: exchange

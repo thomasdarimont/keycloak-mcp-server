@@ -4,6 +4,10 @@
 
 One server for several Keycloak installations: configured statically, supplied by a repository at runtime, or registered through the admin API; per-system keys; one MCP entry per system or realm.
 
+A system is a Keycloak the server administers. Who may call the MCP endpoint or the admin API, and where people sign in
+to the management UI, are separate questions with separate settings:
+[Identity providers, authorization servers and Keycloak systems](providers-and-systems.md).
+
 Every Keycloak the server administers is a named system, `kc-mcp.systems.<name>.*`; a system exists exactly when
 its `url` is set, and a blank `url` switches a configured one off. There is no unnamed system: one Keycloak is
 usually called `default`, a name like any other. Settings a system leaves out come from `kc-mcp.system-defaults.*` (the same keys except
@@ -97,7 +101,8 @@ Needs database storage and `kc-mcp.admin.enabled=true`. JAX-RS under `/admin`. F
 It can run on an instance of its own, with the MCP endpoint off there (`kc-mcp.mcp.enabled=false`), next to the MCP-facing
 instances on the same database ([Several instances](storage.md#several-instances-on-one-database)).
 
-- Bearer, preferably an access token of `kc-mcp.admin.issuer` (a realm URL, verified by Quarkus OIDC, optional
+- Bearer, preferably an access token of `kc-mcp.admin.issuer` (the admin API's authorization server: a realm URL,
+  not necessarily of a Keycloak the server administers; verified by Quarkus OIDC, optional
   `kc-mcp.admin.audience`) carrying `kc-mcp.admin.role` (`realm:admin` default; `<client>.<role>` for client roles): a
   person's token from the authorization code flow, or a service account's from the client credentials grant, so Keycloak
   governs who administers the server, with expiry and revocation. The static `kc-mcp.admin.token` is the alternative for

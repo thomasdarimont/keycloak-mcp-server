@@ -1,0 +1,57 @@
+{
+  "realm": "globex-staff",
+  "displayName": "Globex / staff",
+  "enabled": true,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": true,
+  "eventsEnabled": true,
+  "enabledEventTypes": [
+    "LOGIN",
+    "LOGIN_ERROR",
+    "LOGOUT",
+    "REGISTER",
+    "UPDATE_PASSWORD",
+    "RESET_PASSWORD",
+    "CODE_TO_TOKEN",
+    "CODE_TO_TOKEN_ERROR",
+    "CLIENT_LOGIN",
+    "CLIENT_LOGIN_ERROR"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "groups": [
+    {
+      "name": "engineering"
+    },
+    {
+      "name": "operations"
+    }
+  ],
+  "users": [
+    {
+      "username": "hank",
+      "enabled": true,
+      "email": "hank@globex.example",
+      "emailVerified": true,
+      "firstName": "Hank",
+      "lastName": "Scorpio"
+    },
+    {
+      "username": "mindy",
+      "enabled": true,
+      "email": "mindy@globex.example",
+      "emailVerified": true,
+      "firstName": "Mindy",
+      "lastName": "Simmons"
+    },
+    {
+      "username": "otto",
+      "enabled": true,
+      "email": "otto@globex.example",
+      "emailVerified": true,
+      "firstName": "Otto",
+      "lastName": "Mann"
+    }
+  ]
+}

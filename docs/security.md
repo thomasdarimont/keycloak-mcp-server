@@ -452,6 +452,9 @@ What makes the login count, and what it does not do:
 
 ## Callers
 
+This is about the MCP endpoint and its authorization server; the admin API and the management UI have theirs
+([Identity providers, authorization servers and Keycloak systems](providers-and-systems.md)).
+
 `CallerProvider` reads the Quarkus `SecurityIdentity`: subject, username, issuing realm, roles. The OIDC tenant is off
 by default, so the endpoint is anonymous. `QUARKUS_OIDC_TENANT_ENABLED=true` verifies bearer tokens of
 the default system's auth realm, `<url>/realms/<auth-realm>` (`quarkus.oidc.auth-server-url` to change it, `QUARKUS_OIDC_TOKEN_AUDIENCE` to

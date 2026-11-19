@@ -6,6 +6,8 @@ The MCP server starts with no Keycloak configured. `demo.sh` registers one throu
 - `mcp-users` (:8092): OIDC login with consent, calls run with a delegated token: Keycloak exchanges the user's token for
   one that names the user as `sub` and the system's client as `act` (`KC_MCP_DELEGATION=exchange`)
 - Both share one PostgreSQL database (:5490); Keycloak on :8090 (`admin`/`admin`)
+- A second Keycloak on :8089 (`admin`/`admin`) with four realms of its own and nothing of the MCP server in it:
+  the one to [adopt realms](#5-a-second-keycloak-adopting-realms) from
 
 ```
 ../../mvnw -f ../../pom.xml package -DskipTests -Ppostgresql    # PostgreSQL build
@@ -129,9 +131,65 @@ LLM clients (LM Studio, Claude): `mcp.json` (service account), `mcp-oauth.json` 
 the client reads the delegation scope from the entry's protected resource metadata and Keycloak shows the consent page).
 
 The [management UI](../../docs/management-ui.md) of the first server: <http://localhost:8091/ui/>, sign in as
-`admin` / `admin` of the master realm once `demo.sh` has created the public client `keycloak-mcp-ui` there
-(step 3c). *Systems* shows `acme` and lets you add or change systems, *Audit* lists the tool calls of both servers.
+`admin` / `admin` of the master realm. The one-shot job `keycloak-init` creates the public client `keycloak-mcp-ui`
+there when the stack starts, so the UI works before `demo.sh` has run; it is empty then. After `demo.sh`, *Systems*
+shows `acme` and `globex` and lets you add or change systems, *Audit* lists the tool calls of both servers.
 It runs in dev mode without HTTPS, for one person's machine only.
+
+### 5. A second Keycloak: adopting realms
+
+`keycloak-globex` (:8089) is another company's Keycloak. It starts with the realms `globex-staff`,
+`globex-customers`, `globex-partners` and `globex-legacy` (disabled), imported from `realms-globex/`, and has no
+client for the MCP server. Step 5 of `demo.sh` goes the way an administrator would:
+
+```shell
+A='Authorization: Bearer demo-admin-token'
+# a: register it; the client will live in master, no realm is named yet
+curl -s -X PUT localhost:8091/admin/systems/globex -H "$A" -H 'Content-Type: application/json' -d '{
+    "displayName": "Globex Corp.", "url": "http://keycloak-globex:8080",
+    "issuer": "http://localhost:8089/realms/master", "authRealm": "master",
+    "clientId": "keycloak-mcp-server", "clientAuth": "private_key_jwt", "version": "26.8.2",
+    "signingKey": "generate"}' | jq .
+# b: the client for that Keycloak, as JSON and as a kcadm script; run the script there
+curl -s -H "$A" 'localhost:8091/admin/systems/globex/client-setup?roles=admin&credential=public-key' \
+  | jq -r .script | ./adopt-setup.sh
+# c: the realms its service account sees
+curl -s -H "$A" localhost:8091/admin/systems/globex/keycloak-realms | jq -c '.realms[] | {name, displayName, adopted}'
+# d: adopt two; they become the system's allowlist
+curl -s -X POST localhost:8091/admin/systems/globex/adoption -H "$A" -H 'Content-Type: application/json' \
+  -d '{"realms": ["globex-staff", "globex-customers"], "restrict": true}' | jq .
+# e: an adopted realm answers at its own entry
+./mcp-call.py http://localhost:8091/mcp/systems/globex/globex-staff keycloak_user_search '{"search": "*"}'
+```
+
+- The server creates nothing in Keycloak. `client-setup` answers the client and a script; `adopt-setup.sh` runs
+  that script with the `kcadm.sh` of the Keycloak container, logged in as `admin`
+- `credential=public-key` copies the server's public key into the client. The JWKS URL the server names for itself
+  is `http://localhost:8091/...`, which a Keycloak in a container cannot fetch; with `jwks-url` the script's URL
+  would need `http://mcp:8081` instead
+- `roles=admin` gives the service account the master `admin` role: it sees every realm, later ones too.
+  `roles=read` or `manage` with `realms=globex-staff,globex-customers` gives only those realms' roles, and the others
+  do not even show up in step c
+- `restrict: true` is needed because a system without an allowlist reaches every realm: adopting a selection narrows
+  it to that selection (409 `would_restrict` without it)
+- `globex-partners` then answers `realm_not_allowed`
+
+**In the management UI.** <http://localhost:8091/ui/> (`admin` / `admin`), system `globex`, tab *Adopt*: the two
+realms left over, `globex-partners` and the disabled `globex-legacy`, are there to adopt, and the adopted ones to
+unadopt. To do all of it in the UI, run `./demo.sh --skip-adopt` (steps 1 to 4 still register `acme`), then:
+
+1. *Systems* → *New*: URL `http://keycloak-globex:8080`, issuer `http://localhost:8089/realms/master`, auth realm
+   `master`, client authentication *Signed JWT*, client id `keycloak-mcp-server`. The URL is how the server reaches
+   Keycloak, inside the compose network.
+2. Tab *Adopt* → *1. Client in Keycloak*: key credential *public key*, copy the script, then
+   `pbpaste | ./adopt-setup.sh`.
+3. *2. Realms in Keycloak* → *Load*, then *3. Adopt* a selection, or every realm including later ones.
+
+Worth trying: *Load* before the script ran (`token_refused`); rename a realm in Globex' admin console
+(<http://localhost:8089/admin>) and reload (*renamed from*); delete one (*not listed*).
+`docker compose down` throws Globex' Keycloak away with the client in it; the system and its key stay in
+PostgreSQL, so the next `./demo.sh` creates the client again with the same key. More:
+[Adopting a Keycloak's realms](../../docs/systems.md#adopting-a-keycloaks-realms).
 
 ## What it shows
 
@@ -143,6 +201,8 @@ It runs in dev mode without HTTPS, for one person's machine only.
 - PII scrubbing on `mcp-users`: console lines pseudonymized (`targets: console`), database rows complete
 - Role-based outcomes: same tools, three users, three results
 - Audit retention: `KC_MCP_SPI_AUDIT_LISTENER_DB_RETENTION_DAYS=30` on `mcp`
+- Adoption: a Keycloak that knows nothing of the server becomes a system, its client comes from a generated script,
+  and its realms are taken over one by one, through the admin API or the management UI
 
 Inspect: `psql -h localhost -p 5490 -U kcmcp kcmcp` (tables `kc_mcp_system`, `kc_mcp_signing_key`, `kc_mcp_secret`,
 `kc_mcp_audit_event`).

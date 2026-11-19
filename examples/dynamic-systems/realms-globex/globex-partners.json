@@ -1,0 +1,49 @@
+{
+  "realm": "globex-partners",
+  "displayName": "Globex / partners",
+  "enabled": true,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": true,
+  "eventsEnabled": true,
+  "enabledEventTypes": [
+    "LOGIN",
+    "LOGIN_ERROR",
+    "LOGOUT",
+    "REGISTER",
+    "UPDATE_PASSWORD",
+    "RESET_PASSWORD",
+    "CODE_TO_TOKEN",
+    "CODE_TO_TOKEN_ERROR",
+    "CLIENT_LOGIN",
+    "CLIENT_LOGIN_ERROR"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "groups": [
+    {
+      "name": "resellers"
+    },
+    {
+      "name": "suppliers"
+    }
+  ],
+  "users": [
+    {
+      "username": "artie",
+      "enabled": true,
+      "email": "artie@partners.example",
+      "emailVerified": true,
+      "firstName": "Artie",
+      "lastName": "Ziff"
+    },
+    {
+      "username": "lurleen",
+      "enabled": true,
+      "email": "lurleen@partners.example",
+      "emailVerified": true,
+      "firstName": "Lurleen",
+      "lastName": "Lumpkin"
+    }
+  ]
+}

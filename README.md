@@ -134,6 +134,7 @@ for a complete stack.
 | page | what it covers |
 |---|---|
 | [Architecture](docs/architecture.md) | the server's two instance roles in one picture: the MCP instance for clients and models, the admin instance for configuration, one database between them |
+| [Identity providers, authorization servers and Keycloak systems](docs/providers-and-systems.md) | the three kinds of parties the server deals with and its part towards each: relying party, resource server, client |
 | [Scenarios in pictures](docs/scenarios.md) | diagrams of the ways the server runs: service account, user login, delegated agent, several systems, a shared deployment, registration, CIBA, read-only troubleshooting, the call pipeline |
 | [Tools](docs/tools.md) | what the model sees, the tool areas, prompts |
 | [Integrations](docs/integrations.md) | adding the server to LM Studio, Claude Code, Claude Desktop, VS Code and Copilot, Cursor, Codex; the login's Keycloak side |
