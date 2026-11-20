@@ -97,14 +97,16 @@ with spaces (`etc/eclipse-formatter.prefs`; imports `java|javax|jakarta`, `org`,
 
 ## Status and roadmap
 
-Status: all reference tools, search, exposure modes, guardrails, extension SPI, database storage, admin API and the
-management UI (login, sessions, BFF; pages for systems, their realms and signing keys, the audit trail) done. Open items:
+Status: all reference tools, search, exposure modes, guardrails, extension SPIs, database storage, the distribution
+archive, admin API and the management UI (login, sessions, BFF; pages for systems, their realms and signing keys,
+realm adoption, the audit trail) done. So are delegation by token exchange, the access checks (step-up
+authentication, AuthZEN) and confirmation through CIBA. Open items:
 
 - Model-in-the-loop benchmarks with LM Studio: turns to success, tool-choice errors, tokens per mode
 - Reference skill recipes as prompts
-- Federation sync test against a real LDAP
 - `private_key_jwt` end to end in a test: Keycloak fetching the server's JWKS, `client_credentials`
-  (`PasswordGrantSessionsIT` covers the token manager against a client-jwt client with a fixed key)
+  (`PasswordGrantSessionsIT` and `AdoptionIT` cover the token manager against client-jwt clients that hold the
+  public key itself)
 - Admin API read access to the signing-key history
 - Management UI pages for secrets and storage (today: placeholders)
 - Effective access preview: which systems, realms and tools a given user or MCP client can reach, and why
