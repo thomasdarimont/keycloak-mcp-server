@@ -156,11 +156,14 @@ export MCP_CALL_QUIET=1                             # the login and consent step
 
 if [ -z "$SKIP_ADOPT" ]; then
   step "5a. a second Keycloak, Globex' (:8089): registered as the system 'globex', its client lives in master"
-  GLOBEX_SYSTEM='{"displayName":"Globex Corp.","description":"Globex\u0027 Keycloak, its realms adopted one by one","url":"http://keycloak-globex:8080","issuer":"http://localhost:8089/realms/master","authRealm":"master","clientId":"keycloak-mcp-server","clientAuth":"private_key_jwt","version":"26.8.2"}'
+  GLOBEX_SYSTEM='{"displayName":"Globex Corp.","description":"Globex\u0027 Keycloak, its realms adopted one by one","url":"http://keycloak-globex:8080","issuer":"http://127.0.0.1:8089/realms/master","authRealm":"master","clientId":"keycloak-mcp-server","clientAuth":"private_key_jwt","version":"26.8.2"}'
   GLOBEX=$(admin -X PUT "$MCP/api/admin/systems/globex" -d "$(jq -c '. + {signingKey: "generate"}' <<<"$GLOBEX_SYSTEM")")
   if jq -e '.error == "signing_key_exists"' >/dev/null <<<"$GLOBEX"; then
     echo "(already registered with a key; keeping the key and the realms adopted so far)"
-    GLOBEX=$(admin "$MCP/api/admin/systems/globex")
+    # the settings are written again, so a changed address or issuer reaches a system registered by an earlier run
+    ADOPTED=$(admin "$MCP/api/admin/systems/globex" | jq -c '.allowedRealms // []')
+    GLOBEX=$(admin -X PUT "$MCP/api/admin/systems/globex" -d "$(jq -c --argjson adopted "$ADOPTED" \
+      '. + {signingKey: "existing"} + (if ($adopted | length) > 0 then {allowedRealms: $adopted} else {} end)' <<<"$GLOBEX_SYSTEM")")
   fi
   jq -c '{alias, url, authRealm, clientAuth, allowedRealms, entries}' <<<"$GLOBEX"
 

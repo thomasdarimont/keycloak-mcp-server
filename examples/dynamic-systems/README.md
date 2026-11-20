@@ -129,6 +129,15 @@ curl -s localhost:8092/.well-known/oauth-protected-resource/mcp/systems/acme/acm
 
 LLM clients (LM Studio, Claude): `mcp.json` (service account), `mcp-oauth.json` (login at `acme-dev` via `mcp-consumer`;
 the client reads the delegation scope from the entry's protected resource metadata and Keycloak shows the consent page).
+Claude Code, after `./demo.sh` has created the realm and registered `acme`:
+
+```shell
+claude mcp add --transport http --client-id mcp-consumer --callback-port 33418 keycloak-acme-dev \
+  http://localhost:8092/mcp/systems/acme/acme-dev
+```
+
+The address is the entry, not `http://localhost:8092/mcp`: this server knows its systems from the database only, so
+callers log in at the realm of one of them, and the bare `/mcp` answers `entry_required`.
 
 The [management UI](../../docs/management-ui.md) of the first server: <http://localhost:8091/ui/>, sign in as
 `admin` / `admin` of the master realm. The one-shot job `keycloak-init` creates the public client `keycloak-mcp-ui`
@@ -138,16 +147,19 @@ It runs in dev mode without HTTPS, for one person's machine only.
 
 ### 5. A second Keycloak: adopting realms
 
-`keycloak-globex` (:8089) is another company's Keycloak. It starts with the realms `globex-staff`,
-`globex-customers`, `globex-partners` and `globex-legacy` (disabled), imported from `realms-globex/`, and has no
-client for the MCP server. Step 5 of `demo.sh` goes the way an administrator would:
+`keycloak-globex` (<http://127.0.0.1:8089>) is another company's Keycloak. Its address is `127.0.0.1`, not
+`localhost`, on purpose: both Keycloaks have a realm `master`, and under one host name their login cookies would
+overwrite each other (cookies do not tell ports apart). A name such as `globex.localhost` would do the same, but MCP
+clients like Claude Code send credentials over plain http only to `localhost`, `127.0.0.1` and `::1`. It starts with the realms
+`globex-staff`, `globex-customers`, `globex-partners` and `globex-legacy` (disabled), imported from
+`realms-globex/`, and has no client for the MCP server. Step 5 of `demo.sh` goes the way an administrator would:
 
 ```shell
 A='Authorization: Bearer demo-admin-token'
 # a: register it; the client will live in master, no realm is named yet
 curl -s -X PUT localhost:8091/api/admin/systems/globex -H "$A" -H 'Content-Type: application/json' -d '{
     "displayName": "Globex Corp.", "url": "http://keycloak-globex:8080",
-    "issuer": "http://localhost:8089/realms/master", "authRealm": "master",
+    "issuer": "http://127.0.0.1:8089/realms/master", "authRealm": "master",
     "clientId": "keycloak-mcp-server", "clientAuth": "private_key_jwt", "version": "26.8.2",
     "signingKey": "generate"}' | jq .
 # b: the client for that Keycloak, as JSON and as a kcadm script; run the script there
@@ -178,15 +190,42 @@ curl -s -X POST localhost:8091/api/admin/systems/globex/adoption -H "$A" -H 'Con
 realms left over, `globex-partners` and the disabled `globex-legacy`, are there to adopt, and the adopted ones to
 unadopt. To do all of it in the UI, run `./demo.sh --skip-adopt` (steps 1 to 4 still register `acme`), then:
 
-1. *Systems* → *New*: URL `http://keycloak-globex:8080`, issuer `http://localhost:8089/realms/master`, auth realm
+1. *Systems* → *New*: URL `http://keycloak-globex:8080`, issuer `http://127.0.0.1:8089/realms/master`, auth realm
    `master`, client authentication *Signed JWT*, client id `keycloak-mcp-server`. The URL is how the server reaches
    Keycloak, inside the compose network.
 2. Tab *Adopt* → *1. Client in Keycloak*: key credential *public key*, copy the script, then
    `pbpaste | ./adopt-setup.sh`.
 3. *2. Realms in Keycloak* → *Load*, then *3. Adopt* a selection, or every realm including later ones.
 
+**Globex' own people, with their own roles.** The steps above use the service account (port 8091). On port 8092
+a user of Globex logs in at the master realm of Globex' Keycloak instead, and every call runs with a delegated token
+that carries that user's roles:
+
+```shell
+./globex-login.sh
+claude mcp add --transport http --client-id mcp-consumer --callback-port 33418 keycloak-globex \
+  http://localhost:8092/mcp/systems/globex
+KEYCLOAK_URL=http://127.0.0.1:8089 ./mcp-call.py --login globex-support:globex-support-demo \
+  http://localhost:8092/mcp/systems/globex whoami
+```
+
+- `globex-login.sh` creates in Globex' master realm what a login with delegation needs: the public client
+  `mcp-consumer` (PKCE, consent, the scope `delegation:client`, audience `keycloak-mcp-server`), Admin Permissions with
+  the grant that lets `keycloak-mcp-server` act for users, *Standard Token Exchange* on that client, and the user
+  `globex-support` / `globex-support-demo`.
+- `globex-support` holds roles of the master realm's clients `globex-staff-realm` and `globex-customers-realm`
+  (users, clients, events; the master realm has no `realm-admin` for another realm, the single roles are it). So the
+  user manages those two realms and no other, whatever the system has adopted; a realm that is not adopted answers
+  `realm_not_allowed` first.
+- What such a user can do today: read in both realms and manage clients. Writes on users (enable, password,
+  roles, groups, credentials) answer `caller_foreign_realm`: the no-escalation and self-protection
+  [checks](../../docs/security.md#built-in-policies-group-scope-no-escalation-self-protection) compare caller and
+  target within one realm, and only a master `admin` passes them from outside.
+- The address is the system's entry: its auth realm, `master`, is where the login happens. The realm is an
+  argument of each call (`"realm": "globex-staff"`).
+
 Worth trying: *Load* before the script ran (`token_refused`); rename a realm in Globex' admin console
-(<http://localhost:8089/admin>) and reload (*renamed from*); delete one (*not listed*).
+(<http://127.0.0.1:8089/admin>) and reload (*renamed from*); delete one (*not listed*).
 `docker compose down` throws Globex' Keycloak away with the client in it; the system and its key stay in
 PostgreSQL, so the next `./demo.sh` creates the client again with the same key. More:
 [Adopting a Keycloak's realms](../../docs/systems.md#adopting-a-keycloaks-realms).

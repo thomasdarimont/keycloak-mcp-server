@@ -227,23 +227,22 @@ class AdminAdoptionPlanTest {
     }
 
     @Test
-    void theScriptGrantsAndScopesEveryRole() {
+    void theScriptGrantsEveryRole() {
         Map<String, List<String>> grants = new LinkedHashMap<>();
         grants.put(null, List.of("admin"));
         grants.put("acme-realm", List.of("view-realm", "view-users"));
         String script = AdminAdoption.script(system().build(), "keycloak-mcp-server",
                 Map.of("clientId", "keycloak-mcp-server"), grants);
         assertTrue(script.contains("--uusername \"$SA\" --rolename \"$ROLE\""), script);
-        assertTrue(script.contains("scope-mappings/realm"), script);
         assertTrue(script.contains("--cclientid 'acme-realm'"), script);
-        assertTrue(script.contains("scope-mappings/clients/$RCID"), script);
+        assertFalse(script.contains("scope-mappings"), "full scope is on, no role scope: " + script);
         assertTrue(script.contains("SA='service-account-keycloak-mcp-server'"), script);
         assertEquals("'it'\\''s'", AdminAdoption.shell("it's"));
     }
 
     /** The Windows variant: the same grants, PowerShell syntax, kcadm.bat. */
     @Test
-    void thePowerShellScriptGrantsAndScopesEveryRole() {
+    void thePowerShellScriptGrantsEveryRole() {
         Map<String, List<String>> grants = new LinkedHashMap<>();
         grants.put(null, List.of("admin"));
         grants.put("acme-realm", List.of("view-realm", "view-users"));
@@ -254,10 +253,7 @@ class AdminAdoptionPlanTest {
         assertTrue(script.contains("foreach ($Role in @('admin'))"), script);
         assertTrue(script.contains("foreach ($Role in @('view-realm', 'view-users'))"), script);
         assertTrue(script.contains("--cclientid 'acme-realm' --rolename $Role"), script);
-        assertTrue(script.contains("-q 'clientId=acme-realm'"), script);
-        assertTrue(script.contains("scope-mappings/clients/$Rcid"), script);
-        // unquoted, PowerShell would pass id,name as an array
-        assertTrue(script.contains("--fields 'id,name'"), script);
+        assertFalse(script.contains("scope-mappings"), "full scope is on, no role scope: " + script);
         assertTrue(script.contains("$LASTEXITCODE -ne 0"), "native exit codes are checked: " + script);
         // the JSON in a literal here-string, $HOME stays as it is; on stdin as UTF-8
         assertTrue(script.contains("$clientJson = @'\n{") && script.contains("\"it's $HOME\"")
@@ -297,5 +293,39 @@ class AdminAdoptionPlanTest {
         assertTrue(ps.contains("else { 'quay.io/keycloak/keycloak:26.8.2' }"), ps);
         assertTrue(ps.contains("else { Join-Path $HOME '.kc-mcp/kcadm/prod' }"), ps);
         assertTrue(ps.contains("$input | docker run --rm -i \"--net=$network\" -e HOME=/opt/keycloak"), ps);
+    }
+
+    static String jwt(String claims) {
+        return "e30." + java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(claims.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + ".sig";
+    }
+
+    /**
+     * A 403 of the realm listing: with roles on the service account but none in the
+     * client's scope the token carries none, and the answer says where to add them.
+     */
+    @Test
+    void aForbiddenListingSaysWhatTheTokenCarries() {
+        assertEquals(List.of(), AdminAdoption.tokenRoles(jwt("{\"realm_access\":{\"roles\":[\"default-roles-master\","
+                + "\"offline_access\"]},\"resource_access\":{\"account\":{\"roles\":[\"view-profile\"]}}}")));
+        assertEquals(List.of(), AdminAdoption.tokenRoles(jwt("{\"sub\":\"x\"}")));
+        assertEquals(List.of(), AdminAdoption.tokenRoles("opaque"));
+        assertEquals(List.of(), AdminAdoption.tokenRoles(null));
+        assertEquals(List.of("create-realm", "acme-realm.view-realm"),
+                AdminAdoption.tokenRoles(jwt("{\"realm_access\":{\"roles\":[\"create-realm\"]},"
+                        + "\"resource_access\":{\"acme-realm\":{\"roles\":[\"view-realm\"]}}}")));
+
+        KeycloakSystem system = KeycloakSystem.builder("globex", "http://kc:8080")
+            .clientId("keycloak-mcp-server")
+            .build();
+        String none = AdminAdoption.forbiddenHint(system, List.of());
+        assertTrue(none.startsWith("Its token carries no roles"), none);
+        assertTrue(none.contains(
+                "'Full scope allowed' on under Clients > keycloak-mcp-server > Client scopes > keycloak-mcp-server-dedicated > Scope"),
+                none);
+        String some = AdminAdoption.forbiddenHint(system, List.of("create-realm"));
+        assertTrue(some.startsWith("Its token carries create-realm: give it"), some);
+        assertFalse(some.contains("Client scopes"), some);
     }
 }

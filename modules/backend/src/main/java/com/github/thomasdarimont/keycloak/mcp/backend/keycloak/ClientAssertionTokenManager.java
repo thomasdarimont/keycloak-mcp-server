@@ -202,10 +202,45 @@ public class ClientAssertionTokenManager implements AutoCloseable {
                     return;
                 }
                 LOG.warnf("private_key_jwt token request failed: HTTP %d %s", response.getStatus(), body);
-                throw new ToolException("unauthorized",
-                        "Keycloak rejected the client assertion (HTTP " + response.getStatus() + "): " + body);
+                throw new ToolException("unauthorized", "Keycloak rejected the client assertion (HTTP "
+                        + response.getStatus() + "): " + body + audienceHint(body));
             }
             accept(new JsonObject(body), now);
+        }
+    }
+
+    /**
+     * Starts the part of a refusal that names the issuer Keycloak expects as audience.
+     */
+    public static final String ISSUER_HINT = " Keycloak's issuer is ";
+
+    /**
+     * For a refusal with {@code Invalid token audience}: the issuer the realm names in
+     * its discovery document, which is the audience Keycloak expects. Empty for any other
+     * refusal, and when the document cannot be read.
+     */
+    private String audienceHint(String body) {
+        if (!body.contains("Invalid token audience")) {
+            return "";
+        }
+        String realmUrl = tokenEndpoint.substring(0,
+                tokenEndpoint.length() - "/protocol/openid-connect/token".length());
+        try (Response r = client.target(realmUrl + "/.well-known/openid-configuration")
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .get()) {
+            if (r.getStatus() != 200 || !r.hasEntity()) {
+                return "";
+            }
+            String issuer = new JsonObject(r.readEntity(String.class)).getString("issuer");
+            if (issuer == null || issuer.isBlank()) {
+                return "";
+            }
+            return "." + ISSUER_HINT + issuer + ", the assertion's aud was " + audience
+                    + ": set the system's issuer to " + issuer;
+        }
+        catch (RuntimeException e) {
+            LOG.debugf("Reading the issuer of %s failed: %s", realmUrl, e.toString());
+            return "";
         }
     }
 

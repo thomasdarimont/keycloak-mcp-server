@@ -14,6 +14,7 @@ import jakarta.ws.rs.client.ClientBuilder;
 
 import org.junit.jupiter.api.Test;
 
+import com.github.thomasdarimont.keycloak.mcp.catalog.ToolException;
 import com.github.thomasdarimont.keycloak.mcp.config.GrantType;
 import com.sun.net.httpserver.HttpServer;
 
@@ -165,6 +166,40 @@ class ClientAssertionTokenManagerTest {
             tokens.close();
             assertEquals(2, kc.bodies.size(), "two grants, no logout: " + kc.bodies);
             kc.bodies.forEach(b -> assertTrue(b.contains("grant_type=client_credentials"), b));
+        }
+    }
+
+    /**
+     * The server reaches Keycloak at an internal address and the system names no issuer:
+     * the refusal names the issuer the realm publishes, so nobody has to look it up.
+     */
+    @Test
+    void aRefusedAudienceNamesTheIssuerKeycloakExpects() throws Exception {
+        boolean[] discovery = { true };
+        try (TokenEndpoint kc = new TokenEndpoint(
+                body -> body.isEmpty() && discovery[0]
+                        ? new Answer(200, "{\"issuer\":\"https://sso.example.com/realms/master\"}")
+                        : body.isEmpty() ? new Answer(404, "") : new Answer(400,
+                                "{\"error\":\"invalid_client\",\"error_description\":\"Invalid token audience\"}"),
+                true)) {
+            Client client = ClientBuilder.newClient();
+            ClientAssertionTokenManager tokens = manager(client, kc.url());
+            ToolException refused = org.junit.jupiter.api.Assertions.assertThrows(ToolException.class,
+                    tokens::accessToken);
+            assertTrue(refused.getMessage().contains("Invalid token audience"), refused.getMessage());
+            assertTrue(refused.getMessage()
+                .contains("Keycloak's issuer is https://sso.example.com/realms/master, the assertion's aud was "
+                        + kc.url() + "/realms/master: set the system's issuer to"
+                        + " https://sso.example.com/realms/master"),
+                    refused.getMessage());
+            assertEquals("/realms/master/.well-known/openid-configuration", kc.paths.getLast());
+
+            discovery[0] = false;
+            ToolException plain = org.junit.jupiter.api.Assertions.assertThrows(ToolException.class,
+                    tokens::accessToken);
+            assertFalse(plain.getMessage().contains("issuer is"),
+                    "no discovery document, no hint: " + plain.getMessage());
+            client.close();
         }
     }
 

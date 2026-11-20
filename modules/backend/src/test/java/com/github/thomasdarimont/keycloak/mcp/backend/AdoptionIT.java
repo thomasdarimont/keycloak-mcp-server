@@ -120,6 +120,7 @@ class AdoptionIT {
             .body("client.clientAuthenticatorType", equalTo("client-jwt"))
             .body("client.attributes.'use.jwks.url'", equalTo("false"))
             .body("client.defaultClientScopes", hasItems("kc-admin-api", "service_account"))
+            .body("client.fullScopeAllowed", equalTo(true))
             .body("roles.realmRoles", equalTo(List.of("admin")))
             .extract()
             .jsonPath();
@@ -127,8 +128,8 @@ class AdoptionIT {
         HttpResponse<String> created = AdoptionTestResource.keycloak("POST", "/admin/realms/master/clients",
                 new JsonObject(client).encode());
         assertEquals(201, created.statusCode(), created.body());
-        // what the script does for roles=admin: the role, and the role in the client's
-        // scope
+        // what the script does for roles=admin: the role; full scope lets it into the
+        // token
         String uuid = clientUuid("kc-mcp-adopt-admin");
         String user = serviceAccountUserId(uuid);
         JsonArray role = new JsonArray()
@@ -136,10 +137,6 @@ class AdoptionIT {
         assertEquals(204,
                 AdoptionTestResource
                     .keycloak("POST", "/admin/realms/master/users/" + user + "/role-mappings/realm", role.encode())
-                    .statusCode());
-        assertEquals(204,
-                AdoptionTestResource
-                    .keycloak("POST", "/admin/realms/master/clients/" + uuid + "/scope-mappings/realm", role.encode())
                     .statusCode());
 
         JsonPath listed = admin().get("/api/admin/systems/" + ADMIN_SYSTEM + "/keycloak-realms")

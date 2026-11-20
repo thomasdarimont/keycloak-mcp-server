@@ -1266,7 +1266,7 @@ components:
             serviceAccount: { type: string }
             realmRoles: { type: array, items: { type: string } }
             clientRoles: { type: object, additionalProperties: { type: array, items: { type: string } } }
-        script: { type: string, description: "kcadm.sh script: the client, the roles and the role scope" }
+        script: { type: string, description: "kcadm.sh script: the client and the roles of its service account" }
         notes: { type: array, items: { type: string } }
     SigningKey:
       type: object

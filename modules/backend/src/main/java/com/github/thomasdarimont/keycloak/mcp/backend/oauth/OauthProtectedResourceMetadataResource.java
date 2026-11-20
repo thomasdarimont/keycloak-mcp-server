@@ -92,6 +92,13 @@ public class OauthProtectedResourceMetadataResource {
             ctx.next();
             return;
         }
+        if (tenant.resourceMetadata().authorizationServer().isEmpty()
+                && tenant.authServerUrl().filter(u -> !u.isBlank()).isEmpty()) {
+            // systems from repositories only: the endpoint itself has no authorization
+            // server, the entries have
+            ctx.next();
+            return;
+        }
         ctx.response().setStatusCode(200).end(generateMetadata(tenant, identifier, ctx).toString());
     }
 

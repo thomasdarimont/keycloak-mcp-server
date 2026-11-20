@@ -123,7 +123,7 @@ Admin REST API accepts them. This part cannot be another product.
 |---|---|---|---|---|
 | `run-modes`, `delegated-auth`, `ciba-confirm`, `step-up-passkey` | realm `demo` | realm `demo`, where callers log in (`run-modes`: only `user-login.env` and `shared.env`) | | the same Keycloak, realm `demo` |
 | `management-ui` | realm `demo`, or the realms `demo` and `master` as two providers | | realm `demo` | registered in the UI |
-| `dynamic-systems` | realm `master` of the first Keycloak | second server, `:8093`: realm `master` at the root, realm `acme-dev` at the entry of `acme` | realm `master` | `acme`: the first Keycloak; `globex`: a second one that is nothing else |
+| `dynamic-systems` | realm `master` of the first Keycloak | second server, `:8092`: realm `acme-dev` at the entry of `acme`; none at the root, which answers `entry_required` | realm `master` | `acme`: the first Keycloak; `globex`: a second one that is nothing else |
 | `xaa` | | realm of the Keycloak, behind an enterprise IdP | | the same Keycloak |
 
 One Keycloak realm in all three parts is the simplest setup and a common one. They come apart as soon as the people

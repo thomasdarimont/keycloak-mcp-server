@@ -216,7 +216,7 @@ Register the system first (step 2 above), then:
 
 - `GET /api/admin/systems/<alias>/client-setup[?roles=admin|read|manage&realms=a,b&credential=jwks-url|public-key&kcadm=installed|docker]`:
   the client for the system's `authRealm` as JSON (`POST /admin/realms/<realm>/clients`), the roles of its service
-  account and a script doing both (role and role scope; full scope is off): `script` for Linux and macOS (bash,
+  account and a script doing both (the client has full scope on, so the roles reach its tokens): `script` for Linux and macOS (bash,
   `kcadm.sh`), `powershellScript` for Windows (PowerShell 5.1 or 7, `kcadm.bat`). The server creates nothing in Keycloak.
   - kcadm comes from a Keycloak installation (`KCADM`, default `kcadm.sh` / `kcadm.bat` on the PATH), or with
     `kcadm=docker` (or `KCADM_IMAGE` set) from the Keycloak image of the system's version through `docker run`. The
@@ -265,6 +265,9 @@ Same server, bound to one system or realm.
 - With OIDC on, entry requests are verified against the system's auth realm (`<url>/realms/<auth-realm>`): tenant A's
   users log in at tenant A's Keycloak; exchange delegation works across systems. Systems sharing the default tenant's
   realm keep the default tenant.
+- A server whose systems all come from a repository (`kc-mcp.static-systems=false`) and whose callers log in has no
+  authorization server for `/mcp` itself: only the entries serve callers there, and `/mcp` answers 404
+  `entry_required` with the address to use.
 - Each such entry has its own protected resource metadata, at the well-known path plus the entry's path:
   `/mcp/systems/acme` answers 401 with `resource_metadata="…/.well-known/oauth-protected-resource/mcp/systems/acme"`,
   and that document names the system's realm as the authorization server (`/mcp/systems/acme/sales` likewise, under

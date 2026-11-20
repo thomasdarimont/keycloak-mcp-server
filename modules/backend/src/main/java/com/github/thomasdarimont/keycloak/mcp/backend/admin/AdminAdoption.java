@@ -2,6 +2,7 @@ package com.github.thomasdarimont.keycloak.mcp.backend.admin;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
@@ -388,8 +389,9 @@ public class AdminAdoption {
             .orElseThrow(() -> new AdminException(409, "system_refused",
                     "The server does not connect to '" + system.name() + "' at " + system.url()
                             + " (kc-mcp.allowed-hosts, private addresses; see the server log)."));
+        String token;
         try {
-            kc.accessToken();
+            token = kc.accessToken();
         }
         catch (RuntimeException e) {
             systems.forget(system.name());
@@ -401,7 +403,7 @@ public class AdminAdoption {
         }
         catch (RuntimeException e) {
             systems.forget(system.name());
-            throw adminApiFailed(system, e);
+            throw adminApiFailed(system, e, token);
         }
         List<KeycloakRealm> out = new ArrayList<>();
         for (Map<String, Object> r : raw == null ? List.<Map<String, Object>>of() : raw) {
@@ -446,7 +448,7 @@ public class AdminAdoption {
                 + "' in the realm '" + system.authRealm() + "': " + describe(e) + "." + hint);
     }
 
-    private AdminException adminApiFailed(KeycloakSystem system, RuntimeException e) {
+    private AdminException adminApiFailed(KeycloakSystem system, RuntimeException e, String token) {
         if (unreachable(e)) {
             return unreachableError(system, e);
         }
@@ -459,11 +461,63 @@ public class AdminAdoption {
                             + "' (HTTP 401). Keycloak 26.8.2 and later need the client scope " + scopeName()
                             + " on the client.");
             case 403 -> new AdminException(502, "admin_api_forbidden", "The service account of '" + system.name()
-                    + "' may not list realms (HTTP 403): give it the master realm's admin role, or roles such as"
-                    + " view-realm of the <realm>-realm clients.");
+                    + "' may not list realms (HTTP 403). " + forbiddenHint(system, tokenRoles(token)));
             default -> new AdminException(502, "keycloak_error",
                     "Listing the realms of '" + system.name() + "' failed: " + describe(e) + ".");
         };
+    }
+
+    /**
+     * Why Keycloak answered 403, from the roles the token carries: none at all usually
+     * means the roles are assigned to the service account but not in the client's scope.
+     */
+    static String forbiddenHint(KeycloakSystem system, List<String> tokenRoles) {
+        String give = "give it the master realm's admin role, or roles such as view-realm of the <realm>-realm"
+                + " clients";
+        if (!tokenRoles.isEmpty()) {
+            return "Its token carries " + String.join(", ", tokenRoles) + ": " + give + ".";
+        }
+        String client = system.clientId().filter(c -> !c.isBlank()).orElse(DEFAULT_CLIENT_ID);
+        return "Its token carries no roles: " + give + ". Where the service account has them already, the client's"
+                + " scope keeps them out of the token: turn 'Full scope allowed' on under Clients > " + client
+                + " > Client scopes > " + client + "-dedicated > Scope (the client setup does), or add the roles"
+                + " there.";
+    }
+
+    /**
+     * The roles an access token carries, realm roles by name and client roles as
+     * {@code client.role}; Keycloak's default roles of every account are left out. Empty
+     * for a token that is no JWT.
+     */
+    static List<String> tokenRoles(String token) {
+        List<String> roles = new ArrayList<>();
+        try {
+            String[] parts = token == null ? new String[0] : token.split("\\.");
+            if (parts.length < 2) {
+                return roles;
+            }
+            JsonObject claims = new JsonObject(
+                    new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8));
+            JsonObject realm = claims.getJsonObject("realm_access");
+            if (realm != null && realm.getJsonArray("roles") != null) {
+                realm.getJsonArray("roles").forEach(r -> roles.add(String.valueOf(r)));
+            }
+            JsonObject clients = claims.getJsonObject("resource_access");
+            if (clients != null) {
+                for (String client : clients.fieldNames()) {
+                    JsonObject access = clients.getJsonObject(client);
+                    if (access != null && access.getJsonArray("roles") != null) {
+                        access.getJsonArray("roles").forEach(r -> roles.add(client + "." + r));
+                    }
+                }
+            }
+        }
+        catch (RuntimeException e) {
+            return List.of();
+        }
+        roles.removeIf(r -> r.startsWith("default-roles-") || r.equals("offline_access")
+                || r.equals("uma_authorization") || r.startsWith("account."));
+        return roles;
     }
 
     private static AdminException unreachableError(KeycloakSystem system, RuntimeException e) {
@@ -585,7 +639,9 @@ public class AdminAdoption {
         client.put("standardFlowEnabled", false);
         client.put("implicitFlowEnabled", false);
         client.put("directAccessGrantsEnabled", false);
-        client.put("fullScopeAllowed", false);
+        // the service account's roles are all the client is for: every one of them goes
+        // into its tokens, and assigning a role is enough
+        client.put("fullScopeAllowed", true);
         List<String> scopes = new ArrayList<>(DEFAULT_SCOPES);
         String scope = config.adminApiScope();
         if (scope != null && !scope.isBlank()) {
@@ -723,11 +779,10 @@ public class AdminAdoption {
     }
 
     /**
-     * A bash script for Linux and macOS: the client, the roles of its service account and
-     * the same roles in the client's role scope (full scope is off). kcadm.sh comes from
-     * a Keycloak installation, or from the Keycloak image ({@code image}, or
-     * {@code KCADM_IMAGE}) through docker. No {@code jq}: it runs in the Keycloak
-     * container too.
+     * A bash script for Linux and macOS: the client and the roles of its service account
+     * (full scope is on, so they reach its tokens). kcadm.sh comes from a Keycloak
+     * installation, or from the Keycloak image ({@code image}, or {@code KCADM_IMAGE})
+     * through docker. No {@code jq}: it runs in the Keycloak container too.
      */
     static String script(KeycloakSystem system, String clientId, Map<String, Object> client,
             Map<String, List<String>> grants, Optional<String> image) {
@@ -778,29 +833,19 @@ public class AdminAdoption {
         s.append("SA=").append(shell("service-account-" + clientId.toLowerCase(Locale.ROOT))).append("\n\n");
         s.append("kcadm create clients -r \"$REALM\" -f - <<'JSON'\n");
         s.append(new JsonObject(client).encodePrettily()).append("\nJSON\n");
-        s.append("CID=$(kcadm get clients -r \"$REALM\" -q clientId=\"$CLIENT\" --fields id --format csv"
-                + " --noquotes | head -1)\n");
-        s.append("# kcadm prints one object over several lines: [ and ] around it make the list the scope API takes\n");
-        s.append("as_list() { sed 's/^{/[{/; s/}$/}]/'; }\n\n");
+        s.append('\n');
         for (Map.Entry<String, List<String>> g : grants.entrySet()) {
             String roles = String.join(" ", g.getValue());
             if (g.getKey() == null) {
                 s.append("for ROLE in ").append(roles).append("; do\n");
                 s.append("  kcadm add-roles -r \"$REALM\" --uusername \"$SA\" --rolename \"$ROLE\"\n");
-                s.append("  kcadm get \"roles/$ROLE\" -r \"$REALM\" --fields id,name | as_list \\\n");
-                s.append("    | kcadm create \"clients/$CID/scope-mappings/realm\" -r \"$REALM\" -f -\n");
                 s.append("done\n");
             }
             else {
-                s.append("RCID=$(kcadm get clients -r \"$REALM\" -q clientId=")
-                    .append(shell(g.getKey()))
-                    .append(" --fields id --format csv --noquotes | head -1)\n");
                 s.append("for ROLE in ").append(roles).append("; do\n");
                 s.append("  kcadm add-roles -r \"$REALM\" --uusername \"$SA\" --cclientid ")
                     .append(shell(g.getKey()))
                     .append(" --rolename \"$ROLE\"\n");
-                s.append("  kcadm get \"clients/$RCID/roles/$ROLE\" -r \"$REALM\" --fields id,name | as_list \\\n");
-                s.append("    | kcadm create \"clients/$CID/scope-mappings/clients/$RCID\" -r \"$REALM\" -f -\n");
                 s.append("done\n");
             }
         }
@@ -882,37 +927,21 @@ public class AdminAdoption {
                 "    if ($LASTEXITCODE -ne 0) { throw \"kcadm $($args -join ' ') failed with exit code $LASTEXITCODE\" }\n");
         s.append("    $out\n");
         s.append("}\n");
-        s.append("# a role as the one-element list the scope API takes\n");
-        s.append("function Get-RoleList([string] $Path) {\n");
-        s.append("    $role = (Invoke-Kcadm get $Path -r $Realm --fields 'id,name') -join \"`n\" | ConvertFrom-Json\n");
-        s.append("    ConvertTo-Json -InputObject @($role) -Compress\n");
-        s.append("}\n");
-        s.append("function Add-RoleScope([string] $RolePath, [string] $ScopePath) {\n");
-        s.append("    Get-RoleList $RolePath | Invoke-Kcadm create $ScopePath -r $Realm -f -\n");
-        s.append("}\n\n");
         // a literal here-string: nothing in the JSON is expanded
         s.append("$clientJson = @'\n").append(new JsonObject(client).encodePrettily()).append("\n'@\n");
-        s.append("$clientJson | Invoke-Kcadm create clients -r $Realm -f -\n");
-        s.append("$Cid = Invoke-Kcadm get clients -r $Realm -q \"clientId=$Client\" --fields id --format csv --noquotes"
-                + " | Select-Object -First 1\n\n");
+        s.append("$clientJson | Invoke-Kcadm create clients -r $Realm -f -\n\n");
         for (Map.Entry<String, List<String>> g : grants.entrySet()) {
             String roles = String.join(", ", g.getValue().stream().map(AdminAdoption::powershell).toList());
             if (g.getKey() == null) {
                 s.append("foreach ($Role in @(").append(roles).append(")) {\n");
                 s.append("    Invoke-Kcadm add-roles -r $Realm --uusername $SA --rolename $Role\n");
-                s.append("    Add-RoleScope \"roles/$Role\" \"clients/$Cid/scope-mappings/realm\"\n");
                 s.append("}\n");
             }
             else {
-                s.append("$Rcid = Invoke-Kcadm get clients -r $Realm -q ")
-                    .append(powershell("clientId=" + g.getKey()))
-                    .append(" --fields id --format csv --noquotes | Select-Object -First 1\n");
                 s.append("foreach ($Role in @(").append(roles).append(")) {\n");
                 s.append("    Invoke-Kcadm add-roles -r $Realm --uusername $SA --cclientid ")
                     .append(powershell(g.getKey()))
                     .append(" --rolename $Role\n");
-                s.append(
-                        "    Add-RoleScope \"clients/$Rcid/roles/$Role\" \"clients/$Cid/scope-mappings/clients/$Rcid\"\n");
                 s.append("}\n");
             }
         }

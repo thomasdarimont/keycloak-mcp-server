@@ -79,11 +79,16 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: http://localhost:8089
+      # 127.0.0.1, not localhost: under one host name its login cookies and those of the first Keycloak would
+      # overwrite each other (same realm name, and cookies do not tell ports apart). Not a name like
+      # globex.localhost: MCP clients send credentials over plain http only to localhost, 127.0.0.1 and ::1
+      KC_HOSTNAME: http://127.0.0.1:8089
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      KC_FEATURES: identity-brokering-api:v2
+      # token exchange delegation: Globex' people log in at its master realm and act with their own roles
+      # (globex-login.sh)
+      KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
     volumes:
       - ./realms-globex:/opt/keycloak/data/import:ro
@@ -159,8 +164,9 @@ services:
       KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
       KC_MCP_MCP_DELEGATION: exchange
-      # the default OIDC tenant (root /mcp) is the master realm; an entry /mcp/systems/<system>[/<realm>] verifies
-      # tokens of that system's realm and asks for the scope delegation:client:<the system's client>
+      # callers log in per entry: /mcp/systems/<system>[/<realm>] verifies tokens of that system's realm and asks
+      # for the scope delegation:client:<the system's client>. The root /mcp has no authorization server here (the
+      # systems come from the database only) and answers 404 entry_required
       KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       KC_MCP_MCP_OAUTH_ENABLED: "true"
