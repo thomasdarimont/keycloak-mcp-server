@@ -7,7 +7,7 @@
 #   docker compose down -v        # reset everything
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.2
+    image: quay.io/keycloak/keycloak:26.8.2-3
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -38,7 +38,7 @@ services:
 
   # The one setting a realm import cannot carry: the Admin Permissions grant that lets keycloak-mcp act for users.
   keycloak-init:
-    image: quay.io/keycloak/keycloak:26.8.2
+    image: quay.io/keycloak/keycloak:26.8.2-3
     entrypoint: ["/bin/bash", "/grant-delegation.sh"]
     environment:
       REALMS: demo

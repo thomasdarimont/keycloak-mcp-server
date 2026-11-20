@@ -8,7 +8,7 @@
 #   docker compose down -v                        # reset everything (the realm is re-imported on the next start)
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.2
+    image: quay.io/keycloak/keycloak:26.8.2-3
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin

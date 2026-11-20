@@ -6,7 +6,7 @@
 #   ./setup.sh                    # then: master realm clients and user, the delegation grants, the server's key
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.2
+    image: quay.io/keycloak/keycloak:26.8.2-3
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin

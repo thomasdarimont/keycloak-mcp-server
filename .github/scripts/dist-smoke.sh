@@ -13,7 +13,7 @@ DIST=$1
 REALM=${2:-}
 PORT=${PORT:-8085}
 KC_PORT=${KC_PORT:-18080}
-KC_IMAGE=${KC_IMAGE:-quay.io/keycloak/keycloak:26.8.2}
+KC_IMAGE=${KC_IMAGE:-quay.io/keycloak/keycloak:26.8.2-3}
 INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
 
 SERVER_PID=""

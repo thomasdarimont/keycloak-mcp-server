@@ -26,7 +26,7 @@ services:
       retries: 20
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.2
+    image: quay.io/keycloak/keycloak:26.8.2-3
     command: ["start-dev"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -57,7 +57,7 @@ services:
   # The management UI's client keycloak-mcp-ui in the master realm, which a realm import cannot create there. A
   # one-shot job, so the UI can sign people in before demo.sh has run.
   keycloak-init:
-    image: quay.io/keycloak/keycloak:26.8.2
+    image: quay.io/keycloak/keycloak:26.8.2-3
     entrypoint: ["/bin/bash", "/ui-client.sh"]
     volumes:
       - ../dynamic-systems/init/ui-client.sh:/ui-client.sh:ro

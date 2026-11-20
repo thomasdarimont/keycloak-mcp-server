@@ -10,7 +10,7 @@ import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
  */
 public class KeycloakTestResource implements QuarkusTestResourceLifecycleManager {
 
-    static final String IMAGE = System.getProperty("keycloak.image", "quay.io/keycloak/keycloak:26.8.2");
+    static final String IMAGE = System.getProperty("keycloak.image", "quay.io/keycloak/keycloak:26.8.2-3");
 
     @Override
     public Map<String, String> start() {
