@@ -21,6 +21,7 @@ import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
 
+import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.ClientAssertionTokenManager;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.DefaultKeycloakSystems;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.Jwks;
 import com.github.thomasdarimont.keycloak.mcp.backend.keycloak.JwksEndpoint;
@@ -430,7 +431,11 @@ public class AdminAdoption {
                         + " Keycloak reaches this server's JWKS URL for the system ("
                         + JwksEndpoint.path(keys.keySet(system)) + ") or holds its public key."
                 : " Check that the client exists, has service accounts on and that the secret matches.";
-        if (system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT && describe(e).contains("Invalid token audience")) {
+        if (describe(e).contains(ClientAssertionTokenManager.ISSUER_HINT)) {
+            // the refusal names Keycloak's issuer and what to set already
+            hint = "";
+        }
+        else if (system.clientAuth() == ClientAuth.PRIVATE_KEY_JWT && describe(e).contains("Invalid token audience")) {
             hint = " The assertion's aud was " + system.assertionAudience() + ": Keycloak takes its issuer of the realm"
                     + " (see " + system.url() + "/realms/" + system.authRealm()
                     + "/.well-known/openid-configuration). Set the system's issuer to it, or clear the issuer when"

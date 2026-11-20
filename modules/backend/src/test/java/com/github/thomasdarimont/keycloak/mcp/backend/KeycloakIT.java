@@ -1001,6 +1001,88 @@ class KeycloakIT {
         confirmed("keycloak_user_delete", new JsonObject().put("id", supportId).put("username", "it-support"));
     }
 
+    /**
+     * The order of a user's MFA credentials: of two OTP credentials the second is moved
+     * in front of the first and back behind it, the password stays where it is. The user
+     * comes from the admin client, because no tool creates an OTP credential.
+     */
+    @Test
+    @Order(16)
+    void mfaCredentialsAreRanked() {
+        String userId;
+        try (Keycloak admin = KeycloakBuilder.builder()
+            .serverUrl(keycloakUrl)
+            .realm("master")
+            .clientId("admin-cli")
+            .username("admin")
+            .password("admin")
+            .build()) {
+            org.keycloak.representations.idm.CredentialRepresentation password = new org.keycloak.representations.idm.CredentialRepresentation();
+            password.setType("password");
+            password.setValue("secret1!");
+            org.keycloak.representations.idm.UserRepresentation user = new org.keycloak.representations.idm.UserRepresentation();
+            user.setUsername("it-order");
+            user.setEnabled(true);
+            user.setCredentials(List.of(password, otp("phone", "JBSWY3DPEHPK3PXP"), otp("tablet", "KRSXG5CTMVRXEZLU")));
+            try (jakarta.ws.rs.core.Response created = admin.realm(REALM).users().create(user)) {
+                assertEquals(201, created.getStatus());
+                userId = org.keycloak.admin.client.CreatedResponseUtil.getCreatedId(created);
+            }
+        }
+        JsonObject args = new JsonObject().put("userId", "it-order");
+        assertEquals(List.of("password", "phone", "tablet"),
+                credentialNames(call("keycloak_user_credentials_list", args).getJsonArray("items")));
+
+        JsonObject first = call("keycloak_user_credential_move", args.copy().put("credentialId", "tablet"));
+        assertEquals(List.of("password", "tablet", "phone"), credentialNames(first.getJsonArray("credentials")),
+                first.encode());
+        assertEquals(List.of("password", "tablet", "phone"),
+                credentialNames(call("keycloak_user_credentials_list", args).getJsonArray("items")));
+        // already the first MFA credential: nothing changes
+        assertEquals(List.of("password", "tablet", "phone"),
+                credentialNames(call("keycloak_user_credential_move", args.copy().put("credentialId", "tablet"))
+                    .getJsonArray("credentials")));
+
+        JsonObject behind = call("keycloak_user_credential_move",
+                args.copy().put("credentialId", "tablet").put("after", "phone"));
+        assertEquals(List.of("password", "phone", "tablet"), credentialNames(behind.getJsonArray("credentials")),
+                behind.encode());
+        // behind the password is the front of the MFA credentials
+        assertEquals(List.of("password", "tablet", "phone"),
+                credentialNames(call("keycloak_user_credential_move",
+                        args.copy().put("credentialId", "tablet").put("after", "password"))
+                    .getJsonArray("credentials")));
+
+        assertEquals("invalid_arguments",
+                error("keycloak_user_credential_move", args.copy().put("credentialId", "password")).getString("error"),
+                "a password is not ranked");
+        assertEquals("invalid_arguments",
+                error("keycloak_user_credential_move", args.copy().put("credentialId", "phone").put("after", "phone"))
+                    .getString("error"));
+        assertEquals("ambiguous",
+                error("keycloak_user_credential_move", args.copy().put("credentialId", "otp")).getString("error"));
+        assertEquals("not_found",
+                error("keycloak_user_credential_move", args.copy().put("credentialId", "webauthn")).getString("error"));
+        confirmed("keycloak_user_delete", new JsonObject().put("id", userId).put("username", "it-order"));
+    }
+
+    static org.keycloak.representations.idm.CredentialRepresentation otp(String label, String secret) {
+        org.keycloak.representations.idm.CredentialRepresentation otp = new org.keycloak.representations.idm.CredentialRepresentation();
+        otp.setType("otp");
+        otp.setUserLabel(label);
+        otp.setSecretData("{\"value\":\"" + secret + "\"}");
+        otp.setCredentialData(
+                "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}");
+        return otp;
+    }
+
+    /** The label of each credential, or its type where it has none. */
+    static List<String> credentialNames(JsonArray credentials) {
+        return credentials.stream()
+            .map(c -> ((JsonObject) c).getString("label", ((JsonObject) c).getString("type")))
+            .toList();
+    }
+
     @Test
     @Order(17)
     void organizationMembersAndIdentityProviderUpdates() {

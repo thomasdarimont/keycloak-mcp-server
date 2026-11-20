@@ -198,7 +198,8 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
 4. **Check.** `GET /api/admin/systems/acme` shows the system with `source: db`; a call to
    `/mcp/systems/acme` (`whoami`) runs as the new service account. A failing token request answers
    `keycloak_unreachable` or `unauthorized` with the Keycloak error: `invalid_client` usually means the JWKS URL is
-   not reachable from Keycloak or the `kid` is unknown, `Invalid token audience` that `issuer` is wrong or missing:
+   not reachable from Keycloak or the `kid` is unknown, `Invalid token audience` that `issuer` is wrong or missing
+   (the answer then names the issuer Keycloak publishes, the value to set):
    it is the auth realm's issuer (`https://sso.example.com/realms/master`, not the base URL; a save refuses anything
    else with `invalid_issuer`), needed only when the server reaches Keycloak at an internal URL.
 5. **Rotate** with `POST /api/admin/systems/acme/signing-key`: the JWKS lists the new key first and keeps the retired one

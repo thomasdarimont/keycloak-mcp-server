@@ -543,8 +543,8 @@ class PolicyChecksTest {
     @Test
     void lowerAdminsCannotTouchTheCredentialsOrLockoutOfHigherOnes() {
         NoEscalationCheck check = new NoEscalationCheck(dir, settings(PolicySettings.GroupScope.OFF, null, false));
-        for (String name : List.of("keycloak_user_credential_delete", "keycloak_user_brute_force_clear",
-                "keycloak_user_consent_revoke", "keycloak_org_member_remove")) {
+        for (String name : List.of("keycloak_user_credential_delete", "keycloak_user_credential_move",
+                "keycloak_user_brute_force_clear", "keycloak_user_consent_revoke", "keycloak_org_member_remove")) {
             ToolSpec t = tool(name, "userId");
             assertEquals("target_outranks_caller", check.check(ctx(t, ALICE, Map.of("userId", "bob"))).code(), name);
             assertTrue(check.check(ctx(t, ALICE, Map.of("userId", "carol"))).allowed(), name);

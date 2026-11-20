@@ -88,6 +88,33 @@ public class CredentialToolProvider extends AbstractToolProvider {
                     .api(delete(R + "/users/{user-id}/credentials/{credentialId}").path("user-id", "userId")
                         .path("credentialId", "credentialId"))
                     .build(),
+                tool("keycloak_user_credential_move").title("Reorder a user's credentials")
+                    .description("Rank a user's MFA credentials: move one to the front or behind another. Decides "
+                            + "which MFA method a login asks for first.")
+                    .category(Category.USERS)
+                    .write()
+                    .idempotent(true)
+                    .synonyms("reorder credentials", "credential order", "rank mfa methods", "preferred 2fa",
+                            "preferred mfa", "default second factor", "prefer passkey over otp", "credential priority",
+                            "move to first")
+                    .schema(schema().string("userId", USER_ID)
+                        .required()
+                        .string("credentialId",
+                                "Credential to move: id, its label, or its type (otp, webauthn) if unique; not a password")
+                        .required()
+                        .string("after",
+                                "MFA credential it should follow (id, label or unique type); omit to make "
+                                        + "it the first MFA credential"))
+                    .targets(Target.user("userId"), Target.named("credentialId", "credential"))
+                    .handler(this::credentialMove)
+                    .roles("manage-users")
+                    .api(post(R + "/users/{user-id}/credentials/{credentialId}/moveToFirst").path("user-id", "userId")
+                        .path("credentialId", "credentialId"),
+                            post(R + "/users/{user-id}/credentials/{credentialId}/moveAfter/{newPreviousCredentialId}")
+                                .path("user-id", "userId")
+                                .path("credentialId", "credentialId")
+                                .path("newPreviousCredentialId", "after"))
+                    .build(),
                 tool("keycloak_user_brute_force_get").title("Get a user's lockout status")
                     .description(
                             "Whether brute force detection locked a user out, with failure count, last failure and IP.")
@@ -239,6 +266,68 @@ public class CredentialToolProvider extends AbstractToolProvider {
         user.removeCredential(c.getId());
         Map<String, Object> deleted = view(c);
         return ToolResult.done("Credential deleted", "username", u.getUsername(), "credential", deleted);
+    }
+
+    /**
+     * Ranks the credentials a login asks for after the password. The password is not part
+     * of that order: it is neither moved nor does anything move in front of it.
+     */
+    ToolResult credentialMove(ToolCall call) {
+        UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
+        var user = call.kc().realm(call.realm()).users().get(u.getId());
+        List<CredentialRepresentation> creds = user.credentials();
+        CredentialRepresentation c = find(creds, call.str("credentialId"));
+        if (password(c)) {
+            return ToolResult.error("invalid_arguments",
+                    "A password is not ranked; move an MFA credential (OTP, passkey, security key, recovery codes).");
+        }
+        String afterRef = call.str("after");
+        CredentialRepresentation after;
+        if (afterRef == null || afterRef.isBlank()) {
+            after = beforeFirstMfa(creds, c);
+        }
+        else {
+            after = find(creds, afterRef);
+            if (after.getId().equals(c.getId())) {
+                return ToolResult.error("invalid_arguments", "A credential cannot follow itself.");
+            }
+            if (password(after)) {
+                // behind the password is the front of the MFA credentials
+                after = beforeFirstMfa(creds, c);
+            }
+        }
+        if (after == null) {
+            user.moveCredentialToFirst(c.getId());
+        }
+        else {
+            user.moveCredentialAfter(c.getId(), after.getId());
+        }
+        return ToolResult.done("Credential moved", "username", u.getUsername(), "credentials",
+                Views.list(user.credentials(), CredentialToolProvider::view));
+    }
+
+    static boolean password(CredentialRepresentation c) {
+        return CredentialRepresentation.PASSWORD.equals(c.getType());
+    }
+
+    /**
+     * The credential the moved one has to follow to become the first MFA credential: the
+     * one in front of the first other MFA credential, usually the password; {@code null}
+     * when nothing is in front of it.
+     */
+    static CredentialRepresentation beforeFirstMfa(List<CredentialRepresentation> creds,
+            CredentialRepresentation moved) {
+        CredentialRepresentation previous = null;
+        for (CredentialRepresentation c : creds) {
+            if (c.getId().equals(moved.getId())) {
+                continue;
+            }
+            if (!password(c)) {
+                return previous;
+            }
+            previous = c;
+        }
+        return previous;
     }
 
     ToolResult bruteForce(ToolCall call) {

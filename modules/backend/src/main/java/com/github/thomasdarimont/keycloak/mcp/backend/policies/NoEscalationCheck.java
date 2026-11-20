@@ -48,6 +48,7 @@ public final class NoEscalationCheck implements AccessCheck {
             Map.entry("keycloak_user_role_unassign", "userId"), Map.entry("keycloak_user_client_role_assign", "userId"),
             Map.entry("keycloak_user_client_role_unassign", "userId"), Map.entry("keycloak_group_member_add", "userId"),
             Map.entry("keycloak_group_member_remove", "userId"), Map.entry("keycloak_user_credential_delete", "userId"),
+            Map.entry("keycloak_user_credential_move", "userId"),
             Map.entry("keycloak_user_brute_force_clear", "userId"), Map.entry("keycloak_user_consent_revoke", "userId"),
             Map.entry("keycloak_org_member_add", "userId"), Map.entry("keycloak_org_member_remove", "userId"),
             // linking an outside identity lets whoever holds it sign in as the user
