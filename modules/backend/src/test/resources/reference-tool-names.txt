@@ -1,4 +1,4 @@
-# The 72 tool names of ../mcp-keycloak-admin (porting target, see sketch/notes/reference-tools.md)
+# The 72 tool names of https://github.com/edewit/mcp-keycloak-admin, the project this server was ported from
 keycloak_auth_authenticator_providers_list
 keycloak_auth_flow_bind
 keycloak_auth_flow_copy

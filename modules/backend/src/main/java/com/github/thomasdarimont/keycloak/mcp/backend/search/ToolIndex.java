@@ -15,8 +15,8 @@ import com.github.thomasdarimont.keycloak.mcp.catalog.Category;
 import com.github.thomasdarimont.keycloak.mcp.catalog.ToolSpec;
 
 /**
- * Deterministic lexical index over the tool catalog. See implementation-plan.md §5 for
- * the scoring table.
+ * Deterministic lexical index over the tool catalog. The constants below are the scores
+ * of the single kinds of match.
  */
 public class ToolIndex {
 

@@ -3,7 +3,7 @@ package com.github.thomasdarimont.keycloak.mcp.config;
 import java.util.Locale;
 
 /**
- * Controls what {@code tools/list} returns. See implementation-plan.md §8.
+ * Controls what {@code tools/list} returns.
  */
 public enum ExposureMode {
     /**
