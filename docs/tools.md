@@ -38,6 +38,10 @@ How the server presents its tools to a model, which tools exist, and the prompts
   Off with `kc-mcp.tools.structured-content=false`.
 - Fewer round trips: membership and role changes return effective roles; `keycloak_user_roles_get` names each role's
   source (`direct`, `group:/path`, `composite:<role>`), default roles apart; `keycloak_group_get` shows what a group grants.
+  Realm and client roles are kept in fields of their own (`sources` and `clientRoleSources`, `defaultRoles` and
+  `defaultClientRoles`), so a dot or slash in a name cannot move a role to another client. All of a user's groups are
+  read; what could not be read (a group, a composite) is named under `incomplete`. A change whose effective roles
+  cannot be read afterwards still answers `ok` with a `warning` in their place.
 
 - Cost: tools whose requests grow with the realm say so, `cost: per-item` or `heavy` plus a `costNote` in
   `search_tools` hits, and the note at the end of the description in `tools/list`. Per-item: `scope_mappings_get`

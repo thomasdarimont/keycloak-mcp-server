@@ -2,6 +2,7 @@ package com.github.thomasdarimont.keycloak.mcp.backend.keycloak;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.IntFunction;
 import jakarta.ws.rs.WebApplicationException;
 
 import org.keycloak.admin.client.resource.RealmResource;
@@ -30,18 +32,48 @@ import com.github.thomasdarimont.keycloak.mcp.keycloak.KeycloakAdmin;
  */
 public final class EffectiveRoles {
 
-    /** Realm role names map to themselves, client roles to {@code <clientId>.<role>}. */
-    private final Map<String, Set<String>> sources = new TreeMap<>();
-    private final Set<String> onlyViaDefaults = new TreeSet<>();
+    /** Pages of a user's group memberships are read in this size. */
+    static final int GROUP_PAGE = 100;
+
+    private final Map<RoleKey, Set<String>> sources = new TreeMap<>();
+    private final Set<RoleKey> onlyViaDefaults = new TreeSet<>();
     private final Set<String> directRealm = new TreeSet<>();
     private final Map<String, Set<String>> directClient = new TreeMap<>();
     private final List<String> groups = new ArrayList<>();
+    /** What could not be read, so the roles reported may be fewer than the real ones. */
+    private final Set<String> unread = new TreeSet<>();
     private final KeycloakAdmin kc;
     private final String realm;
     private final String defaultRole;
     private final Map<String, String> clientIdByUuid = new HashMap<>();
 
     private record Seed(RoleRepresentation role, String source, boolean viaDefaults) {
+    }
+
+    /**
+     * A role by what tells it apart: the client it belongs to ({@code null} for a realm
+     * role) and its name. Role names and client ids may contain any character, so the two
+     * are never joined into one string to be split again.
+     */
+    record RoleKey(String clientId, String name) implements Comparable<RoleKey> {
+
+        private static final Comparator<RoleKey> ORDER = Comparator
+            .comparing(RoleKey::clientId, Comparator.nullsFirst(Comparator.naturalOrder()))
+            .thenComparing(RoleKey::name);
+
+        boolean realmRole() {
+            return clientId == null;
+        }
+
+        /** For provenance texts: {@code name}, or {@code clientId/name}. */
+        String label() {
+            return clientId == null ? name : clientId + "/" + name;
+        }
+
+        @Override
+        public int compareTo(RoleKey other) {
+            return ORDER.compare(this, other);
+        }
     }
 
     private EffectiveRoles(KeycloakAdmin kc, String realm) {
@@ -55,12 +87,35 @@ public final class EffectiveRoles {
         RealmResource rr = kc.realm(realm);
         List<Seed> seeds = new ArrayList<>();
         r.collect(rr.users().get(userId).roles(), "direct", seeds, true);
-        for (GroupRepresentation g : rr.users().get(userId).groups(0, 500, true)) {
+        for (GroupRepresentation g : groupsOf(kc, realm, userId)) {
             r.groups.add(g.getPath());
             r.collectGroupChain(g.getPath(), seeds);
         }
         r.expand(seeds);
         return r;
+    }
+
+    /**
+     * All groups a user is a direct member of, read page by page: a role inherited from
+     * the last of them counts as much as one from the first.
+     */
+    public static List<GroupRepresentation> groupsOf(KeycloakAdmin kc, String realm, String userId) {
+        var user = kc.realm(realm).users().get(userId);
+        return allPages(first -> user.groups(first, GROUP_PAGE, true), GROUP_PAGE);
+    }
+
+    static <T> List<T> allPages(IntFunction<List<T>> page, int size) {
+        List<T> all = new ArrayList<>();
+        while (true) {
+            List<T> next = page.apply(all.size());
+            if (next == null) {
+                return all;
+            }
+            all.addAll(next);
+            if (next.size() < size) {
+                return all;
+            }
+        }
     }
 
     public static EffectiveRoles ofGroup(KeycloakAdmin kc, String realm, String groupPath) {
@@ -79,7 +134,7 @@ public final class EffectiveRoles {
                 collect(rr.groups().group(g.getId()).roles(), "group:" + p, seeds, false);
             }
             catch (WebApplicationException e) {
-                // unreadable ancestor: skip
+                unread.add("roles of group " + p + " (HTTP " + e.getResponse().getStatus() + ")");
             }
         }
     }
@@ -109,6 +164,7 @@ public final class EffectiveRoles {
 
     private void expand(List<Seed> seeds) {
         Deque<Seed> queue = new ArrayDeque<>(seeds);
+        Set<RoleKey> reachedOtherwise = new HashSet<>();
         Map<String, Boolean> seen = new HashMap<>(); // role id -> reached via non-default
                                                      // path
         while (!queue.isEmpty()) {
@@ -117,11 +173,11 @@ public final class EffectiveRoles {
             if (role == null || role.getId() == null) {
                 continue;
             }
-            String key = key(role);
+            RoleKey key = key(role);
             if (!role.getName().equals(defaultRole)) {
                 sources.computeIfAbsent(key, k -> new TreeSet<>()).add(s.source());
-                if (s.viaDefaults()) {
-                    onlyViaDefaults.add(key);
+                if (!s.viaDefaults()) {
+                    reachedOtherwise.add(key);
                 }
             }
             Boolean before = seen.get(role.getId());
@@ -130,41 +186,27 @@ public final class EffectiveRoles {
                 continue; // already expanded with at least as strong a path
             }
             seen.put(role.getId(), nonDefault || Boolean.TRUE.equals(before));
-            if (nonDefault) {
-                onlyViaDefaults.remove(key);
-            }
             if (role.isComposite()) {
                 try {
                     for (RoleRepresentation child : kc.realm(realm).rolesById().getRoleComposites(role.getId())) {
                         boolean childViaDefaults = s.viaDefaults() || role.getName().equals(defaultRole);
-                        queue.add(new Seed(child, "composite:" + role.getName(), childViaDefaults));
+                        queue.add(new Seed(child, "composite:" + key.label(), childViaDefaults));
                     }
                 }
                 catch (WebApplicationException e) {
-                    // composites unreadable: keep what we have
+                    unread.add("roles in composite " + key.label() + " (HTTP " + e.getResponse().getStatus() + ")");
                 }
             }
         }
-        // a role reached both via defaults and via a real path is not "only via defaults"
-        for (Map.Entry<String, Set<String>> e : sources.entrySet()) {
-            boolean realPath = e.getValue()
-                .stream()
-                .anyMatch(src -> !src.equals("composite:" + defaultRole) && !isDefaultDescendant(src));
-            if (realPath) {
-                onlyViaDefaults.remove(e.getKey());
+        // a role reached both through the defaults and another way is not a default only
+        for (RoleKey key : sources.keySet()) {
+            if (!reachedOtherwise.contains(key)) {
+                onlyViaDefaults.add(key);
             }
         }
     }
 
-    private boolean isDefaultDescendant(String source) {
-        if (!source.startsWith("composite:")) {
-            return false;
-        }
-        String parent = source.substring("composite:".length());
-        return onlyViaDefaults.contains(parent);
-    }
-
-    private String key(RoleRepresentation role) {
+    private RoleKey key(RoleRepresentation role) {
         if (Boolean.TRUE.equals(role.getClientRole())) {
             String clientId = clientIdByUuid.computeIfAbsent(role.getContainerId(), uuid -> {
                 try {
@@ -174,9 +216,9 @@ public final class EffectiveRoles {
                     return uuid;
                 }
             });
-            return clientId + "." + role.getName();
+            return new RoleKey(clientId, role.getName());
         }
-        return role.getName();
+        return new RoleKey(null, role.getName());
     }
 
     static List<String> ancestorPaths(String path) {
@@ -212,9 +254,9 @@ public final class EffectiveRoles {
      */
     public Set<String> effectiveRealmRoles() {
         Set<String> out = new TreeSet<>();
-        for (String k : sources.keySet()) {
-            if (!k.contains(".") && !onlyViaDefaults.contains(k)) {
-                out.add(k);
+        for (RoleKey k : sources.keySet()) {
+            if (k.realmRole() && !onlyViaDefaults.contains(k)) {
+                out.add(k.name());
             }
         }
         return out;
@@ -223,35 +265,68 @@ public final class EffectiveRoles {
     /** Effective client roles per client, same exclusion. */
     public Map<String, Set<String>> effectiveClientRoles() {
         Map<String, Set<String>> out = new TreeMap<>();
-        for (String k : sources.keySet()) {
-            int dot = k.lastIndexOf('.');
-            if (dot > 0 && !onlyViaDefaults.contains(k)) {
-                out.computeIfAbsent(k.substring(0, dot), c -> new TreeSet<>()).add(k.substring(dot + 1));
+        for (RoleKey k : sources.keySet()) {
+            if (!k.realmRole() && !onlyViaDefaults.contains(k)) {
+                out.computeIfAbsent(k.clientId(), c -> new TreeSet<>()).add(k.name());
+            }
+        }
+        return out;
+    }
+
+    /** Realm roles every user has through {@code default-roles-<realm>}. */
+    public Set<String> defaultRoles() {
+        Set<String> out = new TreeSet<>();
+        for (RoleKey k : onlyViaDefaults) {
+            if (k.realmRole()) {
+                out.add(k.name());
+            }
+        }
+        return out;
+    }
+
+    /** Client roles every user has through {@code default-roles-<realm>}, per client. */
+    public Map<String, Set<String>> defaultClientRoles() {
+        Map<String, Set<String>> out = new TreeMap<>();
+        for (RoleKey k : onlyViaDefaults) {
+            if (!k.realmRole()) {
+                out.computeIfAbsent(k.clientId(), c -> new TreeSet<>()).add(k.name());
             }
         }
         return out;
     }
 
     /**
-     * Roles every user has through {@code default-roles-<realm>} (realm and client
-     * roles).
-     */
-    public Set<String> defaultRoles() {
-        return new TreeSet<>(onlyViaDefaults);
-    }
-
-    /**
-     * Where each effective role comes from: {@code direct}, {@code group:/path},
-     * {@code composite:<role>}.
+     * Where each effective realm role comes from: {@code direct}, {@code group:/path},
+     * {@code composite:<role>} ({@code composite:<clientId>/<role>} for a client role).
      */
     public Map<String, List<String>> sources() {
         Map<String, List<String>> out = new LinkedHashMap<>();
-        for (Map.Entry<String, Set<String>> e : sources.entrySet()) {
-            if (!onlyViaDefaults.contains(e.getKey())) {
-                out.put(e.getKey(), new ArrayList<>(e.getValue()));
+        for (Map.Entry<RoleKey, Set<String>> e : sources.entrySet()) {
+            if (e.getKey().realmRole() && !onlyViaDefaults.contains(e.getKey())) {
+                out.put(e.getKey().name(), new ArrayList<>(e.getValue()));
             }
         }
         return out;
+    }
+
+    /** The same for the effective client roles, per client. */
+    public Map<String, Map<String, List<String>>> clientRoleSources() {
+        Map<String, Map<String, List<String>>> out = new TreeMap<>();
+        for (Map.Entry<RoleKey, Set<String>> e : sources.entrySet()) {
+            RoleKey k = e.getKey();
+            if (!k.realmRole() && !onlyViaDefaults.contains(k)) {
+                out.computeIfAbsent(k.clientId(), c -> new TreeMap<>()).put(k.name(), new ArrayList<>(e.getValue()));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What could not be read. When not empty, roles inherited through these are missing
+     * from the result.
+     */
+    public Set<String> unread() {
+        return unread;
     }
 
     /** Compact JSON for tool results. */
@@ -272,14 +347,22 @@ public final class EffectiveRoles {
             m.put("groups", groups);
         }
         m.put("sources", sources());
+        Map<String, Map<String, List<String>>> clientSources = clientRoleSources();
+        if (!clientSources.isEmpty()) {
+            m.put("clientRoleSources", clientSources);
+        }
         Set<String> defaults = defaultRoles();
         if (!defaults.isEmpty()) {
             m.put("defaultRoles", new ArrayList<>(defaults));
         }
+        Map<String, Set<String>> clientDefaults = defaultClientRoles();
+        if (!clientDefaults.isEmpty()) {
+            m.put("defaultClientRoles", clientDefaults);
+        }
+        if (!unread.isEmpty()) {
+            m.put("incomplete", "Roles inherited through these are missing, because they could not be read: "
+                    + String.join("; ", unread));
+        }
         return m;
-    }
-
-    static Set<String> set(Set<String> s) {
-        return new HashSet<>(s);
     }
 }

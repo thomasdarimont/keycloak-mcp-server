@@ -279,12 +279,13 @@ public class RequiredActionToolProvider extends AbstractToolProvider {
         else {
             flows(call).lowerRequiredActionPriority(a.getAlias());
         }
-        List<String> order = flows(call).getRequiredActions()
-            .stream()
-            .sorted((x, y) -> Integer.compare(x.getPriority(), y.getPriority()))
-            .map(RequiredActionProviderRepresentation::getAlias)
-            .toList();
-        return ToolResult.done(up ? "Moved up" : "Moved down", "alias", a.getAlias(), "order", order);
+        return ToolResult.doneThenRead(up ? "Moved up" : "Moved down", "order",
+                () -> flows(call).getRequiredActions()
+                    .stream()
+                    .sorted((x, y) -> Integer.compare(x.getPriority(), y.getPriority()))
+                    .map(RequiredActionProviderRepresentation::getAlias)
+                    .toList(),
+                "alias", a.getAlias());
     }
 
     ToolResult unregistered(ToolCall call) {

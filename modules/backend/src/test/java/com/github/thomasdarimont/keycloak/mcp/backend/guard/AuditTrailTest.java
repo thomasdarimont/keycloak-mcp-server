@@ -185,4 +185,23 @@ class AuditTrailTest {
         assertFalse(invoker.invoke(setEnabled, change, false, ctx).isError());
         assertEquals(1, trail.deliveries, "skipped while degraded, whatever the setting");
     }
+
+    @Test
+    void aTrailThatFailsWhileTheUserConfirmsStopsTheChange() {
+        boolean[] asked = { false };
+        ToolInvoker invoker = new ToolInvoker(catalog, new AccessPolicy(false, List.of()), req -> {
+            // the confirmation takes its time; meanwhile another call finds the trail
+            // down
+            asked[0] = true;
+            trail.down = true;
+            record(search);
+            return Decision.CONFIRMED;
+        }, 50, null, DelegationMode.OFF, audit).auditOnFailure(AuditOnFailure.REFUSE_CHANGES);
+
+        ToolResult result = invoker.invoke(delete, Map.of("realm", "demo", "id", "1"), false, ctx);
+
+        assertTrue(asked[0], "the call got as far as the confirmation");
+        assertEquals("audit_unavailable", error(result));
+        assertEquals("audit_unavailable", console.events.getLast().outcome());
+    }
 }

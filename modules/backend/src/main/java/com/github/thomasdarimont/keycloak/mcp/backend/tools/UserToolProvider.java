@@ -377,7 +377,17 @@ public class UserToolProvider extends AbstractToolProvider {
         }
         call.kc().save(u, call.realm(), "users", u.getId());
         if (call.has("attributes")) {
-            Map<String, List<String>> stored = res.toRepresentation().getAttributes();
+            Map<String, List<String>> stored;
+            try {
+                stored = res.toRepresentation().getAttributes();
+            }
+            catch (RuntimeException e) {
+                // the update went through; only whether the profile kept the attributes
+                // is
+                // unknown
+                return ToolResult.done("User updated", "id", u.getId(), "changed", changed, "warning",
+                        ToolResult.readBackFailed(e));
+            }
             List<String> dropped = Objects.requireNonNull(call.stringMap("attributes"))
                 .keySet()
                 .stream()

@@ -204,13 +204,9 @@ public class ToolInvoker {
             return ToolResult.error("caller_required", "This server runs every Keycloak call on behalf of the "
                     + "caller; connect through an authenticated (OAuth) MCP session first.");
         }
-        if (spec.level().isWrite() && auditOnFailure.refusesChanges() && audit.trailDegraded()) {
-            // decided before the handler: the row of a change is written after it,
-            // too late to stop it
-            return ToolResult.error("audit_unavailable",
-                    "The audit trail cannot be written right now, so this server refuses changes to Keycloak until"
-                            + " it can (kc-mcp.audit-on-failure=refuse-changes). Reading tools still work. Tell the"
-                            + " user and try the change again later; do not retry right away.");
+        Optional<ToolResult> unaudited = auditUnavailable(spec);
+        if (unaudited.isPresent()) {
+            return unaudited.get();
         }
         if (!policy.permits(spec)) {
             return policy.forbids(spec, null).orElseThrow();
@@ -225,7 +221,27 @@ public class ToolInvoker {
         if (refused.isEmpty()) {
             refused = confirm(inv);
         }
+        if (refused.isEmpty()) {
+            // again: a confirmation can take minutes, and the trail may have failed
+            // meanwhile
+            refused = auditUnavailable(spec);
+        }
         return refused.isPresent() ? refused.get() : execute(inv);
+    }
+
+    /**
+     * Refuses a change while the audit trail cannot be written and the server is set to
+     * refuse then. Decided before the handler: the row of a change is written after it,
+     * too late to stop it.
+     */
+    private Optional<ToolResult> auditUnavailable(ToolSpec spec) {
+        if (!spec.level().isWrite() || !auditOnFailure.refusesChanges() || !audit.trailDegraded()) {
+            return Optional.empty();
+        }
+        return Optional.of(ToolResult.error("audit_unavailable",
+                "The audit trail cannot be written right now, so this server refuses changes to Keycloak until"
+                        + " it can (kc-mcp.audit-on-failure=refuse-changes). Reading tools still work. Tell the"
+                        + " user and try the change again later; do not retry right away."));
     }
 
     /**

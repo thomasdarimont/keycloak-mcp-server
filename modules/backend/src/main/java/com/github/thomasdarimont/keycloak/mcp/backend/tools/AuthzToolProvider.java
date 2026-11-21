@@ -476,8 +476,8 @@ public class AuthzToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one setting.");
         }
         call.kc().save(s, call.realm(), "clients", c.getId(), "authz", "resource-server");
-        return ToolResult.done("Authorization settings updated", "clientId", c.getClientId(), "changed", changed, "now",
-                view(authz.getSettings()));
+        return ToolResult.doneThenRead("Authorization settings updated", "now", () -> view(authz.getSettings()),
+                "clientId", c.getClientId(), "changed", changed);
     }
 
     // ---- scopes --------------------------------------------------------------------

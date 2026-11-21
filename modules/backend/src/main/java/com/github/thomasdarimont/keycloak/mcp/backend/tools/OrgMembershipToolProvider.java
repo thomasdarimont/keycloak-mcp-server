@@ -357,15 +357,15 @@ public class OrgMembershipToolProvider extends AbstractToolProvider {
         }
         check(org(call, o).invitations().resend(before.getId()));
         // a resend replaces the invitation: it gets a new id
-        String now = org(call, o).invitations()
-            .list(null, before.getEmail(), null, null, null, 0, 10)
-            .stream()
-            .filter(i -> before.getEmail().equalsIgnoreCase(i.getEmail()))
-            .map(OrganizationInvitationRepresentation::getId)
-            .findFirst()
-            .orElse(before.getId());
-        return ToolResult.done("Invitation sent again", "organization", o.getName(), "email", before.getEmail(),
-                "invitationId", now);
+        return ToolResult.doneThenRead("Invitation sent again", "invitationId",
+                () -> org(call, o).invitations()
+                    .list(null, before.getEmail(), null, null, null, 0, 10)
+                    .stream()
+                    .filter(i -> before.getEmail().equalsIgnoreCase(i.getEmail()))
+                    .map(OrganizationInvitationRepresentation::getId)
+                    .findFirst()
+                    .orElse(before.getId()),
+                "organization", o.getName(), "email", before.getEmail());
     }
 
     ToolResult invitationDelete(ToolCall call) {

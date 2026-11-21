@@ -390,28 +390,32 @@ public class RoleToolProvider extends AbstractToolProvider {
         return ToolResult.ok(m);
     }
 
-    /** Effective roles after a change, so "assign and tell me" is one call. */
-    static Map<String, Object> afterChange(ToolCall call, String userId) {
-        Map<String, Object> v = EffectiveRoles.ofUser(call.kc(), call.realm(), userId).toView(false);
-        v.remove("sources");
-        v.remove("defaultRoles");
-        return v;
+    /**
+     * The result of a change to a user's roles or groups, with the effective roles after
+     * it, so "assign and tell me" is one call. The change has been made by the time the
+     * roles are read: when that read fails, the result still says so and carries a
+     * warning in place of the roles.
+     */
+    static ToolResult changed(ToolCall call, String userId, String message, Object... kv) {
+        return ToolResult.doneThenRead(message, "now", () -> {
+            Map<String, Object> now = EffectiveRoles.ofUser(call.kc(), call.realm(), userId).toView(false);
+            now.keySet().removeAll(List.of("sources", "clientRoleSources", "defaultRoles", "defaultClientRoles"));
+            return now;
+        }, kv);
     }
 
     ToolResult userRoleAssign(ToolCall call) {
         UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
         RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
         call.kc().realm(call.realm()).users().get(u.getId()).roles().realmLevel().add(List.of(role));
-        return ToolResult.done("Role assigned", "username", u.getUsername(), "role", role.getName(), "now",
-                afterChange(call, u.getId()));
+        return changed(call, u.getId(), "Role assigned", "username", u.getUsername(), "role", role.getName());
     }
 
     ToolResult userRoleUnassign(ToolCall call) {
         UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
         RoleRepresentation role = realmRole(call.kc(), call.realm(), call.str("role"));
         call.kc().realm(call.realm()).users().get(u.getId()).roles().realmLevel().remove(List.of(role));
-        return ToolResult.done("Role removed", "username", u.getUsername(), "role", role.getName(), "now",
-                afterChange(call, u.getId()));
+        return changed(call, u.getId(), "Role removed", "username", u.getUsername(), "role", role.getName());
     }
 
     ToolResult userClientRoles(ToolCall call) {
@@ -428,8 +432,8 @@ public class RoleToolProvider extends AbstractToolProvider {
         ClientRepresentation c = call.kc().findClient(call.realm(), call.str("clientId"));
         RoleRepresentation role = clientRole(call.kc(), call.realm(), c.getId(), call.str("role"));
         call.kc().realm(call.realm()).users().get(u.getId()).roles().clientLevel(c.getId()).add(List.of(role));
-        return ToolResult.done("Client role assigned", "username", u.getUsername(), "clientId", c.getClientId(), "role",
-                role.getName(), "now", afterChange(call, u.getId()));
+        return changed(call, u.getId(), "Client role assigned", "username", u.getUsername(), "clientId",
+                c.getClientId(), "role", role.getName());
     }
 
     ToolResult userClientRoleUnassign(ToolCall call) {

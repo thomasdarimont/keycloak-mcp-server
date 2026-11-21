@@ -154,10 +154,10 @@ public class GroupToolProvider extends AbstractToolProvider {
                     .category(Category.GROUPS)
                     .read()
                     .synonyms("membership", "member of", "which groups", "teams of user")
-                    .schema(schema().string("userId", USER_ID).required())
+                    .schema(schema().string("userId", USER_ID).required().pagination())
                     .handler(this::userGroups)
                     .roles("view-users")
-                    .api(get(R + "/users/{user-id}/groups").path("user-id", "userId"))
+                    .api(get(R + "/users/{user-id}/groups").path("user-id", "userId").query("first", "max"))
                     .build(),
                 tool("keycloak_group_role_assign").title("Assign realm role to group")
                     .description("Grant a realm role to every member of a group.")
@@ -353,8 +353,9 @@ public class GroupToolProvider extends AbstractToolProvider {
         else {
             id = KeycloakAdmin.created(call.kc().realm(call.realm()).groups().add(g));
         }
-        GroupRepresentation created = call.kc().realm(call.realm()).groups().group(id).toRepresentation();
-        return ToolResult.done("Group created", "id", id, "name", created.getName(), "path", created.getPath());
+        return ToolResult.doneThenRead("Group created", "path",
+                () -> call.kc().realm(call.realm()).groups().group(id).toRepresentation().getPath(), "id", id, "name",
+                g.getName());
     }
 
     ToolResult delete(ToolCall call) {
@@ -378,27 +379,23 @@ public class GroupToolProvider extends AbstractToolProvider {
     ToolResult memberAdd(ToolCall call) {
         GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
         UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
-        boolean already = call.kc()
-            .realm(call.realm())
-            .users()
-            .get(u.getId())
-            .groups(0, 500, true)
+        boolean already = EffectiveRoles.groupsOf(call.kc(), call.realm(), u.getId())
             .stream()
             .anyMatch(m -> g.getId().equals(m.getId()));
         if (!already) {
             call.kc().realm(call.realm()).users().get(u.getId()).joinGroup(g.getId());
         }
-        return ToolResult.done(already ? "User was already a member of the group" : "User added to group", "username",
-                u.getUsername(), "group", g.getPath(), "alreadyMember", already, "now",
-                RoleToolProvider.afterChange(call, u.getId()));
+        return RoleToolProvider.changed(call, u.getId(),
+                already ? "User was already a member of the group" : "User added to group", "username", u.getUsername(),
+                "group", g.getPath(), "alreadyMember", already);
     }
 
     ToolResult memberRemove(ToolCall call) {
         GroupRepresentation g = call.kc().findGroup(call.realm(), call.str("groupId"));
         UserRepresentation u = call.kc().findUser(call.realm(), call.str("userId"));
         call.kc().realm(call.realm()).users().get(u.getId()).leaveGroup(g.getId());
-        return ToolResult.done("User removed from group", "username", u.getUsername(), "group", g.getPath(), "now",
-                RoleToolProvider.afterChange(call, u.getId()));
+        return RoleToolProvider.changed(call, u.getId(), "User removed from group", "username", u.getUsername(),
+                "group", g.getPath());
     }
 
     ToolResult userGroups(ToolCall call) {
@@ -407,8 +404,8 @@ public class GroupToolProvider extends AbstractToolProvider {
             .realm(call.realm())
             .users()
             .get(u.getId())
-            .groups(0, call.maxItems(), true);
-        Map<String, Object> page = Views.page(Views.list(groups, Views::group), call.maxItems());
+            .groups(call.first(), call.max(), true);
+        Map<String, Object> page = Views.page(Views.list(groups, Views::group), call.max());
         page.put("username", u.getUsername());
         return ToolResult.ok(page);
     }
@@ -472,7 +469,7 @@ public class GroupToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass name or attributes.");
         }
         call.kc().save(g, call.realm(), "groups", g.getId());
-        GroupRepresentation now = res.toRepresentation();
-        return ToolResult.done("Group updated", "id", now.getId(), "path", now.getPath(), "changed", changed);
+        return ToolResult.doneThenRead("Group updated", "path", () -> res.toRepresentation().getPath(), "id", g.getId(),
+                "changed", changed);
     }
 }

@@ -302,8 +302,8 @@ public class CredentialToolProvider extends AbstractToolProvider {
         else {
             user.moveCredentialAfter(c.getId(), after.getId());
         }
-        return ToolResult.done("Credential moved", "username", u.getUsername(), "credentials",
-                Views.list(user.credentials(), CredentialToolProvider::view));
+        return ToolResult.doneThenRead("Credential moved", "credentials",
+                () -> Views.list(user.credentials(), CredentialToolProvider::view), "username", u.getUsername());
     }
 
     static boolean password(CredentialRepresentation c) {

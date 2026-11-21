@@ -214,7 +214,8 @@ to administrator command`) and is discarded, so the first few database accesses 
 The row is written after the tool has run, so a failing insert cannot stop the call it records: the change is made in
 Keycloak by then. What the server can do is refuse the next ones: with `kc-mcp.audit-on-failure=refuse-changes`
 (default in profile `shared`) write and destructive tools answer `audit_unavailable` from the first failed insert
-until the probe can insert a row again, and reads keep running. A database that answers but refuses inserts
+until the probe can insert a row again, and reads keep running. The check runs when a call arrives and again
+after the user has confirmed it, so a change that waited for its confirmation while the trail failed does not run. A database that answers but refuses inserts
 (a read-only standby after a failover, a revoked grant) keeps the trail degraded. So on each instance only the changes already running when
 the first insert fails go without a row; their log lines, like that of every call during the outage, is still written. Ship the logs to
 keep that record. `kc_mcp.audit.trail.degraded` and `kc_mcp.audit.trail.failures` show the outage

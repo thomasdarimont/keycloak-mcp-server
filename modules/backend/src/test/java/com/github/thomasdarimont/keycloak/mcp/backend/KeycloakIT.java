@@ -236,6 +236,8 @@ class KeycloakIT {
         assertEquals("alice", members.getJsonArray("items").getJsonObject(0).getString("username"));
         JsonObject userGroups = call("keycloak_user_groups_list", new JsonObject().put("userId", userId));
         assertEquals("/admins/ops", userGroups.getJsonArray("items").getJsonObject(0).getString("path"));
+        assertEquals(0, call("keycloak_user_groups_list", new JsonObject().put("userId", userId).put("first", 1))
+            .getInteger("count"), "the listing can be continued");
 
         call("keycloak_group_role_assign", new JsonObject().put("groupId", groupId).put("role", "offline_access"));
         JsonObject roles = call("keycloak_user_roles_get", new JsonObject().put("userId", "alice"));

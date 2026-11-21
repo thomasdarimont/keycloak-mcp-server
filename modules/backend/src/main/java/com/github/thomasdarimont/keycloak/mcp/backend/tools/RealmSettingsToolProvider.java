@@ -311,7 +311,8 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
             return ToolResult.error("invalid_arguments", "Nothing to update: pass at least one setting.");
         }
         realm.updateRealmEventsConfig(c);
-        return ToolResult.done("Event settings updated", "changed", changed, "now", view(realm.getRealmEventsConfig()));
+        return ToolResult.doneThenRead("Event settings updated", "now", () -> view(realm.getRealmEventsConfig()),
+                "changed", changed);
     }
 
     // ---- keys ----------------------------------------------------------------------
@@ -459,8 +460,8 @@ public class RealmSettingsToolProvider extends AbstractToolProvider {
         }
         config.addOrReplaceAttribute(a);
         call.kc().save(config, call.realm(), "users", "profile");
-        return ToolResult.done(created ? "Attribute added to the user profile" : "Attribute updated", "attribute",
-                view(profile.getConfiguration().getAttribute(name)));
+        return ToolResult.doneThenRead(created ? "Attribute added to the user profile" : "Attribute updated",
+                "attribute", () -> view(profile.getConfiguration().getAttribute(name)));
     }
 
     @SuppressWarnings("unchecked")
