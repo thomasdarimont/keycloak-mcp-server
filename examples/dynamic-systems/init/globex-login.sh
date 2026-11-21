@@ -9,6 +9,8 @@
 #   - Admin Permissions on, and the grant that lets the server's client act for the realm's users
 #   - the server's client: Standard Token Exchange on, full scope on
 #   - the public client mcp-consumer MCP clients log users in with: PKCE, consent, the delegation scope, aud=<server's client>
+#     Its consent page asks for the delegation alone: no roles, profile or email scope, the user's name comes from
+#     a mapper of the client
 #   - the user globex-support (globex-support-demo) with user and client management of the realms in REALMS
 set -euo pipefail
 KC=/opt/keycloak/bin/kcadm.sh
@@ -54,13 +56,19 @@ if [ -z "$($KC get clients -r master -q clientId=mcp-consumer --fields id --form
   ],
   "webOrigins": [ "+" ],
   "attributes": { "pkce.code.challenge.method": "S256", "access.token.lifespan": "1800" },
-  "defaultClientScopes": [ "web-origins", "acr", "roles", "profile", "basic", "email" ],
+  "defaultClientScopes": [ "web-origins", "acr", "basic" ],
   "optionalClientScopes": [ "delegation:client", "offline_access" ],
   "protocolMappers": [ {
     "name": "mcp server audience",
     "protocol": "openid-connect",
     "protocolMapper": "oidc-audience-mapper",
     "config": { "included.client.audience": "$ACTOR", "access.token.claim": "true", "id.token.claim": "false" }
+  }, {
+    "name": "username",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-usermodel-attribute-mapper",
+    "config": { "user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String",
+                "access.token.claim": "true", "id.token.claim": "true" }
   } ]
 }
 JSON

@@ -83,7 +83,7 @@
     {
       "clientId": "mcp-consumer",
       "optionalClientScopes": ["delegation:client", "offline_access"],
-      "defaultClientScopes": ["web-origins", "acr", "roles", "profile", "basic", "email"],
+      "defaultClientScopes": ["web-origins", "acr", "basic"],
       "name": "MCP consumer (LLM client)",
       "enabled": true,
       "protocol": "openid-connect",
@@ -117,6 +117,20 @@
             "included.client.audience": "keycloak-mcp-server",
             "access.token.claim": "true",
             "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
             "introspection.token.claim": "true"
           }
         }

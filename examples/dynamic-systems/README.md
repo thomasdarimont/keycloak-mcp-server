@@ -101,6 +101,11 @@ curl -s https://mcp-admin.localhost:8091/api/admin/systems \
 `mcp-consumer`: consent required, optional scope `delegation:client`, audience `keycloak-mcp-server`, full scope off
 without any role in its scope and without `kc-admin-api`. Its tokens open the MCP server and nothing else.
 
+Its consent page asks one thing, *Allow keycloak-mcp-server to act on your behalf?*, preceded by *Offline Access* for
+a client that asks for it (Claude Code does). The client has no `roles`, `profile` or `email` scope, each of which
+would add a line: the server reads the caller's roles from the delegated token, and the user name comes from a
+mapper of the client (`preferred_username`), which a consent page does not list.
+
 | user | password | group | realm-management roles | outcome |
 |---|---|---|---|---|
 | `alice` | `alice-demo` | `/mcp-admins` | `realm-admin` | everything |
