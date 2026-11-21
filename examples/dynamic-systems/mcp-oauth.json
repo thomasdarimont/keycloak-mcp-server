@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "keycloak-acme-dev": {
-      "url": "http://localhost:8092/mcp/systems/acme/acme-dev",
+      "url": "https://mcp.localhost:8092/mcp/systems/acme/acme-dev",
       "auth": {
         "CLIENT_ID": "mcp-consumer"
       }

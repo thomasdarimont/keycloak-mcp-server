@@ -75,6 +75,12 @@ public class JwksEndpoint {
             .filter(s -> keySet.equals(keys.keySet(s)))
             .or(() -> systems.repository().all().stream().filter(s -> keySet.equals(keys.keySet(s))).findFirst())
             .map(KeycloakSystem::name);
+        if (name.isEmpty()) {
+            // a system another instance registered a moment ago, not in this instance's
+            // snapshot yet: its keys are in the vault already, and Keycloak asks for them
+            // with the first token request
+            return keys.publishedJwks(keySet);
+        }
         return name.flatMap(systems::find).filter(a -> keySet.equals(keys.keySet(a.system()))).flatMap(this::jwks);
     }
 

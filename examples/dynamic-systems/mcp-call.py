@@ -2,20 +2,24 @@
 """Call a tool on an MCP entry:
 mcp-call.py [--login user:password[@realm]] [--scope "..."] [--print-token] <entry-url> <tool> [json-arguments]
 
-    ./mcp-call.py http://localhost:8091/mcp/systems/acme/acme-dev whoami
-    ./mcp-call.py http://localhost:8091/mcp/systems/acme/acme-dev keycloak_user_search '{"search": "alice"}'
-    ./mcp-call.py --login alice:alice-demo http://localhost:8092/mcp/systems/acme/acme-dev whoami
-    ./mcp-call.py --login alice:alice-demo --scope openid http://localhost:8092/mcp/systems/acme/acme-dev whoami
+    ./mcp-call.py https://mcp-admin.localhost:8091/mcp/systems/acme/acme-dev whoami
+    ./mcp-call.py https://mcp-admin.localhost:8091/mcp/systems/acme/acme-dev keycloak_user_search '{"search": "alice"}'
+    ./mcp-call.py --login alice:alice-demo https://mcp.localhost:8092/mcp/systems/acme/acme-dev whoami
+    ./mcp-call.py --login alice:alice-demo --scope openid https://mcp.localhost:8092/mcp/systems/acme/acme-dev whoami
                                                                           # a login without the delegation scope
-    ./mcp-call.py --token <access token> http://localhost:8092/mcp/systems/acme/acme-dev whoami
+    ./mcp-call.py --token <access token> https://mcp.localhost:8092/mcp/systems/acme/acme-dev whoami
     ./mcp-call.py --login alice:alice-demo@acme-dev --print-token         # only the login: the access token on stdout
 
---login walks Keycloak's browser flow the way an MCP client's browser does ($KEYCLOAK_URL, default
-http://localhost:8090; the realm given after @, else the realm of the entry URL): authorization request for the
+--login walks Keycloak's browser flow the way an MCP client's browser does, at the authorization server the entry
+names in its protected resource metadata, as an MCP client finds it. With a realm after @, or with $KEYCLOAK_URL set,
+it is that realm of $KEYCLOAK_URL (default https://acme.localhost:8090) instead. Authorization request for the
 public client mcp-consumer, login form, consent page (Keycloak asks every session whether the server's client may act
 on the user's behalf), authorization code for an access token, sent as a Bearer token. The scope defaults to
 "openid delegation:client:keycloak-mcp-server" ($ACTOR_CLIENT_ID names another client). The password grant cannot do
 this: a client that requires consent refuses it. The steps of the login are printed to stderr (MCP_CALL_QUIET=1: not).
+
+HTTPS: mkcert's CA certificate is trusted in addition to the system's ($MCP_CALL_CA names the file, else the one
+`mkcert -CAROOT` points at): Python does not read the operating system's trust store everywhere.
 """
 import base64
 import hashlib
@@ -23,13 +27,16 @@ import json
 import os
 import re
 import secrets
+import ssl
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
-KEYCLOAK = os.environ.get("KEYCLOAK_URL", "http://localhost:8090")
+KEYCLOAK = os.environ.get("KEYCLOAK_URL", "https://acme.localhost:8090")
 REALM = os.environ.get("REALM", "master")                                   # replaced by the realm of the login
+ISSUER = None                                                               # the realm people log in at, set in main
 CLIENT = "mcp-consumer"
 # registered on mcp-consumer; nothing listens there, the code is read from the redirect
 REDIRECT = os.environ.get("REDIRECT_URI", "http://127.0.0.1:33389/mcp-oauth-callback")
@@ -37,6 +44,36 @@ ACTOR = os.environ.get("ACTOR_CLIENT_ID", "keycloak-mcp-server")
 DELEGATION_SCOPE = "openid delegation:client:" + ACTOR
 
 BEARER = None
+
+
+def tls():
+    """The system's trust store plus mkcert's CA."""
+    context = ssl.create_default_context()
+    ca = os.environ.get("MCP_CALL_CA")
+    if not ca:
+        try:
+            root = subprocess.run(["mkcert", "-CAROOT"], capture_output=True, text=True, check=True).stdout.strip()
+            ca = os.path.join(root, "rootCA.pem")
+        except (OSError, subprocess.CalledProcessError):
+            ca = None
+    if ca and os.path.exists(ca):
+        context.load_verify_locations(cafile=ca)
+    return urllib.request.HTTPSHandler(context=context)
+
+
+urllib.request.install_opener(urllib.request.build_opener(tls()))
+
+
+def issuer_of(url):
+    """The authorization server an entry names in its protected resource metadata (RFC 9728), None without one."""
+    parts = urllib.parse.urlparse(url)
+    document = f"{parts.scheme}://{parts.netloc}/.well-known/oauth-protected-resource{parts.path.rstrip('/')}"
+    try:
+        with urllib.request.urlopen(document) as response:
+            servers = json.loads(response.read().decode()).get("authorization_servers") or []
+            return servers[0].rstrip("/") if servers else None
+    except (urllib.error.URLError, ValueError):
+        return None
 
 
 def realm_of(spec, url):
@@ -60,7 +97,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def login(username, password, scope):
-    opener = urllib.request.build_opener(_NoRedirect)
+    opener = urllib.request.build_opener(_NoRedirect, tls())
     # Keycloak marks its cookies Secure; browsers accept that on localhost, Python's cookie jar does not: by hand
     cookies = {}
 
@@ -84,7 +121,7 @@ def login(username, password, scope):
     query = urllib.parse.urlencode({"client_id": CLIENT, "response_type": "code", "redirect_uri": REDIRECT,
                                     "scope": scope, "state": "demo", "code_challenge": challenge,
                                     "code_challenge_method": "S256"})
-    status, html, headers = send(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/auth?{query}")
+    status, html, headers = send(f"{ISSUER}/protocol/openid-connect/auth?{query}")
     for _ in range(10):
         if status in (302, 303):
             location = headers.get("Location")
@@ -95,11 +132,11 @@ def login(username, password, scope):
                 code = answer["code"][0]
                 form = {"grant_type": "authorization_code", "client_id": CLIENT, "code": code, "redirect_uri": REDIRECT,
                         "code_verifier": verifier}
-                status, body, _ = send(f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/token", form)
+                status, body, _ = send(f"{ISSUER}/protocol/openid-connect/token", form)
                 if status != 200:
                     sys.exit(f"token request failed: HTTP {status} {body}")
                 token = json.loads(body)
-                note(f"logged in as {username} at {REALM}, token scope: {token.get('scope')}")
+                note(f"logged in as {username} at {ISSUER}, token scope: {token.get('scope')}")
                 return token["access_token"]
             status, html, headers = send(location)
             continue
@@ -108,7 +145,7 @@ def login(username, password, scope):
             sys.exit("unexpected Keycloak page: " + re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()[:400])
         target = action.group(1).replace("&amp;", "&")
         if not target.startswith("http"):
-            target = KEYCLOAK + target
+            target = "{0.scheme}://{0.netloc}".format(urllib.parse.urlparse(ISSUER)) + target
         if 'name="username"' in html:
             status, html, headers = send(target, {"username": username, "password": password, "credentialId": ""})
         elif 'name="password"' in html:                                    # username first, then the password page
@@ -147,7 +184,7 @@ def post(url, body, session=None):
 
 
 def main():
-    global BEARER, REALM
+    global BEARER, REALM, ISSUER
     args = sys.argv[1:]
     scope = DELEGATION_SCOPE
     credentials = None
@@ -170,6 +207,9 @@ def main():
         sys.exit(2)
     if credentials:
         REALM = realm_of(credentials, args[0] if args else "")
+        if args and "@" not in credentials and "KEYCLOAK_URL" not in os.environ:
+            ISSUER = issuer_of(args[0])                                    # where an MCP client would be sent
+        ISSUER = ISSUER or f"{KEYCLOAK}/realms/{REALM}"
         username, _, password = credentials.rpartition("@")[0].partition(":") if "@" in credentials \
             else credentials.partition(":")
         BEARER = login(username, password, scope)

@@ -14,4 +14,7 @@ command -v mkcert >/dev/null || { echo "mkcert not found: brew install mkcert (a
 mkdir -p .certs
 mkcert -install
 mkcert -cert-file .certs/localhost.pem -key-file .certs/localhost-key.pem localhost 127.0.0.1 ::1 host.docker.internal "$@"
-echo "wrote .certs/localhost.pem and .certs/localhost-key.pem (CA: $(mkcert -CAROOT))"
+# the CA certificate, for containers that have to trust the certificate (a Keycloak fetching the server's JWKS over
+# HTTPS, the server calling Keycloak): public, but git-ignored with the rest
+cp "$(mkcert -CAROOT)/rootCA.pem" .certs/rootCA.pem
+echo "wrote .certs/localhost.pem, .certs/localhost-key.pem and .certs/rootCA.pem (CA: $(mkcert -CAROOT))"

@@ -667,6 +667,15 @@ public interface McpServerConfig {
         Optional<String> token();
 
         /**
+         * Where Keycloak fetches the signing keys from, {@code scheme://host[:port]}: the
+         * address the admin API and the client setup put into the JWKS URL of a system.
+         * For a deployment whose admin API runs on an internal instance while other
+         * instances of the same database are the ones a Keycloak can reach. Default:
+         * {@code kc-mcp.hostname}, else the address of the request.
+         */
+        Optional<String> jwksHostname();
+
+        /**
          * The authorization server of the admin API ({@code kc-mcp.admin.oauth.*}): the
          * server is its resource server.
          */

@@ -3,7 +3,7 @@
 #
 #   1. register the system "acme" on the admin instance (admin API -> PostgreSQL as the writer, key generated there)
 #   2. the realm acme-dev with the public mcp-consumer client and the demo users
-#   3. the keycloak-mcp-server client in that realm, JWKS URL on the admin instance, allowed to act for the realm's
+#   3. the keycloak-mcp-server client in that realm, JWKS URL on the MCP instance, allowed to act for the realm's
 #      users who consent to it (the actor of the MCP instance's delegated tokens); keycloak-mcp-admin and
 #      keycloak-mcp-ui in master, for the admin API and the management UI on the admin instance
 #   4. call tools as users on the MCP instance, which reads the system the admin instance stored
@@ -13,7 +13,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ADMIN=http://localhost:8094
 MCP=http://localhost:8095
-ADMIN_INTERNAL=http://admin:8081                   # how Keycloak reaches the admin instance inside the compose network
 ADMIN_TOKEN=${KC_MCP_ADMIN_TOKEN:-demo-admin-token}
 KCADM="docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh"
 SHARED=../dynamic-systems                          # realm, server client, delegation grant and mcp-call.py of the dynamic-systems example
@@ -52,8 +51,9 @@ if echo "$SYSTEM" | jq -e '.error == "signing_key_exists"' >/dev/null; then
   SYSTEM=$(admin "$ADMIN/api/admin/systems/acme")
 fi
 echo "$SYSTEM" | jq -c '{alias, source, signingKey: .signingKey.kid}'
-JWKS_URL="$ADMIN_INTERNAL$(echo "$SYSTEM" | jq -r .signingKey.jwksPath)"
-echo "JWKS for Keycloak: $JWKS_URL (served by the admin instance; the MCP instance signs with the same key)"
+# kc-mcp.admin.jwks-hostname of the admin instance: the address Keycloak reaches the MCP instance at
+JWKS_URL=$(echo "$SYSTEM" | jq -r .signingKey.jwksUrl)
+echo "JWKS for Keycloak: $JWKS_URL (served by the MCP instance, which also signs with that key)"
 
 step "2. the realm acme-dev: public client mcp-consumer (consent required, audience keycloak-mcp-server), demo users"
 $KCADM config credentials --server http://localhost:8080 --realm master --user admin --password admin >/dev/null

@@ -215,6 +215,27 @@ public class SigningKeys {
     }
 
     /**
+     * The JWKS of a key set by its name alone, as far as the vault holds keys for it: for
+     * an instance that serves the keys of a system it has not loaded yet, because another
+     * instance registered it a moment ago. Never creates a key, and is empty with one
+     * configured key for all systems.
+     */
+    public Optional<JsonObject> publishedJwks(String keySet) {
+        if (configuredKey()) {
+            return Optional.empty();
+        }
+        List<SigningKey> published = vault.publishedSigningKeys(keySet);
+        if (published.isEmpty()) {
+            return Optional.empty();
+        }
+        JsonArray keys = new JsonArray();
+        for (SigningKey key : published) {
+            keys.add(Jwks.jwk(key.publicKey(), key.algorithm(), key.keyId()));
+        }
+        return Optional.of(new JsonObject().put("keys", keys));
+    }
+
+    /**
      * The key of a system from a vault: the stored one, else a new one when the vault can
      * create keys, else empty (read-only vault without a provisioned key). A validation
      * changes no data, so it never creates one.

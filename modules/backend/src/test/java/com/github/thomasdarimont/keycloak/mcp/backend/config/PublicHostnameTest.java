@@ -9,6 +9,7 @@ import com.github.thomasdarimont.keycloak.mcp.backend.admin.AdminResource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PublicHostnameTest {
 
@@ -51,5 +52,26 @@ class PublicHostnameTest {
     void theJwksBaseIgnoresTheRequest() {
         assertEquals("https://mcp.example.com",
                 AdminResource.publicBase(Optional.of("https://mcp.example.com/"), null, null));
+    }
+
+    /**
+     * An admin instance that is not the one Keycloak reaches names the address the keys
+     * are fetched from; without it the server's own address stands.
+     */
+    @Test
+    void theJwksHostnameWinsOverTheServersOwn() {
+        assertEquals(Optional.of("https://mcp.example.com"), PublicHostname
+            .jwks(Optional.of("https://MCP.example.com/"), Optional.of("https://mcp-admin.internal")));
+        assertEquals(Optional.of("https://mcp-admin.internal"),
+                PublicHostname.jwks(Optional.empty(), Optional.of("https://mcp-admin.internal")));
+        assertEquals(Optional.of("https://mcp-admin.internal"),
+                PublicHostname.jwks(Optional.of(" "), Optional.of("https://mcp-admin.internal")));
+        assertEquals(Optional.empty(), PublicHostname.jwks(Optional.empty(), Optional.empty()));
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> PublicHostname.jwks(Optional.of("mcp.example.com/keys"), Optional.empty()));
+        assertTrue(refused.getMessage().startsWith("kc-mcp.admin.jwks-hostname must be"), refused.getMessage());
+        assertThrows(IllegalArgumentException.class,
+                () -> HttpsInterceptorFactoryTest.config(Map.of("kc-mcp.admin.jwks-hostname", "mcp.example.com"))
+                    .getRawValue("quarkus.http.ssl-port"));
     }
 }

@@ -230,14 +230,14 @@ public class UiResource {
     @GET
     @Path("api/systems")
     public Map<String, Object> systems(@Context UriInfo uri, @Context HttpHeaders headers) {
-        return systems.list(AdminResource.publicBase(config.hostname(), uri, headers));
+        return systems.list(AdminResource.jwksBase(config, uri, headers));
     }
 
     @GET
     @Path("api/systems/{alias}")
     public Map<String, Object> system(@PathParam("alias") String alias, @Context UriInfo uri,
             @Context HttpHeaders headers) {
-        return systems.get(alias, AdminResource.publicBase(config.hostname(), uri, headers));
+        return systems.get(alias, AdminResource.jwksBase(config, uri, headers));
     }
 
     @PUT
@@ -245,7 +245,7 @@ public class UiResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response putSystem(@PathParam("alias") String alias, Map<String, Object> body, @Context UriInfo uri,
             @Context HttpHeaders headers) {
-        var saved = systems.save(body, alias, AdminResource.publicBase(config.hostname(), uri, headers));
+        var saved = systems.save(body, alias, AdminResource.jwksBase(config, uri, headers));
         return Response.status(saved.replaced() ? 200 : 201).entity(saved.representation()).build();
     }
 
@@ -260,7 +260,7 @@ public class UiResource {
     @Path("api/systems/{alias}/signing-key")
     public Map<String, Object> rotateSigningKey(@PathParam("alias") String alias,
             @QueryParam("dropPrevious") boolean dropPrevious, @Context UriInfo uri, @Context HttpHeaders headers) {
-        return systems.rotate(alias, AdminResource.publicBase(config.hostname(), uri, headers), dropPrevious);
+        return systems.rotate(alias, AdminResource.jwksBase(config, uri, headers), dropPrevious);
     }
 
     @GET
@@ -296,7 +296,7 @@ public class UiResource {
     public Map<String, Object> clientSetup(@PathParam("alias") String alias, @QueryParam("roles") String roles,
             @QueryParam("realms") String realms, @QueryParam("credential") String credential,
             @QueryParam("kcadm") String kcadm, @Context UriInfo uri, @Context HttpHeaders headers) {
-        return adoption.clientSetup(alias, AdminResource.publicBase(config.hostname(), uri, headers), roles,
+        return adoption.clientSetup(alias, AdminResource.jwksBase(config, uri, headers), roles,
                 AdminResource.splitList(realms), credential, kcadm);
     }
 

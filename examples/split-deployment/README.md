@@ -34,8 +34,9 @@ to the Admin API. The user's own token never leaves the MCP instance. The client
 ## What `demo.sh` shows
 
 1. `acme` is registered on the admin instance, and its key pair is generated there. Keycloak fetches the JWKS from
-   the admin instance (`http://admin:8081/auth/keys/<id>/jwks.json`, `signingKey.jwksPath` of the registration). The MCP instance signs with the same key,
-   which it reads from the database.
+   the MCP instance (`http://mcp:8081/auth/keys/<id>/jwks.json`, `signingKey.jwksUrl` of the registration): the
+   admin instance names that address because of `KC_MCP_ADMIN_JWKS_HOSTNAME`, so no Keycloak needs a way to the
+   admin instance. The MCP instance signs with the same key, which it reads from the database.
 2. The MCP instance knows `acme` only through the database, within `cache-seconds` (10). alice and sam log in and
    call tools; `whoami` shows `delegation: {mode: exchange, consented: true, actor: keycloak-mcp-server}`. The calls
    run with their delegated tokens, so sam's write is `forbidden`: he lacks `manage-users`.

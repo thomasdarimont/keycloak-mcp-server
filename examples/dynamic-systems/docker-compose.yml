@@ -2,10 +2,24 @@
 # the system "acme" through the admin API (stored in PostgreSQL, key pair generated in the database vault), creates
 # the realm acme-dev with the public mcp-consumer client and demo users, creates the keycloak-mcp-server client in
 # that realm with the JWKS URL the API answered, lets it act for the realm's users, and calls tools as service
-# account and as users. A second Keycloak (keycloak-globex, :8089) stands for another company's: demo.sh registers
+# account and as users. A second Keycloak (keycloak-globex) stands for another company's: demo.sh registers
 # it as the system "globex" and adopts two of its four realms, the others are left for the management UI's Adopt tab.
 # Both MCP containers share the database, so a system registered once is known to both. See README.md.
 #
+# Each party has one address, a host name of its own with HTTPS, which is the same in the browser and between the
+# containers: the service listens on that port inside the compose network too and carries the name as a network
+# alias. So a system's URL is also its issuer, and Keycloak fetches the server's keys from the JWKS URL the server
+# names. The certificate is the one of etc/mkcert.sh (.certs/ at the top of the repository), whose CA the
+# containers trust.
+#   https://acme.localhost:8090        keycloak          realm master (admin API, management UI) and realm acme-dev
+#   https://globex.localhost:8089      keycloak-globex   Globex' Keycloak
+#   https://mcp-admin.localhost:8091   mcp               admin API, management UI, calls as the service account
+#   https://mcp.localhost:8092         mcp-users         people log in, calls with a delegated token
+# Names of their own, because both Keycloaks have a realm master and under one host name their login cookies would
+# overwrite each other (cookies do not tell ports apart). HTTPS, because MCP clients send credentials over plain
+# HTTP only to localhost itself.
+#
+#   ../../etc/mkcert.sh acme.localhost globex.localhost mcp-admin.localhost mcp.localhost   # once: the certificate
 #   ../../mvnw -f ../../pom.xml package -DskipTests -Ppostgresql    # the PostgreSQL build of the server
 #   docker compose up -d --build && ./demo.sh
 services:
@@ -36,17 +50,29 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
-      KC_HOSTNAME: http://localhost:8090
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # its one address, for browsers and for the MCP servers; plain HTTP on 8080 stays for kcadm inside the container
+      KC_HOSTNAME: https://acme.localhost:8090
+      KC_HTTPS_PORT: "8090"
+      KC_HTTPS_CERTIFICATE_FILE: /certs/localhost.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /certs/localhost-key.pem
+      # mkcert's CA: Keycloak fetches the MCP server's JWKS over HTTPS
+      KC_TRUSTSTORE_PATHS: /certs/rootCA.pem
+      # the health check stays plain HTTP on the management port
+      KC_HTTP_MANAGEMENT_SCHEME: http
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       # token exchange delegation (the user login of mcp-users) needs parameterized scopes, both preview.
       # 26.8 warns about its deprecated defaults: use the v2 brokering API, drop the Twitter (OAuth 1.0a) broker
       KC_FEATURES: token-exchange-delegation,parameterized-scopes,identity-brokering-api:v2
       KC_FEATURES_DISABLED: twitter-broker
+    volumes:
+      - ../../.certs:/certs:ro
     ports:
-      - "127.0.0.1:8090:8080"
-      - "9090:9000"
+      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:9090:9000"
+    networks:
+      default:
+        aliases: [acme.localhost]
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,11 +105,13 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      # 127.0.0.1, not localhost: under one host name its login cookies and those of the first Keycloak would
-      # overwrite each other (same realm name, and cookies do not tell ports apart). Not a name like
-      # globex.localhost: MCP clients send credentials over plain http only to localhost, 127.0.0.1 and ::1
-      KC_HOSTNAME: http://127.0.0.1:8089
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HOSTNAME: https://globex.localhost:8089
+      KC_HTTPS_PORT: "8089"
+      KC_HTTPS_CERTIFICATE_FILE: /certs/localhost.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /certs/localhost-key.pem
+      KC_TRUSTSTORE_PATHS: /certs/rootCA.pem
+      # the health check stays plain HTTP on the management port
+      KC_HTTP_MANAGEMENT_SCHEME: http
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       # token exchange delegation: Globex' people log in at its master realm and act with their own roles
@@ -92,8 +120,12 @@ services:
       KC_FEATURES_DISABLED: twitter-broker
     volumes:
       - ./realms-globex:/opt/keycloak/data/import:ro
+      - ../../.certs:/certs:ro
     ports:
-      - "127.0.0.1:8089:8080"
+      - "127.0.0.1:8089:8089"
+    networks:
+      default:
+        aliases: [globex.localhost]
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
       interval: 5s
@@ -122,21 +154,33 @@ services:
       KC_MCP_ADMIN_ENABLED: "true"
       # automation uses the static token, people an access token of a master realm admin (role "admin")
       KC_MCP_ADMIN_TOKEN: demo-admin-token
-      KC_MCP_ADMIN_OAUTH_ISSUER: http://keycloak:8080/realms/master
+      # the Keycloaks fetch the signing keys from the server people use, not from this one: the JWKS URL the admin
+      # API and the client setup hand out names that address
+      KC_MCP_ADMIN_JWKS_HOSTNAME: https://mcp.localhost:8092
+      KC_MCP_ADMIN_OAUTH_ISSUER: https://acme.localhost:8090/realms/master
       # only tokens minted for the MCP server (the public client keycloak-mcp-admin); admin-cli tokens are lightweight
       # in Keycloak 26 and carry neither roles nor an audience
       KC_MCP_ADMIN_OAUTH_AUDIENCE: keycloak-mcp-server
-      # the management UI: http://localhost:8091/ui/ (admin / admin; the job keycloak-init creates its client
-      # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_OAUTH_ISSUER. Dev mode lets it run
-      # without HTTPS (its session cookie drops Secure; for one person's machine only). docs/management-ui.md
+      # the management UI: https://mcp-admin.localhost:8091/ui/ (admin / admin; the job keycloak-init creates its client
+      # keycloak-mcp-ui in master), signing people in at the realm of KC_MCP_ADMIN_OAUTH_ISSUER. docs/management-ui.md
       KC_MCP_UI_ENABLED: "true"
-      KC_MCP_DEV_MODE: "true"
+      # its one address (docs/tls.md), and mkcert's CA for its calls to the Keycloaks
+      KC_MCP_HOSTNAME: https://mcp-admin.localhost:8091
+      KC_MCP_HTTPS_PORT: "8091"
+      KC_MCP_HTTPS_CERTIFICATE_FILE: /certs/localhost.pem
+      KC_MCP_HTTPS_CERTIFICATE_KEY_FILE: /certs/localhost-key.pem
+      KC_MCP_TRUSTSTORE_PATHS: /certs/rootCA.pem
       # the MCP server may only talk to these two Keycloaks
-      KC_MCP_ALLOWED_HOSTS: keycloak:8080,keycloak-globex:8080
+      KC_MCP_ALLOWED_HOSTS: acme.localhost:8090,globex.localhost:8089
       KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
+    volumes:
+      - ../../.certs:/certs:ro
     ports:
-      - "8091:8081"
+      - "127.0.0.1:8091:8091"
+    networks:
+      default:
+        aliases: [mcp-admin.localhost]
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,14 +204,19 @@ services:
       KC_MCP_STORAGE_SECRET_KEY: demo-storage-key-change-me
       KC_MCP_STATIC_SYSTEMS: "false"
       KC_MCP_DYNAMIC_SYSTEMS: "true"
-      KC_MCP_ALLOWED_HOSTS: keycloak:8080,keycloak-globex:8080
+      KC_MCP_ALLOWED_HOSTS: acme.localhost:8090,globex.localhost:8089
       KC_MCP_TOOLS_EXPOSURE: hybrid
       KC_MCP_STARTUP_CHECK: "off"
+      KC_MCP_HOSTNAME: https://mcp.localhost:8092
+      KC_MCP_HTTPS_PORT: "8092"
+      KC_MCP_HTTPS_CERTIFICATE_FILE: /certs/localhost.pem
+      KC_MCP_HTTPS_CERTIFICATE_KEY_FILE: /certs/localhost-key.pem
+      KC_MCP_TRUSTSTORE_PATHS: /certs/rootCA.pem
       KC_MCP_MCP_DELEGATION: exchange
       # callers log in per entry: /mcp/systems/<system>[/<realm>] verifies tokens of that system's realm and asks
       # for the scope delegation:client:<the system's client>. The root /mcp has no authorization server here (the
       # systems come from the database only) and answers 404 entry_required
-      KC_MCP_SYSTEMS_DEFAULT_URL: http://keycloak:8080
+      KC_MCP_SYSTEMS_DEFAULT_URL: https://acme.localhost:8090
       KC_MCP_SYSTEMS_DEFAULT_AUTH_REALM: master
       KC_MCP_MCP_OAUTH_ENABLED: "true"
       # only tokens minted for the MCP server (audience mapper on mcp-consumer, and the delegation scope)
@@ -175,8 +224,13 @@ services:
       # personal data stays out of the console log; the database rows keep the full record
       KC_MCP_SPI_AUDIT_SCRUBBER_PII_MODE: pseudonymize
       KC_MCP_SPI_AUDIT_SCRUBBER_PII_TARGETS: console
+    volumes:
+      - ../../.certs:/certs:ro
     ports:
-      - "8092:8081"
+      - "127.0.0.1:8092:8092"
+    networks:
+      default:
+        aliases: [mcp.localhost]
     depends_on:
       postgres:
         condition: service_healthy

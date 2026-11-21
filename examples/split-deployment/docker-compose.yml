@@ -87,6 +87,9 @@ services:
       KC_MCP_DYNAMIC_SYSTEMS: "true"
       # automation uses the static token, people an access token of a master realm admin
       KC_MCP_ADMIN_TOKEN: demo-admin-token
+      # Keycloak fetches the signing keys from the MCP instance, not from this one: the JWKS URL the admin API hands
+      # out names that address (here the one inside the compose network)
+      KC_MCP_ADMIN_JWKS_HOSTNAME: http://mcp:8081
       KC_MCP_ADMIN_OAUTH_ISSUER: http://keycloak:8080/realms/master
       # an audience of its own: a token minted for the MCP endpoint (keycloak-mcp-server) never opens the admin API
       KC_MCP_ADMIN_OAUTH_AUDIENCE: keycloak-mcp-admin-api

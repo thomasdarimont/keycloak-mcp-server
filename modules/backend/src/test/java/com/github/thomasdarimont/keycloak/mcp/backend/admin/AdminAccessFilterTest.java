@@ -30,6 +30,10 @@ public class AdminAccessFilterTest {
                 return Optional.ofNullable(token);
             }
 
+            public Optional<String> jwksHostname() {
+                return Optional.empty();
+            }
+
             public Oauth oauth() {
                 return new Oauth() {
                     public Optional<String> issuer() {

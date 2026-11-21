@@ -10,7 +10,7 @@
   "implicitFlowEnabled": false,
   "serviceAccountsEnabled": false,
   "redirectUris": [
-    "http://localhost:8091/bff/login",
+    "https://mcp-admin.localhost:8091/bff/login",
     "http://localhost:8094/bff/login"
   ],
   "webOrigins": [
@@ -27,6 +27,6 @@
   ],
   "attributes": {
     "pkce.code.challenge.method": "S256",
-    "post.logout.redirect.uris": "http://localhost:8091/ui/*##http://localhost:8094/ui/*"
+    "post.logout.redirect.uris": "https://mcp-admin.localhost:8091/ui/*##http://localhost:8094/ui/*"
   }
 }

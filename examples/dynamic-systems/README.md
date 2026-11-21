@@ -2,19 +2,40 @@
 
 The MCP server starts with no Keycloak configured. `demo.sh` registers one through the admin API and exercises it.
 
-- `mcp` (:8091): admin API, calls run as the registered system's service account
-- `mcp-users` (:8092): OIDC login with consent, calls run with a delegated token: Keycloak exchanges the user's token for
-  one that names the user as `sub` and the system's client as `act` (`KC_MCP_MCP_DELEGATION=exchange`)
-- Both share one PostgreSQL database (:5490); Keycloak on :8090 (`admin`/`admin`)
-- A second Keycloak on :8089 (`admin`/`admin`) with four realms of its own and nothing of the MCP server in it:
-  the one to [adopt realms](#5-a-second-keycloak-adopting-realms) from
+Each party has a host name of its own and serves HTTPS, with one certificate from mkcert:
+
+| address | what |
+|---|---|
+| <https://mcp-admin.localhost:8091> | `mcp`: admin API and management UI, calls run as the registered system's service account |
+| <https://mcp.localhost:8092> | `mcp-users`: OIDC login with consent, calls run with a delegated token: Keycloak exchanges the user's token for one that names the user as `sub` and the system's client as `act` (`KC_MCP_MCP_DELEGATION=exchange`) |
+| <https://acme.localhost:8090> | the first Keycloak (`admin`/`admin`): realm `master` signs people in to the admin API and the UI, realm `acme-dev` is the one `demo.sh` creates |
+| <https://globex.localhost:8089> | a second Keycloak (`admin`/`admin`) with four realms of its own and nothing of the MCP server in it: the one to [adopt realms](#5-a-second-keycloak-adopting-realms) from |
+
+Both servers share one PostgreSQL database (:5490).
 
 ```
+../../etc/mkcert.sh acme.localhost globex.localhost mcp-admin.localhost mcp.localhost   # once: the certificate
 ../../mvnw -f ../../pom.xml package -DskipTests -Ppostgresql    # PostgreSQL build
 docker compose up -d --build
 ./demo.sh                                                         # idempotent
 docker compose down -v                                            # drops databases, system and key
 ```
+
+- **Why names of their own.** Both Keycloaks have a realm `master`. Under one host name their login cookies would
+  overwrite each other, since cookies do not tell ports apart: signing in at one would sign you out of the other.
+  Browsers and the operating system resolve `*.localhost` to this machine without an entry in `/etc/hosts`.
+- **Why HTTPS.** MCP clients such as Claude Code send credentials over plain HTTP only to `localhost` itself.
+- **The certificate.** `etc/mkcert.sh` installs mkcert's CA in the local trust stores and writes `.certs/localhost.pem`
+  with the names given, next to `localhost`; the containers mount `.certs/`. Browsers, `curl` and Claude Code
+  trust it from there. `mcp-call.py` and `demo.sh` ask `mkcert -CAROOT` for the CA, because Python does not read
+  the system's store everywhere. On Linux the containers' users have to be able to read the key:
+  `chmod 644 ../../.certs/localhost-key.pem`.
+- **One address per party.** Inside the compose network each service listens on the same port and carries its
+  name as a network alias, so `https://globex.localhost:8089` means the same Keycloak in the browser and for the MCP
+  servers. A system's `url` is therefore also its issuer, and Keycloak fetches the server's keys from the JWKS URL
+  the admin API names. The containers trust mkcert's CA (`.certs/rootCA.pem`). A deployment where the server reaches
+  Keycloak at an internal address and needs a separate `issuer` is what
+  [split-deployment](../split-deployment/) shows.
 
 Iterating on the server: `docker-compose.dev.yml` mounts `target/quarkus-app` into a plain JDK image, no image build.
 IntelliJ: the `dynamic-systems: *` run configurations in `.run/` cover build + up, the dev stack, restart, demo, down.
@@ -29,14 +50,13 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ### 1. Register the system
 
 ```shell
-curl -s -X PUT localhost:8091/api/admin/systems/acme \
+curl -s -X PUT https://mcp-admin.localhost:8091/api/admin/systems/acme \
   -H 'Authorization: Bearer demo-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{
     "displayName": "ACME Corp.",
     "description": "ACME's Keycloak, administered through the MCP server",
-    "url": "http://keycloak:8080",
-    "issuer": "http://localhost:8090/realms/acme-dev",
+    "url": "https://acme.localhost:8090",
     "authRealm": "acme-dev",
     "clientId": "keycloak-mcp-server",
     "clientAuth": "private_key_jwt",
@@ -50,8 +70,10 @@ curl -s -X PUT localhost:8091/api/admin/systems/acme \
 - Stored in `kc_mcp_system`; key pair generated in `kc_mcp_signing_key`, encrypted with `KC_MCP_STORAGE_SECRET_KEY`
 - `signingKey`: `generate` (new pair), `existing` (already in the vault), absent (existing, else generate)
 - Response: no secrets; `signingKey.kid`, `signingKey.jwksPath`, `signingKey.jwksUrl`, `entries`
-- JWKS URL for Keycloak inside compose: `http://mcp:8081` + `signingKey.jwksPath` (`/auth/keys/<id>/jwks.json`, the
-  system's id: a later `acme` gets another)
+- JWKS URL for Keycloak: `signingKey.jwksUrl`, `https://mcp.localhost:8092/auth/keys/<id>/jwks.json` (the system's
+  id: a later `acme` gets another). It names `mcp-users`, not the admin server that answered:
+  `KC_MCP_ADMIN_JWKS_HOSTNAME` says where the keys are fetched from. Every server on the database serves them; the
+  one people use is the one a Keycloak can be expected to reach, and it leaves the admin server internal
 - `url` must match `KC_MCP_ALLOWED_HOSTS`
 - `authRealm`: the realm of the system's client, here `acme-dev` itself. In delegation mode `exchange` the client must
   live in the realm the users log in at, because Keycloak exchanges a token only in the realm that issued it. One
@@ -63,9 +85,9 @@ curl -s -X PUT localhost:8091/api/admin/systems/acme \
 Bearer: the static `KC_MCP_ADMIN_TOKEN`, or an access token of a master realm admin:
 
 ```shell
-TOKEN=$(curl -s http://localhost:8090/realms/master/protocol/openid-connect/token \
+TOKEN=$(curl -s https://acme.localhost:8090/realms/master/protocol/openid-connect/token \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
-curl -s localhost:8091/api/admin/systems \
+curl -s https://mcp-admin.localhost:8091/api/admin/systems \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
@@ -92,8 +114,8 @@ without any role in its scope and without `kc-admin-api`. Its tokens open the MC
   default scope `kc-admin-api` (Keycloak 26.8.2+ Admin API audience check), `standard.token.exchange.enabled=true`
 - `kcadm` fills in the JWKS URL, grants the service account `realm-management` `realm-admin`, adds the role to the
   client's scope (full scope stays off)
-- The service account's role is what `mcp` (:8091) acts with. The role scope does two jobs: it lets the role into the
-  service account's tokens, and it caps the delegated tokens of `mcp-users` (:8092), where a user's roles count as far
+- The service account's role is what `mcp` (`mcp-admin.localhost`) acts with. The role scope does two jobs: it lets the role into the
+  service account's tokens, and it caps the delegated tokens of `mcp-users` (`mcp.localhost`), where a user's roles count as far
   as they lie within it. With `realm-admin` in the scope a user keeps all of their own roles and gains none
 - `init/grant-delegation.sh` (run inside the Keycloak container) grants the client the Admin Permissions `delegate`
   permission on the realm's users. A realm import cannot carry it. Without it Keycloak drops the delegation scope
@@ -108,8 +130,8 @@ without any role in its scope and without `kc-admin-api`. Its tokens open the MC
 Service account, no login:
 
 ```
-./mcp-call.py http://localhost:8091/mcp/systems/acme/acme-dev whoami
-./mcp-call.py http://localhost:8091/mcp/systems/acme/acme-dev keycloak_user_search '{"search": "alice"}'
+./mcp-call.py https://mcp-admin.localhost:8091/mcp/systems/acme/acme-dev whoami
+./mcp-call.py https://mcp-admin.localhost:8091/mcp/systems/acme/acme-dev keycloak_user_search '{"search": "alice"}'
 ```
 
 Users: login at the entry's realm with the consent page ("Allow keycloak-mcp-server to act on your behalf?"). The
@@ -118,13 +140,13 @@ Keycloak enforces the user's roles, the audit names the person. `mcp-call.py --l
 form, consent page, code with PKCE), because a client that requires consent refuses the password grant:
 
 ```
-./mcp-call.py http://localhost:8092/mcp/systems/acme/acme-dev whoami                          # 401 + WWW-Authenticate … resource_metadata
-curl -s localhost:8092/.well-known/oauth-protected-resource/mcp/systems/acme/acme-dev | jq .  # realm acme-dev, scope delegation:client:keycloak-mcp-server
-./mcp-call.py --login alice:alice-demo http://localhost:8092/mcp/systems/acme/acme-dev whoami # delegation: {mode: exchange, consented: true, actor: keycloak-mcp-server}
-./mcp-call.py --login alice:alice-demo --scope openid http://localhost:8092/mcp/systems/acme/acme-dev whoami   # delegation_failed: no consent
-./mcp-call.py --login sam:sam-demo     http://localhost:8092/mcp/systems/acme/acme-dev keycloak_user_set_enabled '{"id": "bob", "enabled": true}'   # forbidden
-./mcp-call.py --login dave:dave-demo   http://localhost:8092/mcp/systems/acme/acme-dev keycloak_client_list '{}'
-./mcp-call.py --login dave:dave-demo   http://localhost:8092/mcp/systems/acme/acme-dev keycloak_user_delete '{"id": "bob", "username": "bob"}'      # forbidden
+./mcp-call.py https://mcp.localhost:8092/mcp/systems/acme/acme-dev whoami                          # 401 + WWW-Authenticate … resource_metadata
+curl -s https://mcp.localhost:8092/.well-known/oauth-protected-resource/mcp/systems/acme/acme-dev | jq .  # realm acme-dev, scope delegation:client:keycloak-mcp-server
+./mcp-call.py --login alice:alice-demo https://mcp.localhost:8092/mcp/systems/acme/acme-dev whoami # delegation: {mode: exchange, consented: true, actor: keycloak-mcp-server}
+./mcp-call.py --login alice:alice-demo --scope openid https://mcp.localhost:8092/mcp/systems/acme/acme-dev whoami   # delegation_failed: no consent
+./mcp-call.py --login sam:sam-demo     https://mcp.localhost:8092/mcp/systems/acme/acme-dev keycloak_user_set_enabled '{"id": "bob", "enabled": true}'   # forbidden
+./mcp-call.py --login dave:dave-demo   https://mcp.localhost:8092/mcp/systems/acme/acme-dev keycloak_client_list '{}'
+./mcp-call.py --login dave:dave-demo   https://mcp.localhost:8092/mcp/systems/acme/acme-dev keycloak_user_delete '{"id": "bob", "username": "bob"}'      # forbidden
 ```
 
 LLM clients (LM Studio, Claude): `mcp.json` (service account), `mcp-oauth.json` (login at `acme-dev` via `mcp-consumer`;
@@ -133,52 +155,47 @@ Claude Code, after `./demo.sh` has created the realm and registered `acme`:
 
 ```shell
 claude mcp add --transport http --client-id mcp-consumer --callback-port 33418 keycloak-acme-dev \
-  http://localhost:8092/mcp/systems/acme/acme-dev
+  https://mcp.localhost:8092/mcp/systems/acme/acme-dev
 ```
 
-The address is the entry, not `http://localhost:8092/mcp`: this server knows its systems from the database only, so
+The address is the entry, not `https://mcp.localhost:8092/mcp`: this server knows its systems from the database only, so
 callers log in at the realm of one of them, and the bare `/mcp` answers `entry_required`.
 
-The [management UI](../../docs/management-ui.md) of the first server: <http://localhost:8091/ui/>, sign in as
+The [management UI](../../docs/management-ui.md) of the first server: <https://mcp-admin.localhost:8091/ui/>, sign in as
 `admin` / `admin` of the master realm. The one-shot job `keycloak-init` creates the public client `keycloak-mcp-ui`
 there when the stack starts, so the UI works before `demo.sh` has run; it is empty then. After `demo.sh`, *Systems*
 shows `acme` and `globex` and lets you add or change systems, *Audit* lists the tool calls of both servers.
-It runs in dev mode without HTTPS, for one person's machine only.
+It is served over HTTPS like the rest, so its session cookie is `Secure` and the server runs without dev mode.
 
 ### 5. A second Keycloak: adopting realms
 
-`keycloak-globex` (<http://127.0.0.1:8089>) is another company's Keycloak. Its address is `127.0.0.1`, not
-`localhost`, on purpose: both Keycloaks have a realm `master`, and under one host name their login cookies would
-overwrite each other (cookies do not tell ports apart). A name such as `globex.localhost` would do the same, but MCP
-clients like Claude Code send credentials over plain http only to `localhost`, `127.0.0.1` and `::1`. It starts with the realms
+`keycloak-globex` (<https://globex.localhost:8089>) is another company's Keycloak. It starts with the realms
 `globex-staff`, `globex-customers`, `globex-partners` and `globex-legacy` (disabled), imported from
 `realms-globex/`, and has no client for the MCP server. Step 5 of `demo.sh` goes the way an administrator would:
 
 ```shell
 A='Authorization: Bearer demo-admin-token'
 # a: register it; the client will live in master, no realm is named yet
-curl -s -X PUT localhost:8091/api/admin/systems/globex -H "$A" -H 'Content-Type: application/json' -d '{
-    "displayName": "Globex Corp.", "url": "http://keycloak-globex:8080",
-    "issuer": "http://127.0.0.1:8089/realms/master", "authRealm": "master",
+curl -s -X PUT https://mcp-admin.localhost:8091/api/admin/systems/globex -H "$A" -H 'Content-Type: application/json' -d '{
+    "displayName": "Globex Corp.", "url": "https://globex.localhost:8089", "authRealm": "master",
     "clientId": "keycloak-mcp-server", "clientAuth": "private_key_jwt", "version": "26.8.2",
     "signingKey": "generate"}' | jq .
 # b: the client for that Keycloak, as JSON and as a kcadm script; run the script there
-curl -s -H "$A" 'localhost:8091/api/admin/systems/globex/client-setup?roles=admin&credential=public-key' \
+curl -s -H "$A" 'https://mcp-admin.localhost:8091/api/admin/systems/globex/client-setup?roles=admin' \
   | jq -r .script | ./adopt-setup.sh
 # c: the realms its service account sees
-curl -s -H "$A" localhost:8091/api/admin/systems/globex/keycloak-realms | jq -c '.realms[] | {name, displayName, adopted}'
+curl -s -H "$A" https://mcp-admin.localhost:8091/api/admin/systems/globex/keycloak-realms | jq -c '.realms[] | {name, displayName, adopted}'
 # d: adopt two; they become the system's allowlist
-curl -s -X POST localhost:8091/api/admin/systems/globex/adoption -H "$A" -H 'Content-Type: application/json' \
+curl -s -X POST https://mcp-admin.localhost:8091/api/admin/systems/globex/adoption -H "$A" -H 'Content-Type: application/json' \
   -d '{"realms": ["globex-staff", "globex-customers"], "restrict": true}' | jq .
 # e: an adopted realm answers at its own entry
-./mcp-call.py http://localhost:8091/mcp/systems/globex/globex-staff keycloak_user_search '{"search": "*"}'
+./mcp-call.py https://mcp-admin.localhost:8091/mcp/systems/globex/globex-staff keycloak_user_search '{"search": "*"}'
 ```
 
 - The server creates nothing in Keycloak. `client-setup` answers the client and a script; `adopt-setup.sh` runs
   that script with the `kcadm.sh` of the Keycloak container, logged in as `admin`
-- `credential=public-key` copies the server's public key into the client. The JWKS URL the server names for itself
-  is `http://localhost:8091/...`, which a Keycloak in a container cannot fetch; with `jwks-url` the script's URL
-  would need `http://mcp:8081` instead
+- The client names the server's JWKS URL, and Globex' Keycloak fetches the key from there. For a Keycloak that
+  cannot reach the server, `credential=public-key` copies the public key into the client instead
 - `roles=admin` gives the service account the master `admin` role: it sees every realm, later ones too.
   `roles=read` or `manage` with `realms=globex-staff,globex-customers` gives only those realms' roles, and the others
   do not even show up in step c
@@ -186,27 +203,24 @@ curl -s -X POST localhost:8091/api/admin/systems/globex/adoption -H "$A" -H 'Con
   it to that selection (409 `would_restrict` without it)
 - `globex-partners` then answers `realm_not_allowed`
 
-**In the management UI.** <http://localhost:8091/ui/> (`admin` / `admin`), system `globex`, tab *Adopt*: the two
+**In the management UI.** <https://mcp-admin.localhost:8091/ui/> (`admin` / `admin`), system `globex`, tab *Adopt*: the two
 realms left over, `globex-partners` and the disabled `globex-legacy`, are there to adopt, and the adopted ones to
 unadopt. To do all of it in the UI, run `./demo.sh --skip-adopt` (steps 1 to 4 still register `acme`), then:
 
-1. *Systems* → *New*: URL `http://keycloak-globex:8080`, issuer `http://127.0.0.1:8089/realms/master`, auth realm
-   `master`, client authentication *Signed JWT*, client id `keycloak-mcp-server`. The URL is how the server reaches
-   Keycloak, inside the compose network.
-2. Tab *Adopt* → *1. Client in Keycloak*: key credential *public key*, copy the script, then
-   `pbpaste | ./adopt-setup.sh`.
+1. *Systems* → *New*: URL `https://globex.localhost:8089`, auth realm `master`, client authentication
+   *Signed JWT*, client id `keycloak-mcp-server`. No issuer: it is the URL.
+2. Tab *Adopt* → *1. Client in Keycloak*: copy the script, then `pbpaste | ./adopt-setup.sh`.
 3. *2. Realms in Keycloak* → *Load*, then *3. Adopt* a selection, or every realm including later ones.
 
-**Globex' own people, with their own roles.** The steps above use the service account (port 8091). On port 8092
+**Globex' own people, with their own roles.** The steps above use the service account (`mcp-admin.localhost`). On `mcp.localhost`
 a user of Globex logs in at the master realm of Globex' Keycloak instead, and every call runs with a delegated token
 that carries that user's roles:
 
 ```shell
 ./globex-login.sh
 claude mcp add --transport http --client-id mcp-consumer --callback-port 33418 keycloak-globex \
-  http://localhost:8092/mcp/systems/globex
-KEYCLOAK_URL=http://127.0.0.1:8089 ./mcp-call.py --login globex-support:globex-support-demo \
-  http://localhost:8092/mcp/systems/globex whoami
+  https://mcp.localhost:8092/mcp/systems/globex
+./mcp-call.py --login globex-support:globex-support-demo https://mcp.localhost:8092/mcp/systems/globex whoami
 ```
 
 - `globex-login.sh` creates in Globex' master realm what a login with delegation needs: the public client
@@ -225,7 +239,7 @@ KEYCLOAK_URL=http://127.0.0.1:8089 ./mcp-call.py --login globex-support:globex-s
   argument of each call (`"realm": "globex-staff"`).
 
 Worth trying: *Load* before the script ran (`token_refused`); rename a realm in Globex' admin console
-(<http://127.0.0.1:8089/admin>) and reload (*renamed from*); delete one (*not listed*).
+(<https://globex.localhost:8089/admin>) and reload (*renamed from*); delete one (*not listed*).
 `docker compose down` throws Globex' Keycloak away with the client in it; the system and its key stay in
 PostgreSQL, so the next `./demo.sh` creates the client again with the same key. More:
 [Adopting a Keycloak's realms](../../docs/systems.md#adopting-a-keycloaks-realms).

@@ -103,6 +103,11 @@ public class HttpsInterceptorFactory implements ConfigSourceInterceptorFactory {
         if (hostname != null) {
             target.put("quarkus.oidc.resource-metadata.resource", PublicHostname.normalize(hostname));
         }
+        String jwksHostname = option(ctx, "admin.jwks-hostname");
+        if (jwksHostname != null) {
+            // only checked here, so that a bad value stops the start like kc-mcp.hostname
+            PublicHostname.normalize(PublicHostname.JWKS_PROPERTY, jwksHostname);
+        }
         putIfSet(target, "quarkus.http.ssl-port", option(ctx, "https-port"));
         String http = option(ctx, "http-enabled");
         if (http != null) {

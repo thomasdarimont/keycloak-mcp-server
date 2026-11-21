@@ -58,6 +58,16 @@ depend on the headers of each request:
 - the `resource_metadata` link of the 401 challenge, which tells MCP clients where to start their login
 - the JWKS URLs the admin API reports
 
+The JWKS URLs can name another address: `kc-mcp.admin.jwks-hostname`. Every instance on the same database serves the
+keys of every system, so an admin instance that stays internal hands out the address of the MCP instances, the one a
+Keycloak can be expected to reach:
+
+```properties
+# on the admin instance
+kc-mcp.hostname=https://mcp-admin.internal.example.com
+kc-mcp.admin.jwks-hostname=https://mcp.example.com
+```
+
 Its host is also accepted by the DNS rebinding check, so an anonymous server behind a proxy needs no
 `kc-mcp.mcp.dns-rebinding-allowed-hosts` entry for it.
 

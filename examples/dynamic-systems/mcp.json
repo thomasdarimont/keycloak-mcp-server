@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "keycloak-acme-dev": {
-      "url": "http://localhost:8091/mcp/systems/acme/acme-dev"
+      "url": "https://mcp-admin.localhost:8091/mcp/systems/acme/acme-dev"
     }
   }
 }

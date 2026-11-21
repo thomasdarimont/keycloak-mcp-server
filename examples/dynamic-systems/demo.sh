@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# The whole flow, step by step. Needs the stack up (docker compose up -d --build), curl, jq and python3.
+# The whole flow, step by step. Needs the certificate (../../etc/mkcert.sh, see README.md), the stack up (docker compose up -d --build),
+# curl, jq and python3.
 #
 #   1. register the system "acme" in the MCP server (admin API -> PostgreSQL, key pair generated in the database vault)
 #   2. create the realm acme-dev with the public mcp-consumer client and the demo users
 #   3. create the keycloak-mcp-server client in that realm, JWKS URL = what the API answered: its service account
-#      administers the realm (port 8091), and the realm's users may let it act on their behalf (port 8092);
+#      administers the realm (mcp-admin.localhost), and the realm's users may let it act on their behalf (mcp.localhost);
 #      keycloak-mcp-admin and keycloak-mcp-ui in master, for the admin API and the management UI
-#   4. call tools: as the service account (port 8091) and as the realm's users (port 8092)
-#   5. a second Keycloak (:8089) with four realms of its own: register it as the system "globex", create the
+#   4. call tools: as the service account (mcp-admin.localhost) and as the realm's users (mcp.localhost)
+#   5. a second Keycloak (globex.localhost) with four realms of its own: register it as the system "globex", create the
 #      server's client there with the setup script the admin API generates, list its realms, adopt two of them and
 #      call a tool in one; the other two are left to adopt in the management UI (system globex, tab Adopt)
 #
@@ -15,8 +16,13 @@
 #   ./demo.sh --skip-adopt    without step 5, to do all of it in the management UI (README.md, "Adopting realms")
 set -euo pipefail
 cd "$(dirname "$0")"
-MCP=http://localhost:8091
-MCP_INTERNAL=http://mcp:8081                       # how Keycloak reaches the MCP server inside the compose network
+MCP=https://mcp-admin.localhost:8091                    # admin API, management UI, calls as the service account
+MCP_USERS=https://mcp.localhost:8092                    # people log in, calls with a delegated token
+ACME=https://acme.localhost:8090                        # the first Keycloak
+GLOBEX_KEYCLOAK=https://globex.localhost:8089           # Globex' Keycloak
+CA="$(mkcert -CAROOT 2>/dev/null)/rootCA.pem"
+[ -f "$CA" ] || { echo "no mkcert CA: run ../../etc/mkcert.sh with the host names first (README.md)" >&2; exit 1; }
+export CURL_CA_BUNDLE="$CA" MCP_CALL_CA="$CA"      # curl and mcp-call.py trust mkcert's CA, whatever store they read
 ADMIN_TOKEN=${KC_MCP_ADMIN_TOKEN:-demo-admin-token}
 KCADM="docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh"
 
@@ -38,16 +44,16 @@ admin() {
 }
 
 # docker compose up returns before the servers listen
-for _ in $(seq 1 60); do curl -s -o /dev/null "$MCP/mcp" && break; sleep 1; done
-curl -s -o /dev/null "$MCP/mcp" || { echo "no MCP server at $MCP: docker compose up -d --build first" >&2; exit 1; }
+up() { case "$(curl -s -o /dev/null -w '%{http_code}' "$1/mcp")" in 000|502|503) return 1 ;; *) return 0 ;; esac; }
+for _ in $(seq 1 60); do up "$MCP" && up "$MCP_USERS" && break; sleep 1; done
+up "$MCP" && up "$MCP_USERS" || { echo "no MCP server at $MCP or $MCP_USERS: docker compose up -d --build first" >&2; exit 1; }
 
 step "1. register the system 'acme' (stored in PostgreSQL, key pair generated in the database vault)"
 SYSTEM=$(admin -X PUT "$MCP/api/admin/systems/acme" -d @- <<'JSON'
 {
   "displayName": "ACME Corp.",
   "description": "ACME's Keycloak, administered through the MCP server",
-  "url": "http://keycloak:8080",
-  "issuer": "http://localhost:8090/realms/acme-dev",
+  "url": "https://acme.localhost:8090",
   "authRealm": "acme-dev",
   "clientId": "keycloak-mcp-server",
   "clientAuth": "private_key_jwt",
@@ -61,12 +67,12 @@ JSON
 echo "$SYSTEM" | jq .
 if echo "$SYSTEM" | jq -e '.error == "signing_key_exists"' >/dev/null; then
   echo "(already registered with a key; replacing the settings, keeping the key)"
-  SYSTEM=$(admin -X PUT "$MCP/api/admin/systems/acme" -d "$(echo '{}' | jq '. + {"displayName":"ACME Corp.","description":"ACME'"'"'s Keycloak, administered through the MCP server","url":"http://keycloak:8080","issuer":"http://localhost:8090/realms/acme-dev","authRealm":"acme-dev","defaultRealm":"acme-dev","allowedRealms":["acme-dev"],"version":"26.8.2","signingKey":"existing"}')")
+  SYSTEM=$(admin -X PUT "$MCP/api/admin/systems/acme" -d "$(echo '{}' | jq '. + {"displayName":"ACME Corp.","description":"ACME'"'"'s Keycloak, administered through the MCP server","url":"https://acme.localhost:8090","authRealm":"acme-dev","defaultRealm":"acme-dev","allowedRealms":["acme-dev"],"version":"26.8.2","signingKey":"existing"}')")
 fi
-JWKS_PATH=$(echo "$SYSTEM" | jq -r .signingKey.jwksPath)
-JWKS_URL="$MCP_INTERNAL$JWKS_PATH"
-echo "JWKS for Keycloak: $JWKS_URL  (from the host: $MCP$JWKS_PATH)"
-curl -s "$MCP$JWKS_PATH" | jq -c '.keys[0] | {kty, alg, kid}'
+# the address is the same for Keycloak inside the compose network and from the host
+JWKS_URL=$(echo "$SYSTEM" | jq -r .signingKey.jwksUrl)
+echo "JWKS for Keycloak: $JWKS_URL"
+curl -s "$JWKS_URL" | jq -c '.keys[0] | {kty, alg, kid}'
 
 step "2. the realm acme-dev: public client mcp-consumer (consent required), groups with realm-management roles, users"
 $KCADM config credentials --server http://localhost:8080 --realm master --user admin --password admin >/dev/null
@@ -86,10 +92,10 @@ if [ -z "$CLIENT_ID" ]; then
 else
   echo "client keycloak-mcp-server exists ($CLIENT_ID)"
 fi
-# realm-admin of acme-dev: what the server on port 8091 does with this service account ...
+# realm-admin of acme-dev: what the server mcp-admin.localhost does with this service account ...
 $KCADM add-roles -r acme-dev --uusername service-account-keycloak-mcp-server --cclientid realm-management --rolename realm-admin
 # ... and the client's role scope lets the role into its tokens (full scope allowed is off, as Keycloak asks). The
-# same scope caps the delegated tokens of port 8092: a user's roles count as far as they lie within it
+# same scope caps the delegated tokens of mcp.localhost: a user's roles count as far as they lie within it
 REALM_MGMT_ID=$($KCADM get clients -r acme-dev -q clientId=realm-management --fields id --format csv --noquotes | head -1)
 $KCADM get "clients/$REALM_MGMT_ID/roles/realm-admin" -r acme-dev --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KCADM create "clients/$CLIENT_ID/scope-mappings/clients/$REALM_MGMT_ID" -r acme-dev -f - >/dev/null
@@ -111,7 +117,7 @@ fi
 $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KCADM create "clients/$ADMIN_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
 # admin-cli tokens are lightweight in Keycloak 26 (no roles, no audience): the admin API refuses them, this client's work
-TOKEN_URL=http://localhost:8090/realms/master/protocol/openid-connect/token
+TOKEN_URL=$ACME/realms/master/protocol/openid-connect/token
 ADMIN_AT=$(curl -s "$TOKEN_URL" \
   -d 'grant_type=password&client_id=keycloak-mcp-admin&username=admin&password=admin' | jq -r .access_token)
 curl -sS "$MCP/api/admin/systems" \
@@ -136,15 +142,15 @@ $KCADM get roles/admin -r master --fields id,name | sed 's/^{/[{/; s/}$/}]/' \
   | $KCADM create "clients/$UI_CLIENT_ID/scope-mappings/realm" -r master -f - >/dev/null
 echo "management UI: $MCP/ui/ (admin / admin)"
 
-step "4a. as the service account (port 8091): the entry /mcp/systems/acme/acme-dev"
+step "4a. as the service account ($MCP): the entry /mcp/systems/acme/acme-dev"
 ./mcp-call.py "$MCP/mcp/systems/acme/acme-dev" whoami | jq -c '{system, entry, keycloakCallsRunAs, server: .server.version}'
 ./mcp-call.py "$MCP/mcp/systems/acme/acme-dev" keycloak_user_search '{"search": "alice"}' | jq -c '[.items[]?.username] // .'
 
-step "4b. as the realm's users (port 8092): alice may do everything, sam reads, dave manages clients"
-U=http://localhost:8092/mcp/systems/acme/acme-dev
+step "4b. as the realm's users ($MCP_USERS): alice may do everything, sam reads, dave manages clients"
+U=$MCP_USERS/mcp/systems/acme/acme-dev
 # what an MCP client does first: the entry answers 401 and names its metadata, which names the realm and the scope
 ./mcp-call.py "$U" whoami || true
-curl -s localhost:8092/.well-known/oauth-protected-resource/mcp/systems/acme/acme-dev | jq -c '{authorization_servers, scopes_supported}'
+curl -s "$MCP_USERS/.well-known/oauth-protected-resource/mcp/systems/acme/acme-dev" | jq -c '{authorization_servers, scopes_supported}'
 ./mcp-call.py --login alice:alice-demo "$U" whoami | jq -c '{caller: .caller.username, keycloakCallsRunAs, delegation, roles: (.roles["acme-dev"] | length)}'
 export MCP_CALL_QUIET=1                             # the login and consent steps were shown once
 ./mcp-call.py --login alice:alice-demo "$U" keycloak_user_set_enabled '{"id": "bob", "enabled": true}' | jq -c '{username, enabled} // .'
@@ -155,8 +161,8 @@ export MCP_CALL_QUIET=1                             # the login and consent step
 ./mcp-call.py --login alice:alice-demo "$U" keycloak_user_set_enabled '{"id": "bob", "enabled": false}' | jq -c '{username, enabled} // .'
 
 if [ -z "$SKIP_ADOPT" ]; then
-  step "5a. a second Keycloak, Globex' (:8089): registered as the system 'globex', its client lives in master"
-  GLOBEX_SYSTEM='{"displayName":"Globex Corp.","description":"Globex\u0027 Keycloak, its realms adopted one by one","url":"http://keycloak-globex:8080","issuer":"http://127.0.0.1:8089/realms/master","authRealm":"master","clientId":"keycloak-mcp-server","clientAuth":"private_key_jwt","version":"26.8.2"}'
+  step "5a. a second Keycloak, Globex' ($GLOBEX_KEYCLOAK): registered as the system 'globex', its client lives in master"
+  GLOBEX_SYSTEM='{"displayName":"Globex Corp.","description":"Globex\u0027 Keycloak, its realms adopted one by one","url":"https://globex.localhost:8089","authRealm":"master","clientId":"keycloak-mcp-server","clientAuth":"private_key_jwt","version":"26.8.2"}'
   GLOBEX=$(admin -X PUT "$MCP/api/admin/systems/globex" -d "$(jq -c '. + {signingKey: "generate"}' <<<"$GLOBEX_SYSTEM")")
   if jq -e '.error == "signing_key_exists"' >/dev/null <<<"$GLOBEX"; then
     echo "(already registered with a key; keeping the key and the realms adopted so far)"
@@ -175,9 +181,9 @@ if [ -z "$SKIP_ADOPT" ]; then
   else
     echo "before the client exists, listing the realms answers:"
     admin "$MCP/api/admin/systems/globex/keycloak-realms" | jq -c '{error}'
-    # roles=admin: the master admin role, every realm; credential=public-key: the key is copied into the client,
-    # for a Keycloak that cannot fetch it from the server's JWKS URL
-    SETUP=$(admin "$MCP/api/admin/systems/globex/client-setup?roles=admin&credential=public-key")
+    # roles=admin: the master admin role, every realm. The client names the server's JWKS URL, which Globex'
+    # Keycloak fetches the key from; credential=public-key would copy the key in, for a Keycloak that cannot reach it
+    SETUP=$(admin "$MCP/api/admin/systems/globex/client-setup?roles=admin")
     jq -c '{client: (.client | {clientId, clientAuthenticatorType, fullScopeAllowed}), roles: .roles.mode}' <<<"$SETUP"
     jq -r .script <<<"$SETUP" | ./adopt-setup.sh 2>&1 | sed '/^$/d'      # kcadm reports on stderr
   fi

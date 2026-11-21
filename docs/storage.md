@@ -140,7 +140,9 @@ table above.
 The two sides can also use two database users, so that the MCP instances cannot change what the admin side
 configured: they read systems, realms, secrets and keys, append audit rows and keep the CIBA approvals and the rate
 limit counts, nothing more. The admin instance owns the schema and runs the migrations; the MCP instances run with
-`quarkus.liquibase.migrate-at-start=false`, and the audit retention runs on the admin instance.
+`quarkus.liquibase.migrate-at-start=false`, and the audit retention runs on the admin instance. Every instance serves the
+JWKS of every system; `kc-mcp.admin.jwks-hostname` on the admin instance makes the JWKS URLs it hands out name the
+MCP instances, so no Keycloak needs a way to the admin instance.
 
 What the database user of the MCP instances needs, whatever the database; the admin instance's user owns the tables:
 

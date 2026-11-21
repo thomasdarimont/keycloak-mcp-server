@@ -97,14 +97,14 @@ public class AdminResource {
     @GET
     @Path("systems")
     public Map<String, Object> list(@Context UriInfo uri, @Context HttpHeaders headers) {
-        return admin.list(publicBase(config.hostname(), uri, headers));
+        return admin.list(jwksBase(config, uri, headers));
     }
 
     @GET
     @Path("systems/{alias}")
     public Map<String, Object> get(@PathParam("alias") String alias, @Context UriInfo uri,
             @Context HttpHeaders headers) {
-        return admin.get(alias, publicBase(config.hostname(), uri, headers));
+        return admin.get(alias, jwksBase(config, uri, headers));
     }
 
     @PUT
@@ -112,14 +112,14 @@ public class AdminResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response put(@PathParam("alias") String alias, Map<String, Object> body, @Context UriInfo uri,
             @Context HttpHeaders headers) {
-        return saved(admin.save(body, alias, publicBase(config.hostname(), uri, headers)));
+        return saved(admin.save(body, alias, jwksBase(config, uri, headers)));
     }
 
     @POST
     @Path("systems")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response post(Map<String, Object> body, @Context UriInfo uri, @Context HttpHeaders headers) {
-        return saved(admin.save(body, null, publicBase(config.hostname(), uri, headers)));
+        return saved(admin.save(body, null, jwksBase(config, uri, headers)));
     }
 
     @DELETE
@@ -133,7 +133,7 @@ public class AdminResource {
     @Path("systems/{alias}/signing-key")
     public Map<String, Object> rotate(@PathParam("alias") String alias,
             @QueryParam("dropPrevious") boolean dropPrevious, @Context UriInfo uri, @Context HttpHeaders headers) {
-        return admin.rotate(alias, publicBase(config.hostname(), uri, headers), dropPrevious);
+        return admin.rotate(alias, jwksBase(config, uri, headers), dropPrevious);
     }
 
     @GET
@@ -168,8 +168,7 @@ public class AdminResource {
     public Map<String, Object> clientSetup(@PathParam("alias") String alias, @QueryParam("roles") String roles,
             @QueryParam("realms") String realms, @QueryParam("credential") String credential,
             @QueryParam("kcadm") String kcadm, @Context UriInfo uri, @Context HttpHeaders headers) {
-        return adoption.clientSetup(alias, publicBase(config.hostname(), uri, headers), roles, splitList(realms),
-                credential, kcadm);
+        return adoption.clientSetup(alias, jwksBase(config, uri, headers), roles, splitList(realms), credential, kcadm);
     }
 
     @GET
@@ -289,8 +288,16 @@ public class AdminResource {
     }
 
     /**
-     * The base of the JWKS URL: {@code kc-mcp.hostname}; else scheme and host the caller
-     * used, {@code X-Forwarded-*} first (or let
+     * The base of the JWKS URL: {@code kc-mcp.admin.jwks-hostname}, else
+     * {@code kc-mcp.hostname}, else what the request says.
+     */
+    public static String jwksBase(McpServerConfig config, UriInfo uri, HttpHeaders headers) {
+        return publicBase(PublicHostname.jwks(config.admin().jwksHostname(), config.hostname()), uri, headers);
+    }
+
+    /**
+     * The base of a link: {@code kc-mcp.hostname}; else scheme and host the caller used,
+     * {@code X-Forwarded-*} first (or let
      * {@code quarkus.http.proxy.proxy-address-forwarding} fold them into the request),
      * else the request's own.
      */

@@ -187,8 +187,9 @@ the public key from a JWKS the server publishes per system. `examples/dynamic-sy
    ```
 
    The answer carries no secret: `signingKey.kid`, `signingKey.jwksPath` (`/auth/keys/<id>/jwks.json`) and
-   `signingKey.jwksUrl`, the full URL as the caller reached the server, so an internal hostname needs
-   `X-Forwarded-Proto` and `X-Forwarded-Host` from the proxy to come out right. The JWKS is public and lists the
+   `signingKey.jwksUrl`, the full URL: at `kc-mcp.admin.jwks-hostname` when set (the instances Keycloak reaches,
+   where the admin API runs on an internal one), else at `kc-mcp.hostname`, else as the caller reached the server,
+   so an internal hostname needs `X-Forwarded-Proto` and `X-Forwarded-Host` from the proxy to come out right. The JWKS is public and lists the
    current key, after a rotation also the retired one for the grace period.
 3. **Client in Keycloak**, in the realm named as `authRealm`: a confidential client `keycloak-mcp-server` with
    *Service accounts roles* on and the `realm-management` roles (or master `admin`) it needs; under *Credentials*
