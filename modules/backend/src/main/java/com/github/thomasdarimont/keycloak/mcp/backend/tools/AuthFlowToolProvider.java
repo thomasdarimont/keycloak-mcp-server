@@ -1,8 +1,10 @@
 package com.github.thomasdarimont.keycloak.mcp.backend.tools;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -541,17 +543,47 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
         }
     }
 
+    /**
+     * An execution or sub-flow was added and could not be found again: without its id the
+     * requirement asked for cannot be set, and with none asked for only the id is
+     * missing.
+     */
+    private static ToolResult addedUnread(ToolCall call, RuntimeException e, String applied, Object... kv) {
+        if (call.has("requirement")) {
+            return ToolResult.partiallyApplied(applied, "set its requirement to " + call.str("requirement"), e, kv);
+        }
+        Object[] all = Arrays.copyOf(kv, kv.length + 2);
+        all[kv.length] = "warning";
+        all[kv.length + 1] = ToolResult.readBackFailed(e);
+        return ToolResult.done(applied.substring(0, 1).toUpperCase(Locale.ROOT) + applied.substring(1), all);
+    }
+
     ToolResult executionAdd(ToolCall call) {
         String flowAlias = flowOrSubflow(call, call.str("flowAlias"));
         String providerId = call.str("providerId");
         flowsOf(call).addExecution(flowAlias, Map.of("provider", providerId));
-        AuthenticationExecutionInfoRepresentation added = lastExecution(call, flowAlias,
-                e -> providerId.equals(e.getProviderId()) && e.getLevel() == 0);
-        if (added == null) {
-            added = lastExecution(call, flowAlias, e -> providerId.equals(e.getProviderId()));
+        AuthenticationExecutionInfoRepresentation added;
+        try {
+            added = lastExecution(call, flowAlias, e -> providerId.equals(e.getProviderId()) && e.getLevel() == 0);
+            if (added == null) {
+                added = lastExecution(call, flowAlias, e -> providerId.equals(e.getProviderId()));
+            }
+        }
+        catch (RuntimeException e) {
+            return addedUnread(call, e, "execution '" + providerId + "' added to flow '" + flowAlias + "'", "flowAlias",
+                    flowAlias, "providerId", providerId);
         }
         if (added != null && call.has("requirement")) {
-            setRequirement(call, flowAlias, added, call.str("requirement"));
+            try {
+                setRequirement(call, flowAlias, added, call.str("requirement"));
+            }
+            catch (RuntimeException e) {
+                return ToolResult.partiallyApplied(
+                        "execution '" + providerId + "' added to flow '" + flowAlias + "' with requirement "
+                                + added.getRequirement(),
+                        "set its requirement to " + call.str("requirement"), e, "flowAlias", flowAlias, "providerId",
+                        providerId, "executionId", added.getId());
+            }
         }
         return ToolResult.done("Execution added", "flowAlias", flowAlias, "providerId", providerId, "executionId",
                 added == null ? null : added.getId(), "requirement",
@@ -570,10 +602,26 @@ public class AuthFlowToolProvider extends AbstractToolProvider {
             data.put("provider", "registration-page-form");
         }
         flowsOf(call).addExecutionFlow(parentAlias, data);
-        AuthenticationExecutionInfoRepresentation added = lastExecution(call, parentAlias,
-                e -> Boolean.TRUE.equals(e.getAuthenticationFlow()) && alias.equals(e.getDisplayName()));
+        AuthenticationExecutionInfoRepresentation added;
+        try {
+            added = lastExecution(call, parentAlias,
+                    e -> Boolean.TRUE.equals(e.getAuthenticationFlow()) && alias.equals(e.getDisplayName()));
+        }
+        catch (RuntimeException e) {
+            return addedUnread(call, e, "sub-flow '" + alias + "' added to flow '" + parentAlias + "'",
+                    "parentFlowAlias", parentAlias, "alias", alias);
+        }
         if (added != null && call.has("requirement")) {
-            setRequirement(call, parentAlias, added, call.str("requirement"));
+            try {
+                setRequirement(call, parentAlias, added, call.str("requirement"));
+            }
+            catch (RuntimeException e) {
+                return ToolResult.partiallyApplied(
+                        "sub-flow '" + alias + "' added to flow '" + parentAlias + "' with requirement "
+                                + added.getRequirement(),
+                        "set its requirement to " + call.str("requirement"), e, "parentFlowAlias", parentAlias, "alias",
+                        alias, "executionId", added.getId());
+            }
         }
         return ToolResult.done("Sub-flow added", "parentFlowAlias", parentAlias, "alias", alias, "executionId",
                 added == null ? null : added.getId());

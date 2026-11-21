@@ -49,9 +49,34 @@ public record ToolResult(boolean isError, Object payload) {
         return done(message, all);
     }
 
+    /**
+     * The result of a change in several steps of which a later one failed: an error,
+     * because what was asked for is not in place, that names what is. Without it the
+     * caller would take the call for one that changed nothing and repeat it.
+     *
+     * @param applied what was changed in Keycloak before the failure
+     * @param notApplied the step that failed
+     */
+    public static ToolResult partiallyApplied(String applied, String notApplied, RuntimeException cause, Object... kv) {
+        Object[] all = Arrays.copyOf(kv, kv.length + 4);
+        all[kv.length] = "applied";
+        all[kv.length + 1] = applied;
+        all[kv.length + 2] = "notApplied";
+        all[kv.length + 3] = notApplied;
+        return error("partially_applied",
+                "Only part of the change was made. Done: " + applied + ". Not done: " + notApplied + " (" + why(cause)
+                        + "). Do not repeat the whole call: tell the user, then finish or undo the"
+                        + " rest with the tool for that step.",
+                all);
+    }
+
+    private static String why(RuntimeException e) {
+        return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+    }
+
     /** What a result says when the change was made and the read after it failed. */
     public static String readBackFailed(RuntimeException e) {
-        String why = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        String why = why(e);
         return "The change was made, but its outcome could not be read afterwards (" + why
                 + "). Do not repeat the change; read the current state with a get or list tool.";
     }

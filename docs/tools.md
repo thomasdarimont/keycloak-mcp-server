@@ -42,6 +42,10 @@ How the server presents its tools to a model, which tools exist, and the prompts
   `defaultClientRoles`), so a dot or slash in a name cannot move a role to another client. All of a user's groups are
   read; what could not be read (a group, a composite) is named under `incomplete`. A change whose effective roles
   cannot be read afterwards still answers `ok` with a `warning` in their place.
+- A change says what it did even when it did not get through. A tool that reads back after its change answers `ok`
+  with a `warning` when only that read fails. A tool that changes Keycloak in two steps (a client scope and its realm
+  default type, an execution and its requirement, authorization scopes and their resource, not-before and its push)
+  answers `partially_applied` when the second fails, with `applied` and `notApplied`, so nobody repeats the first.
 
 - Cost: tools whose requests grow with the realm say so, `cost: per-item` or `heavy` plus a `costNote` in
   `search_tools` hits, and the note at the end of the description in `tools/list`. Per-item: `scope_mappings_get`

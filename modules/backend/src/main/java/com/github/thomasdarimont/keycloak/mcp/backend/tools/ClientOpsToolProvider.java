@@ -221,7 +221,15 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
         call.kc().save(full, call.realm(), "clients", c.getId());
         boolean pushed = full.getAdminUrl() != null && !full.getAdminUrl().isBlank();
         if (pushed) {
-            resource.pushRevocation();
+            try {
+                resource.pushRevocation();
+            }
+            catch (RuntimeException e) {
+                return ToolResult.partiallyApplied(
+                        "Keycloak no longer accepts tokens issued to the client before " + Views.iso(now * 1000L),
+                        "tell the client at " + full.getAdminUrl() + ", which may still accept them", e, "clientId",
+                        c.getClientId(), "notBefore", Views.iso(now * 1000L));
+            }
         }
         return ToolResult.done("Tokens issued to the client before now are no longer valid", "clientId",
                 c.getClientId(), "notBefore", Views.iso(now * 1000L), "pushedTo",

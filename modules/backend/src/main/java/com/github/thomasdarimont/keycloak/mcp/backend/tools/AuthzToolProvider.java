@@ -530,8 +530,8 @@ public class AuthzToolProvider extends AbstractToolProvider {
                 .orElse(null);
             if (found == null) {
                 created(authz.scopes().create(new ScopeRepresentation(name)));
-                found = authz.scopes().findByName(name);
                 createdScopes.add(name);
+                found = authz.scopes().findByName(name);
             }
             out.add(found);
         }
@@ -569,8 +569,19 @@ public class AuthzToolProvider extends AbstractToolProvider {
         AuthorizationResource authz = writable(call, c);
         ResourceRepresentation r = new ResourceRepresentation(call.str("name"));
         List<String> createdScopes = new ArrayList<>();
-        applyResource(call, authz, r, createdScopes);
-        String id = created(authz.resources().create(r));
+        String id;
+        try {
+            applyResource(call, authz, r, createdScopes);
+            id = created(authz.resources().create(r));
+        }
+        catch (RuntimeException e) {
+            if (createdScopes.isEmpty()) {
+                throw e;
+            }
+            return ToolResult.partiallyApplied("authorization scopes " + createdScopes + " created",
+                    "create the resource '" + r.getName() + "'", e, "clientId", c.getClientId(), "scopesCreated",
+                    createdScopes);
+        }
         return ToolResult.done("Authorization resource created", "clientId", c.getClientId(), "id", id, "name",
                 r.getName(), "scopesCreated", createdScopes);
     }
@@ -582,12 +593,23 @@ public class AuthzToolProvider extends AbstractToolProvider {
             .resource(findResource(authz, call.str("resource")).getId())
             .toRepresentation();
         List<String> createdScopes = new ArrayList<>();
-        List<String> changed = applyResource(call, authz, r, createdScopes);
-        if (changed.isEmpty()) {
-            return ToolResult.error("invalid_arguments",
-                    "Nothing to update: pass at least one field besides resource.");
+        List<String> changed;
+        try {
+            changed = applyResource(call, authz, r, createdScopes);
+            if (changed.isEmpty()) {
+                return ToolResult.error("invalid_arguments",
+                        "Nothing to update: pass at least one field besides resource.");
+            }
+            call.kc().save(r, call.realm(), "clients", c.getId(), "authz", "resource-server", "resource", r.getId());
         }
-        call.kc().save(r, call.realm(), "clients", c.getId(), "authz", "resource-server", "resource", r.getId());
+        catch (RuntimeException e) {
+            if (createdScopes.isEmpty()) {
+                throw e;
+            }
+            return ToolResult.partiallyApplied("authorization scopes " + createdScopes + " created",
+                    "update the resource '" + r.getName() + "'", e, "clientId", c.getClientId(), "scopesCreated",
+                    createdScopes);
+        }
         return ToolResult.done("Authorization resource updated", "clientId", c.getClientId(), "name", r.getName(),
                 "changed", changed, "scopesCreated", createdScopes);
     }

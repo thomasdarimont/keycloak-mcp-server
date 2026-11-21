@@ -205,7 +205,16 @@ public class RealmLifecycleToolProvider extends AbstractToolProvider {
         change.setRealm(r.getRealm());
         change.setNotBefore(now);
         realm.update(change);
-        GlobalRequestResult result = realm.pushRevocation();
+        GlobalRequestResult result;
+        try {
+            result = realm.pushRevocation();
+        }
+        catch (RuntimeException e) {
+            return ToolResult.partiallyApplied(
+                    "Keycloak no longer accepts tokens issued before " + Views.iso(now * 1000L),
+                    "tell the clients that have an admin URL, which may still accept them", e, "realm", call.realm(),
+                    "notBefore", Views.iso(now * 1000L));
+        }
         return ToolResult.done("Tokens issued before now are no longer valid", "realm", call.realm(), "notBefore",
                 Views.iso(now * 1000L), "clients", view(result));
     }

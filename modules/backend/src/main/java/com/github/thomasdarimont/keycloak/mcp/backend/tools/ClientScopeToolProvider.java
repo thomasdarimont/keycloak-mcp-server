@@ -377,11 +377,15 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
         return changed;
     }
 
-    /** Moves a scope to the realm default type asked for. */
-    private static void setRealmDefault(RealmResource realm, String scopeId, String type) {
+    /**
+     * Moves a scope to the realm default type asked for.
+     *
+     * @return the type it had before
+     */
+    private static String setRealmDefault(RealmResource realm, String scopeId, String type) {
         String now = realmDefaultOf(realm, scopeId);
         if (now.equals(type)) {
-            return;
+            return now;
         }
         switch (now) {
             case "default" -> realm.removeDefaultDefaultClientScope(scopeId);
@@ -390,12 +394,33 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
                 // not a realm default yet
             }
         }
-        switch (type) {
-            case "default" -> realm.addDefaultDefaultClientScope(scopeId);
-            case "optional" -> realm.addDefaultOptionalClientScope(scopeId);
-            default -> {
-                // none: removed above
+        try {
+            switch (type) {
+                case "default" -> realm.addDefaultDefaultClientScope(scopeId);
+                case "optional" -> realm.addDefaultOptionalClientScope(scopeId);
+                default -> {
+                    // none: removed above
+                }
             }
+        }
+        catch (RuntimeException e) {
+            if (now.equals("none")) {
+                throw e;
+            }
+            // moving is a removal and an addition: the first went through
+            throw new HalfMoved(now, e);
+        }
+        return now;
+    }
+
+    /**
+     * A scope taken out of one realm default type that could not be put into the other.
+     */
+    private static final class HalfMoved extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        HalfMoved(String was, RuntimeException cause) {
+            super("the scope was a realm " + was + " scope and is no realm default now: " + cause.getMessage(), cause);
         }
     }
 
@@ -411,7 +436,15 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
         RealmResource realm = call.kc().realm(call.realm());
         String id = KeycloakAdmin.created(realm.clientScopes().create(s));
         String type = call.str("realmDefault", "none");
-        setRealmDefault(realm, id, type);
+        if (!type.equals("none")) {
+            try {
+                setRealmDefault(realm, id, type);
+            }
+            catch (RuntimeException e) {
+                return ToolResult.partiallyApplied("client scope '" + s.getName() + "' created",
+                        "make it a realm " + type + " scope", e, "id", id, "name", s.getName());
+            }
+        }
         return ToolResult.done("Client scope created", "id", id, "name", s.getName(), "realmDefault", type);
     }
 
@@ -428,7 +461,19 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
             call.kc().save(s, call.realm(), "client-scopes", s.getId());
         }
         if (call.has("realmDefault")) {
-            setRealmDefault(realm, s.getId(), call.str("realmDefault"));
+            try {
+                setRealmDefault(realm, s.getId(), call.str("realmDefault"));
+            }
+            catch (RuntimeException e) {
+                if (changed.isEmpty() && !(e instanceof HalfMoved)) {
+                    throw e;
+                }
+                return ToolResult.partiallyApplied(
+                        changed.isEmpty() ? "client scope '" + s.getName() + "' taken out of the realm's default scopes"
+                                : "client scope '" + s.getName() + "' updated: " + changed,
+                        "make it a realm " + call.str("realmDefault") + " scope", e, "name", s.getName(), "changed",
+                        changed);
+            }
             changed.add("realmDefault");
         }
         return ToolResult.done("Client scope updated", "name", s.getName(), "changed", changed);
@@ -438,8 +483,18 @@ public class ClientScopeToolProvider extends AbstractToolProvider {
         ClientScopeRepresentation s = ClientToolProvider.findScope(call, call.str("scope"));
         RealmResource realm = call.kc().realm(call.realm());
         // Keycloak refuses to delete a realm default scope
-        setRealmDefault(realm, s.getId(), "none");
-        realm.clientScopes().get(s.getId()).remove();
+        String was = setRealmDefault(realm, s.getId(), "none");
+        try {
+            realm.clientScopes().get(s.getId()).remove();
+        }
+        catch (RuntimeException e) {
+            if (was.equals("none")) {
+                throw e;
+            }
+            return ToolResult.partiallyApplied(
+                    "client scope '" + s.getName() + "' is no realm " + was + " scope any more",
+                    "delete the client scope", e, "id", s.getId(), "name", s.getName());
+        }
         return ToolResult.done("Client scope deleted", "id", s.getId(), "name", s.getName());
     }
 
