@@ -28,7 +28,7 @@ How the server presents its tools to a model, which tools exist, and the prompts
   `invalid_arguments` (+ `problems`, schema), `realm_not_allowed`, `confirmation_required`, `read_only_mode`, `not_found`,
   `conflict`, `keycloak_unreachable`, `audit_unavailable` (a change while the audit trail cannot be written).
 - `whoami(language?)`: who the session's Keycloak calls run as (signed-in user under `KC_MCP_MCP_DELEGATION=exchange`, else
-  the service account), `realm-management` roles per realm with admin-console labels (`language: de` → "Benutzer
+  the service account), for a signed-in caller the realm and the `issuer` of their token (which Keycloak they logged in at), `realm-management` roles per realm with admin-console labels (`language: de` → "Benutzer
   anzeigen"; others fall back to English, `labelLanguage` says so), per-area summary (`users: view`), tool count unlocked.
   With roles known, `search_tools` marks unusable hits `allowed: false` + `missingRoles`; `forbidden` errors point to `whoami`.
 - Hidden tools stay callable by name.

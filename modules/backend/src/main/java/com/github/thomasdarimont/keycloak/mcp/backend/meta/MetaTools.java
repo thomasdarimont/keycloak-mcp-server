@@ -432,6 +432,12 @@ public class MetaTools {
             if (caller.realm() != null) {
                 who.put("realm", caller.realm());
             }
+            // which authorization server the token is from: realms of the same name exist
+            // on
+            // several Keycloaks
+            if (caller.claim("iss") instanceof String issuer && !issuer.isBlank()) {
+                who.put("issuer", issuer);
+            }
             who.putAll(signIn(caller));
             out.put("caller", who);
         }

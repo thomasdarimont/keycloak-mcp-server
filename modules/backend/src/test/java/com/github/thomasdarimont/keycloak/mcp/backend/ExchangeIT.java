@@ -162,6 +162,8 @@ class ExchangeIT {
         JsonObject me = McpClient.text(root.callTool("whoami", new JsonObject()));
         assertEquals("root", me.getJsonObject("caller").getString("username"), me.encode());
         assertEquals("master", me.getJsonObject("caller").getString("realm"), me.encode());
+        assertTrue(me.getJsonObject("caller").getString("issuer").endsWith("/realms/master"),
+                "the issuer of the caller's token: " + me.encode());
         assertEquals(true, me.getBoolean("superAdmin"), me.encode());
 
         JsonObject disabled = McpClient.text(root.callTool("keycloak_user_set_enabled",
