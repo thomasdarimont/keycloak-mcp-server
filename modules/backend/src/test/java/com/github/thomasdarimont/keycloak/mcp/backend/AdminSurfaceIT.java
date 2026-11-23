@@ -323,6 +323,23 @@ class AdminSurfaceIT {
         assertNotNull(revoked.getString("notBefore"), revoked.encode());
         assertTrue(revoked.getString("pushedTo").startsWith("nobody"), revoked.encode());
 
+        // a client with an admin URL nobody listens on: Keycloak sets the not-before,
+        // answers 200 and names the URL as failed
+        confirmed("keycloak_realm_partial_import",
+                new JsonObject().put("representation",
+                        new JsonObject().put("clients",
+                                new JsonArray().add(new JsonObject().put("clientId", "legacy-app")
+                                    .put("enabled", true)
+                                    .put("adminUrl", "http://127.0.0.1:9/app")))));
+        JsonObject unreached = error("keycloak_client_revoke_tokens",
+                new JsonObject().put("clientId", "legacy-app").put("confirm", true));
+        assertEquals("partially_applied", unreached.getString("error"), unreached.encode());
+        assertNotNull(unreached.getString("notBefore"), unreached.encode());
+        assertTrue(unreached.getString("applied").contains("no longer accepts tokens"), unreached.encode());
+        assertTrue(unreached.getString("notApplied").contains("http://127.0.0.1:9/app"), unreached.encode());
+        assertTrue(unreached.getJsonObject("pushed").getJsonArray("failed").contains("http://127.0.0.1:9/app"),
+                unreached.encode());
+
         JsonObject rotated = call("keycloak_client_rotated_secret_get", new JsonObject().put("clientId", "billing"));
         assertEquals(false, rotated.getBoolean("rotated"), rotated.encode());
         confirmed("keycloak_client_rotated_secret_invalidate", new JsonObject().put("clientId", "billing"));

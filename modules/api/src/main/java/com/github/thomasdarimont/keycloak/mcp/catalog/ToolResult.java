@@ -58,13 +58,18 @@ public record ToolResult(boolean isError, Object payload) {
      * @param notApplied the step that failed
      */
     public static ToolResult partiallyApplied(String applied, String notApplied, RuntimeException cause, Object... kv) {
+        return partiallyApplied(applied, notApplied, why(cause), kv);
+    }
+
+    /** The same for a step Keycloak reports as failed without failing the request. */
+    public static ToolResult partiallyApplied(String applied, String notApplied, String why, Object... kv) {
         Object[] all = Arrays.copyOf(kv, kv.length + 4);
         all[kv.length] = "applied";
         all[kv.length + 1] = applied;
         all[kv.length + 2] = "notApplied";
         all[kv.length + 3] = notApplied;
         return error("partially_applied",
-                "Only part of the change was made. Done: " + applied + ". Not done: " + notApplied + " (" + why(cause)
+                "Only part of the change was made. Done: " + applied + ". Not done: " + notApplied + " (" + why
                         + "). Do not repeat the whole call: tell the user, then finish or undo the"
                         + " rest with the tool for that step.",
                 all);

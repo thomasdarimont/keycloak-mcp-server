@@ -7,6 +7,7 @@ import java.util.Map;
 import jakarta.ws.rs.WebApplicationException;
 
 import org.keycloak.admin.client.resource.ClientResource;
+import org.keycloak.representations.adapters.action.GlobalRequestResult;
 import org.keycloak.representations.idm.ClientInitialAccessCreatePresentation;
 import org.keycloak.representations.idm.ClientInitialAccessPresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
@@ -219,21 +220,31 @@ public class ClientOpsToolProvider extends AbstractToolProvider {
         int now = (int) (System.currentTimeMillis() / 1000);
         full.setNotBefore(now);
         call.kc().save(full, call.realm(), "clients", c.getId());
-        boolean pushed = full.getAdminUrl() != null && !full.getAdminUrl().isBlank();
-        if (pushed) {
-            try {
-                resource.pushRevocation();
-            }
-            catch (RuntimeException e) {
-                return ToolResult.partiallyApplied(
-                        "Keycloak no longer accepts tokens issued to the client before " + Views.iso(now * 1000L),
-                        "tell the client at " + full.getAdminUrl() + ", which may still accept them", e, "clientId",
-                        c.getClientId(), "notBefore", Views.iso(now * 1000L));
-            }
+        String notBefore = Views.iso(now * 1000L);
+        String applied = "Keycloak no longer accepts tokens issued to the client before " + notBefore;
+        if (full.getAdminUrl() == null || full.getAdminUrl().isBlank()) {
+            return ToolResult.done("Tokens issued to the client before now are no longer valid", "clientId",
+                    c.getClientId(), "notBefore", notBefore, "pushedTo", "nobody: the client has no admin URL");
+        }
+        GlobalRequestResult result;
+        try {
+            result = call.kc().queries().pushClientRevocation(call.realm(), c.getId());
+        }
+        catch (RuntimeException e) {
+            return ToolResult.partiallyApplied(applied,
+                    "tell the client at " + full.getAdminUrl() + ", which may still accept them", e, "clientId",
+                    c.getClientId(), "notBefore", notBefore);
+        }
+        // Keycloak answers 200 whether the client took the not-before or not
+        List<String> failed = RealmLifecycleToolProvider.failed(result);
+        if (!failed.isEmpty()) {
+            return ToolResult.partiallyApplied(applied, "tell the client, which may still accept them, at " + failed,
+                    "Keycloak could not reach it", "clientId", c.getClientId(), "notBefore", notBefore, "pushed",
+                    RealmLifecycleToolProvider.view(result));
         }
         return ToolResult.done("Tokens issued to the client before now are no longer valid", "clientId",
-                c.getClientId(), "notBefore", Views.iso(now * 1000L), "pushedTo",
-                pushed ? full.getAdminUrl() : "nobody: the client has no admin URL");
+                c.getClientId(), "notBefore", notBefore, "pushedTo", full.getAdminUrl(), "pushed",
+                RealmLifecycleToolProvider.view(result));
     }
 
     ToolResult rotatedSecret(ToolCall call) {

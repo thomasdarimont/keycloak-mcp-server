@@ -46,6 +46,8 @@ How the server presents its tools to a model, which tools exist, and the prompts
   with a `warning` when only that read fails. A tool that changes Keycloak in two steps (a client scope and its realm
   default type, an execution and its requirement, authorization scopes and their resource, not-before and its push)
   answers `partially_applied` when the second fails, with `applied` and `notApplied`, so nobody repeats the first.
+  Revoking tokens and logging out a realm read Keycloak's answer for that: it is a `200` even when a client's admin URL
+  was not reached, and names the URLs under `failed`.
 
 - Cost: tools whose requests grow with the realm say so, `cost: per-item` or `heavy` plus a `costNote` in
   `search_tools` hits, and the note at the end of the description in `tools/list`. Per-item: `scope_mappings_get`

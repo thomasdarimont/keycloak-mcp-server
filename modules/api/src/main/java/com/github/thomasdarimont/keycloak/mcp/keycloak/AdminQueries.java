@@ -14,6 +14,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import org.keycloak.representations.adapters.action.GlobalRequestResult;
 import org.keycloak.representations.idm.AdminEventRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
@@ -139,6 +140,16 @@ public interface AdminQueries {
     Response activateWorkflow(@PathParam("realm") String realm, @PathParam("id") String id,
             @PathParam("type") String type, @PathParam("resourceId") String resourceId,
             @QueryParam("notBefore") String notBefore);
+
+    /**
+     * Tells a client's admin URL (and its registered cluster nodes) the client's
+     * not-before. The admin client's method returns nothing, and with it drops the answer
+     * that says which of them were reached.
+     */
+    @POST
+    @Path("clients/{client-uuid}/push-revocation")
+    GlobalRequestResult pushClientRevocation(@PathParam("realm") String realm,
+            @PathParam("client-uuid") String clientUuid);
 
     @POST
     @Path("workflows/{id}/deactivate/{type}/{resourceId}")

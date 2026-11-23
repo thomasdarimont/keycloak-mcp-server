@@ -183,17 +183,31 @@ public class RealmLifecycleToolProvider extends AbstractToolProvider {
         return ToolResult.done("Realm deleted", "realm", realm);
     }
 
-    private static Map<String, Object> view(GlobalRequestResult result) {
+    /**
+     * Which admin URLs Keycloak reached with a logout or a not-before, and which not. It
+     * answers 200 either way, so the answer has to be read.
+     */
+    static Map<String, Object> view(GlobalRequestResult result) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("notified", result.getSuccessRequests() == null ? List.of() : result.getSuccessRequests());
-        if (result.getFailedRequests() != null && !result.getFailedRequests().isEmpty()) {
-            m.put("failed", result.getFailedRequests());
+        m.put("notified",
+                result == null || result.getSuccessRequests() == null ? List.of() : result.getSuccessRequests());
+        if (!failed(result).isEmpty()) {
+            m.put("failed", failed(result));
         }
         return m;
     }
 
+    static List<String> failed(GlobalRequestResult result) {
+        return result == null || result.getFailedRequests() == null ? List.of() : result.getFailedRequests();
+    }
+
     ToolResult logoutAll(ToolCall call) {
         GlobalRequestResult result = call.kc().realm(call.realm()).logoutAll();
+        if (!failed(result).isEmpty()) {
+            return ToolResult.partiallyApplied("every session of the realm ended in Keycloak",
+                    "tell these clients, where users may still be logged in: " + failed(result),
+                    "Keycloak could not reach them", "realm", call.realm(), "clients", view(result));
+        }
         return ToolResult.done("Every session of the realm ended", "realm", call.realm(), "clients", view(result));
     }
 
@@ -214,6 +228,13 @@ public class RealmLifecycleToolProvider extends AbstractToolProvider {
                     "Keycloak no longer accepts tokens issued before " + Views.iso(now * 1000L),
                     "tell the clients that have an admin URL, which may still accept them", e, "realm", call.realm(),
                     "notBefore", Views.iso(now * 1000L));
+        }
+        if (!failed(result).isEmpty()) {
+            return ToolResult.partiallyApplied(
+                    "Keycloak no longer accepts tokens issued before " + Views.iso(now * 1000L),
+                    "tell these clients, which may still accept them: " + failed(result),
+                    "Keycloak could not reach them", "realm", call.realm(), "notBefore", Views.iso(now * 1000L),
+                    "clients", view(result));
         }
         return ToolResult.done("Tokens issued before now are no longer valid", "realm", call.realm(), "notBefore",
                 Views.iso(now * 1000L), "clients", view(result));
