@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
-/** Placeholder until Secrets / Storage talk to the BFF. */
+/** Placeholder until Storage talks to the BFF. */
 @customElement('kc-mcp-placeholder-page')
 export class PlaceholderPage extends LitElement {
   static styles = css`

@@ -7,12 +7,12 @@ A browser UI for the server at `/ui`, with its backend-for-frontend (BFF) under 
 **Status: work in progress.** Sign in at the sign-in provider (Keycloak or another OpenID Provider), land on Overview, browse **Systems** (each system is a Keycloak
 cluster / environment), open a system for **Settings** (connection and realm allowlist), **Realms** (allowlist merged
 with per-realm settings from the admin realm API) and **Keys** (signing key / rotate). Create, replace and delete
-mutable systems via the BFF; edit realm labels and presets on their own pages. Secrets and Storage are placeholders
-(vault provenance and encryption / system sources later — no secret writing in the UI). **Audit** lists the tool
-calls of the audit trail, filtered and paged on the server. The plumbing underneath is
-covered by integration tests: the login, sessions in the database, several identity providers, session checks and
-back-channel logout. See `modules/backend/src/main/resources/frontend/README.md` for the contract and the development
-loop.
+mutable systems via the BFF; edit realm labels and presets on their own pages. **Secrets** lists vault names and
+which systems use them (never values; no secret writing in the UI). Storage is a placeholder (encryption / system
+sources later). **Audit** lists the tool calls of the audit trail, filtered and paged on the server. The plumbing
+underneath is covered by integration tests: the login, sessions in the database, several identity providers, session
+checks and back-channel logout. See `modules/backend/src/main/resources/frontend/README.md` for the contract and the
+development loop.
 
 ## Pages
 
@@ -27,7 +27,8 @@ loop.
 | `/ui/systems/{alias}/adopt` | adopt realms: the Keycloak client (JSON and a kcadm script for Linux/macOS or Windows, from an installation or the Keycloak image; copy or download), the realms its service account sees, adopt a selection or every realm ([Adopting](systems.md#adopting-a-keycloaks-realms)) |
 | `/ui/systems/{alias}/keys` | signing key details; rotate (operator, mutable / writable vault) |
 | `/ui/audit` | the audit trail, newest first: filters for caller, system, realm and tool (completed from the recorded values), level, outcome and time (the last N minutes, hours, days or weeks, or between two moments), and signed-in or anonymous callers, applied as they are chosen and listed as removable chips; When, Caller and Took sort the table; an entry opens to its details (message, subject, client, connection, the OpenTelemetry trace and span, linked through `kc-mcp.ui.trace-url`), and its arguments are fetched only on *Show arguments*; the address bar carries them (`?system=&realm=&tool=&level=&outcome=&anonymous=&last=2w` or `from=&to=`, `sort=&order=`, `size=`), so a view can be bookmarked or shared, without the caller: names stay out of URLs; 25, 50, 100 or 250 per page (25 by default), paged with the total |
-| `/ui/secrets`, `/ui/storage` | stubs |
+| `/ui/secrets` | vault id and writable marker; secret names, `vault:…` references and the systems that use each (links to the system); values never shown |
+| `/ui/storage` | stub |
 
 A system is one Keycloak front door (`url`). Realms are not a top-level nav section: the allowlist is
 `allowedRealms` / `defaultRealm` on the system; stored per-realm settings use
@@ -164,6 +165,7 @@ set through `auth-params`; startup fails on them.
 | `GET /bff/api/audit` | the audit trail, as `GET /api/admin/audit`; operator or viewer |
 | `GET /bff/api/audit/{id}` | one event with its arguments, as `GET /api/admin/audit/{id}` |
 | `GET /bff/api/audit/values/{field}` | completions for its filters, as `GET /api/admin/audit/values/{field}` |
+| `GET /bff/api/secrets` | vault names and `usedBy`, as `GET /api/admin/secrets`; never values; operator or viewer |
 | `POST /bff/check-session` | the session check above |
 | `POST /bff/backchannel-logout` | for the identity provider, not the browser |
 

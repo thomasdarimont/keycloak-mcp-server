@@ -492,6 +492,27 @@ export const unadoptRealm = (alias: string, realm: string, restrict: boolean): P
     { method: 'DELETE' },
   );
 
+/** One vault secret as returned by GET /bff/api/secrets (never a value). */
+export interface Secret {
+  name: string;
+  /** How systems refer to it, e.g. `vault:acme/client-secret`. */
+  reference: string;
+  vault: string;
+  /** Aliases of systems that reference this secret. */
+  usedBy: string[];
+}
+
+/** Vault provenance and secrets list (GET /bff/api/secrets). */
+export interface SecretsList {
+  vault: string;
+  /** Whether the admin API can store secrets in this vault (UI still never writes). */
+  writable: boolean;
+  secrets: Secret[];
+}
+
+/** Names in the vault and which systems use them (GET /bff/api/secrets). */
+export const listSecrets = (): Promise<SecretsList> => call<SecretsList>('/api/secrets');
+
 /** One tool call of the audit trail (GET /bff/api/audit). */
 export interface AuditEvent {
   id: number;

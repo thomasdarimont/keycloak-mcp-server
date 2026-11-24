@@ -8,6 +8,7 @@ import { sessionContext, type SessionState } from './session-context.js';
 import './pages/audit/page.js';
 import './pages/overview.js';
 import './pages/placeholder.js';
+import './pages/secrets/page.js';
 import './pages/server-info.js';
 import './pages/systems/detail.js';
 import './pages/systems/page.js';
@@ -164,11 +165,7 @@ export class KcMcpOutlet extends LitElement {
           notifyNavigate();
           return true;
         },
-        render: () =>
-          html`<kc-mcp-placeholder-page
-            heading="Secrets"
-            description="Names, vault provenance, and usedBy will appear here. Secrets are managed in the vault (or OpenBao / HashiCorp Vault) — this UI will not edit values."
-          ></kc-mcp-placeholder-page>`,
+        render: () => html`<kc-mcp-secrets-page></kc-mcp-secrets-page>`,
       },
       {
         name: 'storage',
